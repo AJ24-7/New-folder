@@ -2,10 +2,10 @@
 /// Manages base URL and API endpoints
 class ApiConfig {
   // Base URL - Change this based on your environment
-  static const String baseUrl = 'http://localhost:5000';
+  // static const String baseUrl = 'http://localhost:5000';
   
-  // Production URL (uncomment when deploying)
-  // static const String baseUrl = 'https://your-production-url.com';
+  // Production URL
+  static const String baseUrl = 'https://gym-wale.onrender.com';
   
   // API Endpoints
   static const String _apiPrefix = '/api';

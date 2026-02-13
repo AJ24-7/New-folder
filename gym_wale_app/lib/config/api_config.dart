@@ -6,6 +6,10 @@ class ApiConfig {
   static String get baseUrl {
     return '${dotenv.env['API_BASE_URL']}/api'; }
   
+  // Base URL without /api suffix for assets/images
+  static String get baseUrlWithoutApi {
+    return dotenv.env['API_BASE_URL'] ?? ''; }
+  
   // ========== Authentication Endpoints ==========
   static const String login = '/users/login';
   static const String register = '/users/signup';

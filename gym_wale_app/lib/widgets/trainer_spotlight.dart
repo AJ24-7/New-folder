@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../config/app_theme.dart';
+import '../config/api_config.dart';
 import '../models/trainer.dart';
 
 class TrainerSpotlight extends StatelessWidget {
@@ -93,7 +94,7 @@ class TrainerSpotlight extends StatelessWidget {
                             ? CachedNetworkImage(
                                 imageUrl: trainer.photo!.startsWith('http')
                                     ? trainer.photo!
-                                    : 'http://192.168.1.13:5000${trainer.photo}',
+                                    : '${ApiConfig.baseUrlWithoutApi}${trainer.photo}',
                                 fit: BoxFit.cover,
                                 placeholder: (context, url) => Container(
                                   color: Colors.grey[200],

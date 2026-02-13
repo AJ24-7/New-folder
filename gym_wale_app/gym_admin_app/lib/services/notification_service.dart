@@ -2,11 +2,13 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/notification.dart';
+import '../config/api_config.dart';
 import 'storage_service.dart';
 
 class NotificationService {
-  static const String baseUrl = 'http://10.0.2.2:3000/api';
   final StorageService _storage = StorageService();
+  
+  String get baseUrl => '${ApiConfig.baseUrl}/api';
 
   Future<Map<String, String>> _getHeaders() async {
     final token = await _storage.getToken();

@@ -2420,8 +2420,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
     
     // Generate registration URL for QR code
-    // In production, replace with your actual domain
-    final baseUrl = 'http://localhost:3000'; // Change to your production URL
+    final baseUrl = 'https://gym-wale.onrender.com';
     final registrationUrl = '$baseUrl/gym-register.html?gymId=${qrData['gymId']}';
     final gymName = qrData['gymName'] ?? 'Gym';
     final gymId = qrData['gymId'] ?? '';
