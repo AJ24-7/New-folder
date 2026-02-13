@@ -14,6 +14,10 @@ app.use(cors({
     
     // List of allowed origins
     const allowedOrigins = [
+      // Production (Render)
+      'https://gym-wale-backend.onrender.com',
+      process.env.API_BASE_URL,
+      // Development
       'http://localhost:5000',
       'http://localhost:3000',
       'http://localhost:8080',
@@ -23,10 +27,13 @@ app.use(cors({
       'http://192.168.1.13:5000',
       'http://192.168.1.13:3000',
       'http://192.168.1.13:8080',
-    ];
+    ].filter(Boolean); // Remove undefined values
     
-    // Check if origin starts with localhost or 127.0.0.1 (for Flutter web debug)
-    if (origin.includes('localhost') || origin.includes('127.0.0.1') || origin.includes('192.168.1.13')) {
+    // Check if origin starts with localhost, 127.0.0.1, or Render domain (for Flutter web debug)
+    if (origin.includes('localhost') || 
+        origin.includes('127.0.0.1') || 
+        origin.includes('192.168.1.13') ||
+        origin.includes('onrender.com')) {
       return callback(null, true);
     }
     
@@ -35,7 +42,10 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // Allow all for development
+    // Allow all for development, restrict in production
+    if (process.env.NODE_ENV === 'production') {
+      return callback(new Error('Not allowed by CORS'));
+    }
     callback(null, true);
   },
   credentials: true,
@@ -61,6 +71,16 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Root health check endpoint for Render
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
 
 // Image URL Transform Middleware - Removes local paths and keeps only Cloudinary URLs
 const { imageUrlTransformMiddleware } = require('./middleware/imageUrlTransform');
