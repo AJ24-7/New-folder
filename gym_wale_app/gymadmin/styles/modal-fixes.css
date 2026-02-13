@@ -1,0 +1,95 @@
+/* Modal Visibility Fixes - Override any conflicting styles */
+
+/* Ensure modals are properly displayed when active */
+.modal.show,
+.modal.active,
+.modal[style*="display: flex"],
+.modal[style*="display: block"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 999999 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background-color: rgba(0, 0, 0, 0.5) !important;
+    align-items: center !important;
+    justify-content: center !important;
+    pointer-events: auto !important;
+}
+
+/* Ensure modal content is visible */
+.modal.show .modal-content,
+.modal.active .modal-content,
+.modal[style*="display: flex"] .modal-content,
+.modal[style*="display: block"] .modal-content {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    z-index: 1000000 !important;
+    position: relative !important;
+    pointer-events: auto !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+}
+
+/* Override any pointer-events: none on buttons and interactive elements */
+.quick-action-badge,
+.btn,
+button,
+[data-modal] {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+/* Ensure buttons are clickable */
+.quick-action-badge:hover,
+.btn:hover,
+button:hover,
+[data-modal]:hover {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    opacity: 0.9 !important;
+}
+
+/* Fix z-index conflicts */
+.content.tab-content {
+    z-index: 1 !important;
+}
+
+.modal {
+    z-index: 100000 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.sidebar,
+.top-nav,
+.mobile-menu-bar {
+    z-index: 1000 !important;
+}
+
+/* Ensure modal backdrop doesn't interfere */
+.modal-backdrop {
+    z-index: 99999 !important;
+}
+
+/* Fix for any hidden elements */
+.modal:not([style*="display: none"]) {
+    display: flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+/* Debugging styles - can be removed after testing */
+.modal.debug {
+    border: 3px solid red !important;
+    background-color: rgba(255, 0, 0, 0.1) !important;
+}
+
+.modal-content.debug {
+    border: 2px solid blue !important;
+    background-color: white !important;
+}

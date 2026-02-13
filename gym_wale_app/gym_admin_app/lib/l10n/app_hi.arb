@@ -1,0 +1,241 @@
+{
+  "@@locale": "hi",
+  "appTitle": "जिम-वाले एडमिन",
+  "dashboard": "डैशबोर्ड",
+  "members": "सदस्य",
+  "activeMembers": "सक्रिय सदस्य",
+  "expiredMembers": "समाप्त सदस्य",
+  "noExpiredMembers": "कोई समाप्त सदस्य नहीं मिला",
+  "expiredMembersCount": "{count} समाप्त सदस्य",
+  "@expiredMembersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "trainers": "प्रशिक्षक",
+  "attendance": "उपस्थिति",
+  "payments": "भुगतान",
+  "equipment": "उपकरण",
+  "offers": "ऑफर और कूपन",
+  "support": "समर्थन और समीक्षा",
+  "settings": "सेटिंग्स",
+  "logout": "लॉगआउट",
+  
+  "dashboardOverview": "डैशबोर्ड अवलोकन",
+  "totalMembers": "कुल सदस्य",
+  "activeMembers": "सक्रिय सदस्य",
+  "totalRevenue": "कुल राजस्व",
+  "pendingApprovals": "लंबित अनुमोदन",
+  "quickActions": "त्वरित कार्य",
+  "addMember": "सदस्य जोड़ें",
+  "sendNotification": "सूचना भेजें",
+  "generateReport": "रिपोर्ट बनाएं",
+  
+  "profile": "प्रोफ़ाइल",
+  "gymProfile": "जिम प्रोफ़ाइल",
+  "changePassword": "पासवर्ड बदलें",
+  "notifications": "सूचनाएं",
+  
+  "viewMode": "देखें मोड",
+  "editMode": "संपादन मोड",
+  "enableEditMode": "संपादन सक्षम करें",
+  "save": "सहेजें",
+  "cancel": "रद्द करें",
+  
+  "basicInformation": "बुनियादी जानकारी",
+  "gymName": "जिम का नाम",
+  "ownerName": "मालिक का नाम",
+  "email": "ईमेल",
+  "phone": "फोन",
+  "supportEmail": "समर्थन ईमेल",
+  "supportPhone": "समर्थन फोन",
+  
+  "locationInformation": "स्थान जानकारी",
+  "address": "पता",
+  "city": "शहर",
+  "state": "राज्य",
+  "pincode": "पिनकोड",
+  "landmark": "स्थल चिह्न",
+  
+  "operationalInformation": "परिचालन जानकारी",
+  "openingTime": "खुलने का समय",
+  "closingTime": "बंद होने का समय",
+  "currentMembers": "वर्तमान सदस्य",
+  "description": "विवरण",
+  
+  "currentPassword": "वर्तमान पासवर्ड",
+  "newPassword": "नया पासवर्ड",
+  "confirmPassword": "पासवर्ड की पुष्टि करें",
+  "passwordStrength": "पासवर्ड की ताकत",
+  "weak": "कमजोर",
+  "medium": "मध्यम",
+  "strong": "मजबूत",
+  
+  "theme": "थीम",
+  "language": "भाषा",
+  "lightMode": "लाइट मोड",
+  "darkMode": "डार्क मोड",
+  "systemDefault": "सिस्टम डिफ़ॉल्ट",
+  
+  "search": "खोजें",
+  "filter": "फ़िल्टर",
+  "export": "निर्यात",
+  "import": "आयात",
+  "refresh": "ताज़ा करें",
+  
+  "memberList": "सदस्य सूची",
+  "trainerList": "प्रशिक्षक सूची",
+  "attendanceRecords": "उपस्थिति रिकॉर्ड",
+  "paymentHistory": "भुगतान इतिहास",
+  "equipmentInventory": "उपकरण सूची",
+  
+  "activeStatus": "सक्रिय",
+  "inactiveStatus": "निष्क्रिय",
+  "pendingStatus": "लंबित",
+  "expiredStatus": "समाप्त",
+  
+  "success": "सफलता",
+  "error": "त्रुटि",
+  "warning": "चेतावनी",
+  "info": "जानकारी",
+  
+  "confirmAction": "कार्रवाई की पुष्टि करें",
+  "areYouSure": "क्या आप सुनिश्चित हैं?",
+  "yes": "हाँ",
+  "no": "नहीं",
+  
+  "loading": "लोड हो रहा है...",
+  "noDataFound": "कोई डेटा नहीं मिला",
+  "tryAgain": "पुनः प्रयास करें",
+  
+  "todayAttendance": "आज की उपस्थिति",
+  "weeklyStats": "साप्ताहिक आंकड़े",
+  "monthlyRevenue": "मासिक राजस्व",
+  "activeCoupons": "सक्रिय कूपन",
+  
+  "addNewMember": "नया सदस्य जोड़ें",
+  "editMember": "सदस्य संपादित करें",
+  "deleteMember": "सदस्य हटाएं",
+  "viewDetails": "विवरण देखें",
+  
+  "trainerCertifications": "प्रशिक्षक प्रमाणपत्र",
+  "specialization": "विशेषज्ञता",
+  "experience": "अनुभव",
+  "rating": "रेटिंग",
+  
+  "scanQRCode": "QR कोड स्कैन करें",
+  "manualEntry": "मैनुअल प्रविष्टि",
+  "markAttendance": "उपस्थिति चिह्नित करें",
+  
+  "receivedPayments": "प्राप्त भुगतान",
+  "pendingPayments": "लंबित भुगतान",
+  "duePayments": "बकाया भुगतान",
+  "profitLoss": "लाभ/हानि",
+  
+  "equipmentMaintenance": "उपकरण रखरखाव",
+  "maintenanceDue": "रखरखाव बकाया",
+  "workingCondition": "कार्य स्थिति",
+  "needsRepair": "मरम्मत की आवश्यकता",
+  
+  "createOffer": "ऑफर बनाएं",
+  "generateCoupon": "कूपन बनाएं",
+  "activeCampaigns": "सक्रिय अभियान",
+  "offerTemplates": "ऑफर टेम्पलेट",
+  
+  "customerReviews": "ग्राहक समीक्षा",
+  "grievances": "शिकायतें",
+  "communications": "संचार",
+  "replyToReview": "समीक्षा का जवाब दें",
+  
+  "supportAndReviews": "सहायता और समीक्षा",
+  "autoRefreshEnabled": "स्वतः रीफ्रेश सक्षम",
+  "autoRefreshDisabled": "स्वतः रीफ्रेश अक्षम",
+  "refreshNow": "अभी रीफ्रेश करें",
+  "reviews": "समीक्षा",
+  "chats": "चैट",
+  "unread": "अपठित",
+  "pending": "लंबित",
+  "open": "खुला",
+  "retry": "पुनः प्रयास करें",
+  
+  "gymConfiguration": "जिम कॉन्फ़िगरेशन",
+  "adminManagement": "व्यवस्थापक प्रबंधन",
+  "securitySettings": "सुरक्षा सेटिंग्स",
+  "security": "सुरक्षा",
+  "backupData": "डेटा बैकअप",
+  "restoreData": "डेटा पुनर्स्थापित करें",
+  
+  "sessionTimer": "सत्र टाइमर",
+  "sessionActive": "सत्र सक्रिय",
+  "sessionExpiry": "सत्र समाप्ति",
+  "timeRemaining": "शेष समय",
+  "sessionWillExpireSoon": "आपका सत्र जल्द ही समाप्त हो जाएगा",
+  "sessionExpiredTitle": "सत्र समाप्त हो गया",
+  "sessionExpiredMessage": "आपका सत्र समाप्त हो गया है। कृपया फिर से लॉगिन करें।",
+  "sessionWarningTitle": "सत्र जल्द समाप्त हो रहा है",
+  "sessionWarningMessage": "आपका सत्र {time} में समाप्त हो जाएगा। क्या आप सत्र बढ़ाना चाहते हैं?",
+  "extendSession": "सत्र बढ़ाएं",
+  "continueWorking": "काम जारी रखें",
+  "autoLogoutEnabled": "स्वतः लॉगआउट सक्षम",
+  "sessionManagement": "सत्र प्रबंधन",
+  "sessionInfo": "सत्र जानकारी",
+  "loggedInSince": "लॉग इन समय",
+  "autoSessionTimeout": "स्वतः सत्र समय समाप्ति",
+  "autoSessionTimeoutDescription": "सुरक्षा के लिए स्वचालित लॉगआउट समय सेट करें",
+  "sessionTimeoutDuration": "सत्र समय समाप्ति अवधि",
+  "threeDays": "3 दिन",
+  "sevenDays": "7 दिन",
+  "oneMonth": "1 महीना (30 दिन)",
+  "currentTimeoutSetting": "वर्तमान: {duration}",
+  "@currentTimeoutSetting": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionTimeoutUpdated": "सत्र समय समाप्ति सफलतापूर्वक अपडेट की गई",
+  "failedToUpdateSessionTimeout": "सत्र समय समाप्ति अपडेट करने में विफल",
+  "selectSessionTimeout": "सत्र समय समाप्ति चुनें",
+  
+  "totalEquipment": "कुल उपकरण",
+  "availableEquipment": "उपलब्ध उपकरण",
+  "maintenanceEquipment": "रखरखाव में",
+  "outOfOrderEquipment": "खराब",
+  "addEquipment": "उपकरण जोड़ें",
+  "editEquipment": "उपकरण संपादित करें",
+  "deleteEquipment": "उपकरण हटाएं",
+  "equipmentName": "उपकरण का नाम",
+  "brand": "ब्रांड",
+  "model": "मॉडल",
+  "category": "श्रेणी",
+  "quantity": "मात्रा",
+  "status": "स्थिति",
+  "purchaseDate": "खरीद तिथि",
+  "price": "कीमत",
+  "warranty": "वारंटी",
+  "location": "स्थान",
+  "specifications": "विशेषताएं",
+  "photos": "फ़ोटो",
+  "addPhotos": "फ़ोटो जोड़ें",
+  "searchEquipment": "उपकरण खोजें...",
+  "allCategories": "सभी श्रेणियां",
+  "allStatuses": "सभी स्थितियां",
+  "sortBy": "क्रमबद्ध करें",
+  "name": "नाम",
+  "months": "महीने",
+  "noEquipmentFound": "कोई उपकरण नहीं मिला",
+  "noEquipmentFoundDescription": "अपने जिम इन्वेंट्री को ट्रैक और प्रबंधित करने के लिए पहला उपकरण जोड़ें।",
+  "confirmDelete": "हटाने की पुष्टि करें",
+  "confirmDeleteEquipmentMessage": "क्या आप वाकई {equipmentName} को हटाना चाहते हैं? यह क्रिया पूर्ववत नहीं की जा सकती।",
+  "@confirmDeleteEquipmentMessage": {
+    "placeholders": {
+      "equipmentName": {
+        "type": "String"
+      }
+    }
+  },
+  "delete": "हटाएं"
+}

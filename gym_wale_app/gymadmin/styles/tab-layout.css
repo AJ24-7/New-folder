@@ -1,0 +1,269 @@
+/* ===== TAB LAYOUT SYSTEM ===== */
+
+/* Tab Content Visibility Control */
+
+
+.tab-content.active,
+.tab-content[style*="display: block"],
+.tab-content[style*="display:block"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: all !important;
+}
+
+/* Main Content Container - Fixed layout with sidebar */
+.main-content {
+    margin-left: 270px;
+    width: calc(100vw - 270px);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: var(--bg-color, #f5f7fa);
+    box-sizing: border-box;
+    padding: 0 !important;
+    overflow-x: hidden;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Collapsed sidebar state - use adjacent sibling selector */
+.sidebar-collapsed + .main-content {
+    margin-left: 70px;
+    width: calc(100vw - 70px);
+}
+
+/* Mobile: No sidebar offset */
+@media (max-width: 900px) {
+    .main-content {
+        margin-left: 0 !important;
+        width: 100vw !important;
+    }
+    
+    .sidebar-collapsed + .main-content {
+        margin-left: 0 !important;
+        width: 100vw !important;
+    }
+}
+
+/* Top Navigation - Fixed positioning */
+.top-nav, #topNav {
+    position: fixed !important;
+    top: 0 !important;
+    left: 270px;
+    width: calc(100vw - 270px);
+    height: 70px !important;
+    z-index: 1200 !important;
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #000000 100%);
+    box-sizing: border-box;
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Adjust top nav when sidebar is collapsed */
+.sidebar-collapsed + .main-content .top-nav,
+.sidebar-collapsed + .main-content #topNav {
+    left: 70px;
+    width: calc(100vw - 70px);
+}
+
+@media (max-width: 900px) {
+    .top-nav, #topNav {
+        left: 0 !important;
+        width: 100vw !important;
+        height: 60px !important;
+        min-height: 60px !important;
+        max-height: 60px !important;
+        padding: 0 15px !important;
+        justify-content: space-between !important;
+    }
+    
+    .sidebar-collapsed + .main-content .top-nav,
+    .sidebar-collapsed + .main-content #topNav {
+        left: 0 !important;
+        width: 100vw !important;
+    }
+}
+
+/* Dashboard Content (default visible tab) */
+.content {
+    padding: 90px 24px 24px 24px !important;
+    flex: 1;
+    display: block;
+    width: 100% !important;
+    box-sizing: border-box;
+    min-height: calc(100vh - 70px);
+    position: relative !important;
+}
+
+/* Tab Content Containers - Direct children of main-content */
+.tab-content {
+    display: none !important;
+    visibility: hidden;
+    opacity: 0;
+    width: 100% !important;
+    min-height: calc(100vh - 70px);
+    background: var(--bg-color, #f5f7fa);
+    box-sizing: border-box;
+    position: relative !important;
+}
+
+.tab-content.active,
+.tab-content[style*="display: block"],
+.tab-content[style*="display:block"] {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+/* Tab Inner Content - Provides consistent padding */
+.tab-inner-content {
+    padding: 90px 24px 24px 24px !important;
+    min-height: calc(100vh - 70px);
+    width: 100% !important;
+    box-sizing: border-box;
+    position: relative !important;
+    left: 0 !important;
+    right: 0 !important;
+    margin: 0 !important;
+}
+
+/* Remove any margins on first children to prevent gaps */
+.content > :first-child,
+.tab-inner-content > :first-child {
+    margin-top: 0 !important;
+}
+
+/* Responsive padding adjustments */
+@media (max-width: 900px) {
+    .content,
+    .tab-inner-content {
+        padding: 75px 16px 16px 16px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .content,
+    .tab-inner-content {
+        padding: 75px 16px 16px 16px !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .content,
+    .tab-inner-content {
+        padding: 72px 12px 12px 12px !important;
+    }
+}
+
+/* Ensure tabs don't overlap with fixed navbar */
+.page-header {
+    margin-bottom: 24px;
+}
+
+/* Mobile hamburger menu */
+.hamburger-menu {
+    display: none !important;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    margin-right: auto;
+}
+
+.hamburger-menu span {
+    display: block;
+    width: 25px;
+    height: 3px;
+    background: #fff;
+    margin: 5px 0;
+    transition: 0.3s;
+}
+
+/* Show hamburger only on mobile */
+@media (max-width: 900px) {
+    .hamburger-menu {
+        display: block !important;
+    }
+}
+
+/* Force hide hamburger on desktop */
+@media (min-width: 901px) {
+    .hamburger-menu {
+        display: none !important;
+    }
+}
+
+/* Mobile Sidebar Backdrop */
+.mobile-sidebar-backdrop {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.mobile-sidebar-backdrop.show {
+    display: block;
+    opacity: 1;
+}
+
+/* Mobile Sidebar Dropdown */
+.mobile-sidebar-dropdown {
+    display: none;
+    position: fixed;
+    top: 0;
+    right: -100%;
+    width: 280px;
+    max-width: 80vw;
+    height: 100vh;
+    background: linear-gradient(180deg, #000000 0%, #1a1a1a 50%, #000000 100%);
+    z-index: 1000;
+    overflow-y: auto;
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: -4px 0 20px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 900px) {
+    .mobile-sidebar-dropdown {
+        display: block;
+    }
+    
+    .mobile-sidebar-dropdown.show {
+        right: 0;
+    }
+}
+
+/* Prevent content scrolling when mobile menu is open */
+body.mobile-menu-open {
+    overflow: hidden;
+}
+
+/* Z-index hierarchy (sidebar, modals, dropdowns) */
+.sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 270px !important;
+    height: 100vh !important;
+    z-index: 1100 !important;
+}
+
+/* Modals should be above everything */
+.modal {
+    z-index: 10000 !important;
+}
+
+.support-modal {
+    z-index: 10001 !important;
+}
+
+/* Dropdowns in navbar */
+.profile-dropdown-menu,
+.notification-dropdown {
+    z-index: 9999 !important;
+}

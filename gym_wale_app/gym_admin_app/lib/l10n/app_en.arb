@@ -1,0 +1,241 @@
+{
+  "@@locale": "en",
+  "appTitle": "Gym-Wale Admin",
+  "dashboard": "Dashboard",
+  "members": "Members",
+  "activeMembers": "Active Members",
+  "expiredMembers": "Expired Members",
+  "noExpiredMembers": "No expired members found",
+  "expiredMembersCount": "{count} Expired Member(s)",
+  "@expiredMembersCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "trainers": "Trainers",
+  "attendance": "Attendance",
+  "payments": "Payments",
+  "equipment": "Equipment",
+  "offers": "Offers & Coupons",
+  "support": "Support & Reviews",
+  "settings": "Settings",
+  "logout": "Logout",
+  
+  "dashboardOverview": "Dashboard Overview",
+  "totalMembers": "Total Members",
+  "activeMembers": "Active Members",
+  "totalRevenue": "Total Revenue",
+  "pendingApprovals": "Pending Approvals",
+  "quickActions": "Quick Actions",
+  "addMember": "Add Member",
+  "sendNotification": "Send Notification",
+  "generateReport": "Generate Report",
+  
+  "profile": "Profile",
+  "gymProfile": "Gym Profile",
+  "changePassword": "Change Password",
+  "notifications": "Notifications",
+  
+  "viewMode": "View Mode",
+  "editMode": "Edit Mode",
+  "enableEditMode": "Enable Edit Mode",
+  "save": "Save",
+  "cancel": "Cancel",
+  
+  "basicInformation": "Basic Information",
+  "gymName": "Gym Name",
+  "ownerName": "Owner Name",
+  "email": "Email",
+  "phone": "Phone",
+  "supportEmail": "Support Email",
+  "supportPhone": "Support Phone",
+  
+  "locationInformation": "Location Information",
+  "address": "Address",
+  "city": "City",
+  "state": "State",
+  "pincode": "Pincode",
+  "landmark": "Landmark",
+  
+  "operationalInformation": "Operational Information",
+  "openingTime": "Opening Time",
+  "closingTime": "Closing Time",
+  "currentMembers": "Current Members",
+  "description": "Description",
+  
+  "currentPassword": "Current Password",
+  "newPassword": "New Password",
+  "confirmPassword": "Confirm Password",
+  "passwordStrength": "Password Strength",
+  "weak": "Weak",
+  "medium": "Medium",
+  "strong": "Strong",
+  
+  "theme": "Theme",
+  "language": "Language",
+  "lightMode": "Light Mode",
+  "darkMode": "Dark Mode",
+  "systemDefault": "System Default",
+  
+  "search": "Search",
+  "filter": "Filter",
+  "export": "Export",
+  "import": "Import",
+  "refresh": "Refresh",
+  
+  "memberList": "Member List",
+  "trainerList": "Trainer List",
+  "attendanceRecords": "Attendance Records",
+  "paymentHistory": "Payment History",
+  "equipmentInventory": "Equipment Inventory",
+  
+  "activeStatus": "Active",
+  "inactiveStatus": "Inactive",
+  "pendingStatus": "Pending",
+  "expiredStatus": "Expired",
+  
+  "success": "Success",
+  "error": "Error",
+  "warning": "Warning",
+  "info": "Info",
+  
+  "confirmAction": "Confirm Action",
+  "areYouSure": "Are you sure?",
+  "yes": "Yes",
+  "no": "No",
+  
+  "loading": "Loading...",
+  "noDataFound": "No data found",
+  "tryAgain": "Try Again",
+  
+  "todayAttendance": "Today's Attendance",
+  "weeklyStats": "Weekly Stats",
+  "monthlyRevenue": "Monthly Revenue",
+  "activeCoupons": "Active Coupons",
+  
+  "addNewMember": "Add New Member",
+  "editMember": "Edit Member",
+  "deleteMember": "Delete Member",
+  "viewDetails": "View Details",
+  
+  "trainerCertifications": "Trainer Certifications",
+  "specialization": "Specialization",
+  "experience": "Experience",
+  "rating": "Rating",
+  
+  "scanQRCode": "Scan QR Code",
+  "manualEntry": "Manual Entry",
+  "markAttendance": "Mark Attendance",
+  
+  "receivedPayments": "Received Payments",
+  "pendingPayments": "Pending Payments",
+  "duePayments": "Due Payments",
+  "profitLoss": "Profit/Loss",
+  
+  "equipmentMaintenance": "Equipment Maintenance",
+  "maintenanceDue": "Maintenance Due",
+  "workingCondition": "Working Condition",
+  "needsRepair": "Needs Repair",
+  
+  "createOffer": "Create Offer",
+  "generateCoupon": "Generate Coupon",
+  "activeCampaigns": "Active Campaigns",
+  "offerTemplates": "Offer Templates",
+  
+  "customerReviews": "Customer Reviews",
+  "grievances": "Grievances",
+  "communications": "Communications",
+  "replyToReview": "Reply to Review",
+  
+  "supportAndReviews": "Support & Reviews",
+  "autoRefreshEnabled": "Auto-refresh enabled",
+  "autoRefreshDisabled": "Auto-refresh disabled",
+  "refreshNow": "Refresh now",
+  "reviews": "Reviews",
+  "chats": "Chats",
+  "unread": "unread",
+  "pending": "pending",
+  "open": "open",
+  "retry": "Retry",
+  
+  "gymConfiguration": "Gym Configuration",
+  "adminManagement": "Admin Management",
+  "securitySettings": "Security Settings",
+  "security": "Security",
+  "backupData": "Backup Data",
+  "restoreData": "Restore Data",
+  
+  "sessionTimer": "Session Timer",
+  "sessionActive": "Session Active",
+  "sessionExpiry": "Session Expiry",
+  "timeRemaining": "Time Remaining",
+  "sessionWillExpireSoon": "Your session will expire soon",
+  "sessionExpiredTitle": "Session Expired",
+  "sessionExpiredMessage": "Your session has expired. Please login again.",
+  "sessionWarningTitle": "Session Expiring Soon",
+  "sessionWarningMessage": "Your session will expire in {time}. Do you want to extend the session?",
+  "extendSession": "Extend Session",
+  "continueWorking": "Continue Working",
+  "autoLogoutEnabled": "Auto-logout enabled",
+  "sessionManagement": "Session Management",
+  "sessionInfo": "Session Information",
+  "loggedInSince": "Logged in since",
+  "autoSessionTimeout": "Auto Session Timeout",
+  "autoSessionTimeoutDescription": "Set automatic logout time for security",
+  "sessionTimeoutDuration": "Session Timeout Duration",
+  "threeDays": "3 Days",
+  "sevenDays": "7 Days",
+  "oneMonth": "1 Month (30 Days)",
+  "currentTimeoutSetting": "Current: {duration}",
+  "@currentTimeoutSetting": {
+    "placeholders": {
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionTimeoutUpdated": "Session timeout updated successfully",
+  "failedToUpdateSessionTimeout": "Failed to update session timeout",
+  "selectSessionTimeout": "Select Session Timeout",
+  
+  "totalEquipment": "Total Equipment",
+  "availableEquipment": "Available Equipment",
+  "maintenanceEquipment": "Maintenance",
+  "outOfOrderEquipment": "Out of Order",
+  "addEquipment": "Add Equipment",
+  "editEquipment": "Edit Equipment",
+  "deleteEquipment": "Delete Equipment",
+  "equipmentName": "Equipment Name",
+  "brand": "Brand",
+  "model": "Model",
+  "category": "Category",
+  "quantity": "Quantity",
+  "status": "Status",
+  "purchaseDate": "Purchase Date",
+  "price": "Price",
+  "warranty": "Warranty",
+  "location": "Location",
+  "specifications": "Specifications",
+  "photos": "Photos",
+  "addPhotos": "Add Photos",
+  "searchEquipment": "Search equipment...",
+  "allCategories": "All Categories",
+  "allStatuses": "All Statuses",
+  "sortBy": "Sort By",
+  "name": "Name",
+  "months": "months",
+  "noEquipmentFound": "No Equipment Found",
+  "noEquipmentFoundDescription": "Start by adding your first piece of equipment to track and manage your gym inventory.",
+  "confirmDelete": "Confirm Delete",
+  "confirmDeleteEquipmentMessage": "Are you sure you want to delete {equipmentName}? This action cannot be undone.",
+  "@confirmDeleteEquipmentMessage": {
+    "placeholders": {
+      "equipmentName": {
+        "type": "String"
+      }
+    }
+  },
+  "delete": "Delete"
+}

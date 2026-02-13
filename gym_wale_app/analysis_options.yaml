@@ -1,0 +1,31 @@
+flutter:
+  # Prevents the project from being published to pub.dev
+  # This is a private project
+  publish_to: none
+
+analyzer:
+  errors:
+    # Treat missing required parameters as warnings
+    missing_required_param: warning
+    # Treat missing return types as warnings
+    always_declare_return_types: warning
+
+linter:
+  rules:
+    # Error rules
+    - avoid_empty_else
+    - avoid_print
+    - avoid_relative_lib_imports
+    - avoid_slow_async_io
+    - avoid_types_as_parameter_names
+    - cancel_subscriptions
+    - close_sinks
+    - valid_regexps
+    
+    # Style rules
+    - camel_case_types
+    - library_names
+    - file_names
+    - package_names
+    - non_constant_identifier_names
+    - constant_identifier_names

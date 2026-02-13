@@ -1,0 +1,366 @@
+/* Member Pending Payments Section Styles */
+
+/* CRITICAL: Fix dropdown z-index issues for member payments tab */
+.user-profile-dropdown,
+.notification-dropdown,
+#userProfileDropdown,
+#notificationDropdown,
+.dropdown-content {
+    position: fixed !important;
+    z-index: 999999 !important;
+    top: 70px !important;
+    right: 20px !important;
+}
+
+.notification-dropdown,
+#notificationDropdown {
+    right: 80px !important;
+}
+
+/* Ensure dropdowns appear above all member payments content */
+.member-pending-payments-section,
+.member-payments-modal,
+.modal-overlay {
+    z-index: 1 !important;
+}
+
+.member-pending-payments-section {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.member-pending-payments-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.member-pending-payments-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-pending-payments-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 0.9rem;
+}
+
+.member-pending-payments-stats span {
+  background: rgba(255,255,255,0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.member-pending-payments-list {
+  padding: 20px;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.member-payment-item {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.member-payment-item:hover {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transform: translateY(-2px);
+}
+
+.member-payment-item.overdue {
+  border-left: 4px solid #ef4444;
+  background: linear-gradient(90deg, #fef2f2 0%, #fff 10%);
+}
+
+.member-payment-item.critical {
+  border-left: 4px solid #dc2626;
+  background: linear-gradient(90deg, #fef2f2 0%, #fff 10%);
+  animation: glow 2s ease-in-out infinite alternate;
+}
+
+.member-payment-item.pending {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(90deg, #fffbeb 0%, #fff 10%);
+}
+
+@keyframes glow {
+  from {
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.2);
+  }
+  to {
+    box-shadow: 0 4px 20px rgba(220, 38, 38, 0.4);
+  }
+}
+
+.member-payment-avatar {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.2rem;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+.member-payment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.member-payment-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  color: #1f2937;
+  margin-bottom: 4px;
+}
+
+.member-payment-plan {
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+
+.member-payment-details {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.member-payment-details span {
+  background: #f3f4f6;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.member-payment-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+.member-payment-badge.overdue {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.member-payment-badge.critical {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  animation: pulse 2s infinite;
+}
+
+.member-payment-badge.urgent {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.member-payment-badge.pending {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fed7aa;
+}
+
+.member-payment-badge.allowance {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.member-payment-amount {
+  text-align: right;
+  margin: 0 20px;
+  flex-shrink: 0;
+}
+
+.amount-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.amount-label {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.member-payment-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.member-payment-actions .payment-action-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.member-payment-actions .payment-action-btn.mark-paid {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.member-payment-actions .payment-action-btn.mark-paid:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  transform: scale(1.05);
+}
+
+.member-payment-actions .payment-action-btn.remind {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+}
+
+.member-payment-actions .payment-action-btn.remind:hover {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  transform: scale(1.05);
+}
+
+.member-payment-actions .payment-action-btn.allowance {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+}
+
+.member-payment-actions .payment-action-btn.allowance:hover {
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  transform: scale(1.05);
+}
+
+.member-payment-actions .payment-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Member Pending Stats in Payment Card */
+.member-pending-details {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 4px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 4px;
+}
+
+.member-pending-details i {
+  margin-right: 4px;
+  color: #3b82f6;
+}
+
+/* Auto-fill animation for amount input */
+.autofill-animation {
+  animation: autofillGlow 0.6s ease-in-out;
+}
+
+@keyframes autofillGlow {
+  0% {
+    background-color: #fef3c7;
+    border-color: #f59e0b;
+  }
+  50% {
+    background-color: #fbbf24;
+    border-color: #d97706;
+  }
+  100% {
+    background-color: #ffffff;
+    border-color: #d1d5db;
+  }
+}
+
+/* Amount validation styles */
+.amount-valid {
+  border-color: #10b981 !important;
+  background-color: #f0fdfa !important;
+}
+
+.amount-overpay {
+  border-color: #3b82f6 !important;
+  background-color: #eff6ff !important;
+}
+
+.amount-underpay {
+  border-color: #f59e0b !important;
+  background-color: #fffbeb !important;
+}
+
+.amount-invalid {
+  border-color: #ef4444 !important;
+  background-color: #fef2f2 !important;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .member-payment-item {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  
+  .member-payment-avatar {
+    align-self: flex-start;
+    margin-right: 0;
+  }
+  
+  .member-payment-amount {
+    text-align: left;
+    margin: 0;
+  }
+  
+  .member-payment-actions {
+    justify-content: flex-end;
+  }
+  
+  .member-payment-details {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
