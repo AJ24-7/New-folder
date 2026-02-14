@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'storage_service.dart';
 
 /// Service to manage JWT token expiration and auto-logout
 class SessionTimerService extends ChangeNotifier {
   static final SessionTimerService _instance = SessionTimerService._internal();
   factory SessionTimerService() => _instance;
   SessionTimerService._internal();
+  
+  final StorageService _storage = StorageService();
 
   // JWT token expires in 30 minutes (1800 seconds) by default
   static const int _defaultTokenExpiryDuration = 1800; // 30 minutes in seconds
@@ -49,23 +52,59 @@ class SessionTimerService extends ChangeNotifier {
   }
 
   /// Start the session timer
-  void startTimer({
+  Future<void> startTimer({
     required VoidCallback onSessionExpired,
     VoidCallback? onWarning,
-    int? durationInMinutes, // New parameter for configurable duration
-  }) {
+    int? durationInMinutes,
+    bool restoreExisting = true, // Whether to restore existing session
+  }) async {
     _onSessionExpired = onSessionExpired;
     _onWarning = onWarning;
-    _loginTime = DateTime.now();
     
     // Set duration: use provided duration or default
     if (durationInMinutes != null && durationInMinutes > 0) {
       _tokenExpiryDuration = durationInMinutes * 60; // Convert minutes to seconds
+      await _storage.saveSessionTimeoutDuration(durationInMinutes);
     } else {
-      _tokenExpiryDuration = _defaultTokenExpiryDuration;
+      // Try to load saved duration
+      final savedDuration = _storage.getSessionTimeoutDuration();
+      if (savedDuration != null && savedDuration > 0) {
+        _tokenExpiryDuration = savedDuration * 60;
+      } else {
+        _tokenExpiryDuration = _defaultTokenExpiryDuration;
+      }
     }
     
-    _remainingSeconds = _tokenExpiryDuration;
+    // Try to restore existing session if requested
+    if (restoreExisting) {
+      final savedLoginTime = _storage.getSessionLoginTime();
+      if (savedLoginTime != null) {
+        _loginTime = savedLoginTime;
+        final elapsed = DateTime.now().difference(savedLoginTime).inSeconds;
+        _remainingSeconds = _tokenExpiryDuration - elapsed;
+        
+        if (_remainingSeconds <= 0) {
+          // Session already expired
+          debugPrint('⏰ Session already expired - triggering auto logout');
+          await clearSession();
+          _onSessionExpired?.call();
+          return;
+        }
+        
+        debugPrint('🔄 Restored existing session. Login time: $_loginTime, Remaining: $_remainingSeconds seconds');
+      } else {
+        // No saved session, start fresh
+        _loginTime = DateTime.now();
+        _remainingSeconds = _tokenExpiryDuration;
+        await _storage.saveSessionLoginTime(_loginTime!);
+      }
+    } else {
+      // Start fresh session
+      _loginTime = DateTime.now();
+      _remainingSeconds = _tokenExpiryDuration;
+      await _storage.saveSessionLoginTime(_loginTime!);
+    }
+    
     _isActive = true;
     _showWarning = false;
 
@@ -96,18 +135,19 @@ class SessionTimerService extends ChangeNotifier {
   }
 
   /// Reset the timer (called after token refresh)
-  void resetTimer() {
+  Future<void> resetTimer() async {
     if (_isActive) {
       _remainingSeconds = _tokenExpiryDuration;
       _loginTime = DateTime.now();
       _showWarning = false;
+      await _storage.saveSessionLoginTime(_loginTime!);
       notifyListeners();
       debugPrint('🔄 Session timer reset. New expiry in $_tokenExpiryDuration seconds');
     }
   }
 
   /// Stop the timer
-  void stopTimer() {
+  Future<void> stopTimer() async {
     _sessionTimer?.cancel();
     _countdownTimer?.cancel();
     _sessionTimer = null;
@@ -116,13 +156,20 @@ class SessionTimerService extends ChangeNotifier {
     _showWarning = false;
     _remainingSeconds = _tokenExpiryDuration;
     _loginTime = null;
+    await clearSession();
     notifyListeners();
     debugPrint('⏹️ Session timer stopped');
   }
+  
+  /// Clear session data from storage
+  Future<void> clearSession() async {
+    await _storage.deleteSessionLoginTime();
+    debugPrint('🗑️ Session data cleared from storage');
+  }
 
   /// Extend the session (for manual refresh)
-  void extendSession() {
-    resetTimer();
+  Future<void> extendSession() async {
+    await resetTimer();
     debugPrint('⏰ Session extended manually');
   }
 
@@ -143,7 +190,9 @@ class SessionTimerService extends ChangeNotifier {
 
   @override
   void dispose() {
-    stopTimer();
+    stopTimer().then((_) {
+      // Timer stopped and session cleared
+    });
     super.dispose();
   }
 }

@@ -73,7 +73,7 @@ class SessionWarningDialog {
                   await authService.refreshToken();
                   
                   // Reset the session timer
-                  sessionTimer.resetTimer();
+                  await sessionTimer.resetTimer();
                   
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(

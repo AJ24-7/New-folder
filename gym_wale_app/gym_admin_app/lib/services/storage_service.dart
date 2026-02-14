@@ -22,6 +22,8 @@ class StorageService {
   static const String _deviceFingerprintKey = 'device_fingerprint';
   static const String _rememberMeKey = 'remember_me';
   static const String _gymIdKey = 'gym_id';
+  static const String _sessionLoginTimeKey = 'session_login_time';
+  static const String _sessionTimeoutDurationKey = 'session_timeout_duration';
 
   // Token methods
   Future<void> saveToken(String token) async {
@@ -126,5 +128,34 @@ class StorageService {
 
   Future<void> remove(String key) async {
     await _prefs.remove(key);
+  }
+
+  // Session Timer methods
+  Future<void> saveSessionLoginTime(DateTime loginTime) async {
+    await _prefs.setString(_sessionLoginTimeKey, loginTime.toIso8601String());
+  }
+
+  DateTime? getSessionLoginTime() {
+    final timeString = _prefs.getString(_sessionLoginTimeKey);
+    if (timeString != null) {
+      return DateTime.parse(timeString);
+    }
+    return null;
+  }
+
+  Future<void> deleteSessionLoginTime() async {
+    await _prefs.remove(_sessionLoginTimeKey);
+  }
+
+  Future<void> saveSessionTimeoutDuration(int minutes) async {
+    await _prefs.setInt(_sessionTimeoutDurationKey, minutes);
+  }
+
+  int? getSessionTimeoutDuration() {
+    return _prefs.getInt(_sessionTimeoutDurationKey);
+  }
+
+  Future<void> deleteSessionTimeoutDuration() async {
+    await _prefs.remove(_sessionTimeoutDurationKey);
   }
 }

@@ -679,14 +679,28 @@ router.post('/verify-login-2fa', tempAuth, async (req, res) => {
     gym.twoFactorOTPExpiry = null;
     await gym.save();
     
-    // Create final login token
+    // Get session timeout settings for dynamic token expiration
+    const SecuritySettings = require('../models/SecuritySettings');
+    let sessionTimeout = 60; // Default 60 minutes
+    try {
+      const settings = await SecuritySettings.findOne({ gymId: gym._id });
+      if (settings?.sessionTimeout?.enabled && settings.sessionTimeout.timeoutMinutes) {
+        sessionTimeout = settings.sessionTimeout.timeoutMinutes;
+      }
+    } catch (err) {
+      console.log('⚠️ Could not fetch session timeout, using default:', err.message);
+    }
+    
+    console.log('⏱️ JWT Token expiration set to:', sessionTimeout, 'minutes');
+    
+    // Create final login token with dynamic expiration
     const payload = {
       admin: {
         id: gym.id,
         email: gym.email
       }
     };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: `${sessionTimeout}m` });
     
     // Update lastLogin field
     gym.lastLogin = new Date();
@@ -703,10 +717,15 @@ router.post('/verify-login-2fa', tempAuth, async (req, res) => {
       gymId: gym.id
     };
     
+    // Calculate token expiration timestamp
+    const tokenExpiresAt = new Date(Date.now() + sessionTimeout * 60 * 1000);
+    
     res.json({ 
       success: true, 
       message: 'Login successful!',
       token,
+      tokenExpiresAt: tokenExpiresAt.toISOString(),
+      tokenExpiresInMinutes: sessionTimeout,
       gymId: gym.id,
       admin: adminData
     });

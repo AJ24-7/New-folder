@@ -1508,17 +1508,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       if (result['success'] == true) {
-        // Restart the session timer with new duration
-        authProvider.sessionTimer.stopTimer();
-        authProvider.setSessionExpiredCallback(() {
-          _showSessionExpiredDialog();
-        });
-        authProvider.setSessionWarningCallback(() {
-          SessionWarningDialog.show(context);
-        });
+        // Update the timeout duration but preserve the login time
+        final originalLoginTime = authProvider.sessionTimer.loginTime;
         
-        // Manually restart timer with new duration
-        authProvider.sessionTimer.startTimer(
+        // Stop current timer
+        await authProvider.sessionTimer.stopTimer();
+        
+        // Restart timer with new duration, but don't restore (start fresh with updated timeout)
+        await authProvider.sessionTimer.startTimer(
           onSessionExpired: () {
             authProvider.logout();
             _showSessionExpiredDialog();
@@ -1527,6 +1524,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SessionWarningDialog.show(context);
           },
           durationInMinutes: timeoutMinutes,
+          restoreExisting: false, // Start fresh with new timeout
         );
 
         if (mounted) {
