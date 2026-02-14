@@ -300,15 +300,30 @@ exports.login = async (req, res) => {
       }
     }
         
-    // Create and assign a token
+    // Create and assign a token with dynamic expiration
     console.log('🎫 Creating JWT token...');
+    
+    // Get session timeout settings
+    const SecuritySettings = require('../models/SecuritySettings');
+    let sessionTimeout = 60; // Default 60 minutes
+    try {
+      const settings = await SecuritySettings.findOne({ gymId: gym._id });
+      if (settings?.sessionTimeout?.enabled && settings.sessionTimeout.timeoutMinutes) {
+        sessionTimeout = settings.sessionTimeout.timeoutMinutes;
+      }
+    } catch (err) {
+      console.log('⚠️ Could not fetch session timeout, using default:', err.message);
+    }
+    
+    console.log('⏱️ JWT Token expiration set to:', sessionTimeout, 'minutes');
+    
     const payload = {
       admin: {
         id: gym.id,
         email: gym.email
       }
     };
-    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: `${sessionTimeout}m` });
     console.log('🎫 Token created successfully');
     
     // Update lastLogin and record attempt asynchronously (don't wait)
@@ -335,10 +350,15 @@ exports.login = async (req, res) => {
       gymId: gym.id
     };
     
+    // Calculate token expiration timestamp
+    const tokenExpiresAt = new Date(Date.now() + sessionTimeout * 60 * 1000);
+    
     res.status(200).json({
       success: true,
       message: 'Login successful! Redirecting...',
       token,
+      tokenExpiresAt: tokenExpiresAt.toISOString(),
+      tokenExpiresInMinutes: sessionTimeout,
       gymId: gym.id,
       admin: adminData
     });

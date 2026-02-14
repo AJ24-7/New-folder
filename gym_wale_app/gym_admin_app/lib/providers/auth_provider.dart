@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/admin.dart';
 import '../services/auth_service.dart';
 import '../services/session_timer_service.dart';
+import '../services/api_service.dart';
 
 /// Authentication Provider
 class AuthProvider extends ChangeNotifier {
@@ -23,6 +24,10 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider() {
     _checkLoginStatus();
+    // Set up API service auth error callback
+    ApiService.setAuthErrorCallback(() {
+      _handleSessionExpired();
+    });
   }
 
   Future<void> _checkLoginStatus() async {
@@ -46,28 +51,46 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Start session timer
-  Future<void> _startSessionTimer() async {
+  Future<void> _startSessionTimer({bool restoreExisting = true}) async {
     // Load session timeout configuration from backend
     final timeoutConfig = await _authService.getSessionTimeout();
     final durationInMinutes = timeoutConfig['timeoutMinutes'] ?? 30;
     
-    _sessionTimer.startTimer(
+    debugPrint('⏱️ Starting session timer with $durationInMinutes minutes (restore: $restoreExisting)');
+    
+    await _sessionTimer.startTimer(
       onSessionExpired: () {
         // Auto-logout when session expires
+        debugPrint('⏰ Session expired - auto logout triggered');
         _handleSessionExpired();
       },
       onWarning: () {
         // Show warning when threshold is reached
+        debugPrint('⚠️ Session warning - 5 minutes remaining');
         _onSessionWarningCallback?.call();
         notifyListeners();
       },
       durationInMinutes: durationInMinutes,
+      restoreExisting: restoreExisting,
     );
   }
   
   /// Handle session expiration
   Future<void> _handleSessionExpired() async {
-    await logout();
+    debugPrint('🚪 Handling session expiration - logging out');
+    
+    // Stop the session timer
+    _sessionTimer.stopTimer();
+    
+    // Clear authentication state
+    _currentAdmin = null;
+    _isLoggedIn = false;
+    notifyListeners();
+    
+    // Clear stored data
+    await _authService.clearTokens();
+    
+    // Trigger callback to show dialog and redirect
     _onSessionExpiredCallback?.call();
   }
 
@@ -91,8 +114,8 @@ class AuthProvider extends ChangeNotifier {
         if (result['requires2FA'] != true) {
           _isLoggedIn = true;
           _currentAdmin = Admin.fromJson(result['admin']);
-          // Start session timer after successful login without 2FA
-          _startSessionTimer();
+          // Start session timer after successful login without 2FA (fresh session)
+          await _startSessionTimer(restoreExisting: false);
         }
       } else {
         _error = result['message'];
@@ -123,8 +146,8 @@ class AuthProvider extends ChangeNotifier {
       );
 
       if (result['success'] == true) {
-        // Start session timer after successful 2FA verification
-        _startSessionTimer();
+        // Start session timer after successful 2FA verification (fresh session)
+        await _startSessionTimer(restoreExisting: false);
         _isLoggedIn = true;
         _currentAdmin = Admin.fromJson(result['admin']);
       } else {
@@ -143,7 +166,7 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     // Stop session timer
-    _sessionTimer.stopTimer();
+    await _sessionTimer.stopTimer();
     
     _isLoading = true;
     notifyListeners();

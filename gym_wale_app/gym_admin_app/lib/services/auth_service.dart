@@ -624,4 +624,17 @@ class AuthService {
       };
     }
   }
+  
+  /// Clear all tokens and user data (used when session expires)
+  Future<void> clearTokens() async {
+    try {
+      await _storage.deleteToken();
+      await _storage.deleteRefreshToken();
+      await _storage.deleteUserData();
+      await _storage.deleteGymId();
+      debugPrint('✅ All tokens and user data cleared');
+    } catch (e) {
+      debugPrint('⚠️ Error clearing tokens: $e');
+    }
+  }
 }

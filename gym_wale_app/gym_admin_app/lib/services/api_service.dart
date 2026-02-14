@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../config/api_config.dart';
 import '../models/dashboard_stats.dart';
 import '../models/gym_profile.dart';
@@ -22,6 +23,14 @@ class ApiService {
     _setupInterceptors();
   }
 
+  // Callback for handling authentication errors
+  static VoidCallback? _onAuthError;
+  
+  /// Set authentication error callback (called when token expires)
+  static void setAuthErrorCallback(VoidCallback callback) {
+    _onAuthError = callback;
+  }
+
   void _setupInterceptors() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
@@ -41,12 +50,26 @@ class ApiService {
         print('❌ Error Data: ${error.response?.data}');
         
         if (error.response?.statusCode == 401) {
-          print('🔓 401 Unauthorized - Token may be invalid or expired');
-          final token = await _storage.getToken();
-          if (token == null) {
-            print('⚠️ No token in storage - User needs to login');
+          print('🔓 401 Unauthorized - Token expired or invalid');
+          
+          // Check if error is due to JWT expiration
+          final errorData = error.response?.data;
+          final isTokenExpired = errorData is Map && 
+              (errorData['error'] == 'invalid_token' || 
+               errorData['details']?.toString().contains('expired') == true);
+          
+          if (isTokenExpired) {
+            print('⏰ JWT Token has expired - triggering logout');
+            
+            // Clear all stored data
+            await _storage.deleteToken();
+            await _storage.deleteRefreshToken();
+            await _storage.deleteUserData();
+            
+            // Trigger auth error callback to logout and redirect
+            _onAuthError?.call();
           } else {
-            print('⚠️ Token expired or invalid - Clearing storage');
+            print('⚠️ Invalid authentication - clearing storage');
             await _storage.deleteToken();
           }
         }
