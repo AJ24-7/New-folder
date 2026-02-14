@@ -304,7 +304,6 @@ exports.login = async (req, res) => {
     console.log('🎫 Creating JWT token...');
     
     // Get session timeout settings
-    const SecuritySettings = require('../models/SecuritySettings');
     let sessionTimeout = 60; // Default 60 minutes
     try {
       const settings = await SecuritySettings.findOne({ gymId: gym._id });
