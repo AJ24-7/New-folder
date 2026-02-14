@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/locale_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/session_timer_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
+import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/session_warning_dialog.dart';
 import '../members/members_screen.dart';
@@ -24,6 +27,12 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   int _selectedIndex = 8; // Settings is index 8
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ScrollController _scrollController = ScrollController();
+  final GlobalKey _attendanceSettingsKey = GlobalKey();
+  final ApiService _apiService = ApiService();
+  
+  AttendanceSettings? _attendanceSettings;
+  bool _isLoadingSettings = true;
 
   @override
   void initState() {
@@ -37,7 +46,53 @@ class _SettingsScreenState extends State<SettingsScreen> {
       authProvider.setSessionWarningCallback(() {
         SessionWarningDialog.show(context);
       });
+      
+      // Load attendance settings
+      _loadAttendanceSettings();
+      
+      // Handle navigation arguments to scroll to specific section
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['scrollTo'] == 'attendance') {
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _scrollToAttendanceSettings();
+        });
+      }
     });
+  }
+  
+  Future<void> _loadAttendanceSettings() async {
+    try {
+      final settings = await _apiService.getAttendanceSettings();
+      if (mounted) {
+        setState(() {
+          _attendanceSettings = settings;
+          _isLoadingSettings = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingSettings = false;
+        });
+      }
+    }
+  }
+  
+  void _scrollToAttendanceSettings() {
+    final context = _attendanceSettingsKey.currentContext;
+    if (context != null) {
+      Scrollable.ensureVisible(
+        context,
+        duration: const Duration(milliseconds: 500),
+        curve: Curves.easeInOut,
+      );
+    }
+  }
+  
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _onMenuItemSelected(int index) {
@@ -126,7 +181,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // Top bar for mobile/tablet with menu button
                 if (!isDesktop)
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).padding.top > 0 
+                          ? MediaQuery.of(context).padding.top + 8 
+                          : 12,
+                      bottom: 12,
+                      left: 12,
+                      right: 12,
+                    ),
                     decoration: BoxDecoration(
                       color: Theme.of(context).cardColor,
                       boxShadow: [
@@ -140,12 +202,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.menu),
+                          icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
                           onPressed: () {
                             _scaffoldKey.currentState?.openDrawer();
                           },
+                          padding: const EdgeInsets.all(8),
+                          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         Text(
                           l10n.settings,
                           style: Theme.of(context).textTheme.titleLarge
@@ -157,6 +221,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // Settings content
                 Expanded(
                   child: SingleChildScrollView(
+                    controller: _scrollController,
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -266,6 +331,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ],
                         ),
+
+                        const SizedBox(height: 24),
+
+                        // Attendance Settings Section
+                        _buildAttendanceSettingsSection(context, l10n),
 
                         const SizedBox(height: 24),
 
@@ -484,6 +554,394 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             )
           : null,
+    );
+  }
+
+  Widget _buildAttendanceSettingsSection(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    return Container(
+      key: _attendanceSettingsKey,
+      child: _buildSectionCard(
+        context,
+        title: 'Attendance Settings',
+        icon: FontAwesomeIcons.clipboardCheck,
+        children: [
+          if (_isLoadingSettings)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else ...[
+            // Attendance Mode
+            _buildSettingTile(
+              context,
+              title: 'Attendance Mode',
+              subtitle: _getAttendanceModeLabel(_attendanceSettings?.mode ?? AttendanceMode.manual),
+              leading: Icon(
+                _getAttendanceModeIcon(_attendanceSettings?.mode ?? AttendanceMode.manual),
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onTap: () => _showAttendanceModeDialog(context),
+            ),
+            const Divider(height: 1),
+            
+            // Auto Mark Attendance
+            _buildSettingTile(
+              context,
+              title: 'Auto Mark Attendance',
+              subtitle: 'Automatically mark attendance based on mode',
+              leading: Icon(
+                Icons.auto_mode,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              trailing: Switch(
+                value: _attendanceSettings?.autoMarkEnabled ?? false,
+                onChanged: (value) async {
+                  await _updateAttendanceSetting('autoMarkEnabled', value);
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            
+            // Require Check Out
+            _buildSettingTile(
+              context,
+              title: 'Require Check Out',
+              subtitle: 'Members must check out when leaving',
+              leading: Icon(
+                Icons.exit_to_app,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              trailing: Switch(
+                value: _attendanceSettings?.requireCheckOut ?? false,
+                onChanged: (value) async {
+                  await _updateAttendanceSetting('requireCheckOut', value);
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            
+            // Allow Late Check In
+            _buildSettingTile(
+              context,
+              title: 'Allow Late Check In',
+              subtitle: 'Permit check-ins after scheduled time',
+              leading: Icon(
+                Icons.schedule,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              trailing: Switch(
+                value: _attendanceSettings?.allowLateCheckIn ?? true,
+                onChanged: (value) async {
+                  await _updateAttendanceSetting('allowLateCheckIn', value);
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            
+            // Late Threshold
+            _buildSettingTile(
+              context,
+              title: 'Late Threshold',
+              subtitle: '${_attendanceSettings?.lateThresholdMinutes ?? 15} minutes',
+              leading: Icon(
+                Icons.timer,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onTap: () => _showLateThresholdDialog(context),
+            ),
+            const Divider(height: 1),
+            
+            // Send Notifications
+            _buildSettingTile(
+              context,
+              title: 'Send Notifications',
+              subtitle: 'Notify members about attendance',
+              leading: Icon(
+                Icons.notifications_active,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              trailing: Switch(
+                value: _attendanceSettings?.sendNotifications ?? false,
+                onChanged: (value) async {
+                  await _updateAttendanceSetting('sendNotifications', value);
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            
+            // Track Duration
+            _buildSettingTile(
+              context,
+              title: 'Track Duration',
+              subtitle: 'Track how long members stay',
+              leading: Icon(
+                Icons.timelapse,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              trailing: Switch(
+                value: _attendanceSettings?.trackDuration ?? true,
+                onChanged: (value) async {
+                  await _updateAttendanceSetting('trackDuration', value);
+                },
+              ),
+            ),
+            const Divider(height: 1),
+            
+            // Geofence Setup
+            _buildSettingTile(
+              context,
+              title: 'Geofence Configuration',
+              subtitle: 'Setup location-based attendance',
+              leading: Icon(
+                FontAwesomeIcons.mapLocationDot,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onTap: () {
+                Navigator.pushNamed(context, '/geofence-setup');
+              },
+            ),
+            const Divider(height: 1),
+            
+            // Reset Settings
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: ElevatedButton.icon(
+                onPressed: () => _showResetAttendanceSettingsDialog(context),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reset to Default'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  
+  String _getAttendanceModeLabel(AttendanceMode mode) {
+    switch (mode) {
+      case AttendanceMode.manual:
+        return 'Manual Entry';
+      case AttendanceMode.geofence:
+        return 'Location-Based (Geofence)';
+      case AttendanceMode.biometric:
+        return 'Biometric';
+      case AttendanceMode.qr:
+        return 'QR Code Scan';
+      case AttendanceMode.hybrid:
+        return 'Hybrid (Multiple Methods)';
+    }
+  }
+  
+  IconData _getAttendanceModeIcon(AttendanceMode mode) {
+    switch (mode) {
+      case AttendanceMode.manual:
+        return Icons.edit;
+      case AttendanceMode.geofence:
+        return FontAwesomeIcons.locationDot;
+      case AttendanceMode.biometric:
+        return Icons.fingerprint;
+      case AttendanceMode.qr:
+        return Icons.qr_code;
+      case AttendanceMode.hybrid:
+        return Icons.apps;
+    }
+  }
+  
+  Future<void> _updateAttendanceSetting(String key, dynamic value) async {
+    if (_attendanceSettings == null) return;
+    
+    AttendanceSettings updatedSettings;
+    switch (key) {
+      case 'autoMarkEnabled':
+        updatedSettings = _attendanceSettings!.copyWith(autoMarkEnabled: value);
+        break;
+      case 'requireCheckOut':
+        updatedSettings = _attendanceSettings!.copyWith(requireCheckOut: value);
+        break;
+      case 'allowLateCheckIn':
+        updatedSettings = _attendanceSettings!.copyWith(allowLateCheckIn: value);
+        break;
+      case 'sendNotifications':
+        updatedSettings = _attendanceSettings!.copyWith(sendNotifications: value);
+        break;
+      case 'trackDuration':
+        updatedSettings = _attendanceSettings!.copyWith(trackDuration: value);
+        break;
+      case 'lateThresholdMinutes':
+        updatedSettings = _attendanceSettings!.copyWith(lateThresholdMinutes: value);
+        break;
+      case 'mode':
+        updatedSettings = _attendanceSettings!.copyWith(mode: value);
+        break;
+      default:
+        return;
+    }
+    
+    final success = await _apiService.updateAttendanceSettings(updatedSettings);
+    if (success && mounted) {
+      setState(() {
+        _attendanceSettings = updatedSettings;
+      });
+      _showSnackBar(context, 'Attendance settings updated successfully');
+    } else {
+      _showSnackBar(context, 'Failed to update attendance settings');
+    }
+  }
+  
+  void _showAttendanceModeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Select Attendance Mode'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: AttendanceMode.values.map((mode) {
+              final isSelected = _attendanceSettings?.mode == mode;
+              return RadioListTile<AttendanceMode>(
+                value: mode,
+                groupValue: _attendanceSettings?.mode,
+                title: Text(_getAttendanceModeLabel(mode)),
+                subtitle: Text(_getAttendanceModeDescription(mode)),
+                selected: isSelected,
+                activeColor: Theme.of(dialogContext).colorScheme.primary,
+                onChanged: (value) async {
+                  if (value != null) {
+                    Navigator.of(dialogContext).pop();
+                    await _updateAttendanceSetting('mode', value);
+                  }
+                },
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  String _getAttendanceModeDescription(AttendanceMode mode) {
+    switch (mode) {
+      case AttendanceMode.manual:
+        return 'Manually mark attendance for each member';
+      case AttendanceMode.geofence:
+        return 'Auto-mark when members enter gym area';
+      case AttendanceMode.biometric:
+        return 'Use fingerprint or face recognition';
+      case AttendanceMode.qr:
+        return 'Scan QR code to mark attendance';
+      case AttendanceMode.hybrid:
+        return 'Use multiple methods simultaneously';
+    }
+  }
+  
+  void _showLateThresholdDialog(BuildContext context) {
+    int selectedMinutes = _attendanceSettings?.lateThresholdMinutes ?? 15;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Set Late Threshold'),
+        content: StatefulBuilder(
+          builder: (context, setState) {
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '$selectedMinutes minutes',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: 16),
+                Slider(
+                  value: selectedMinutes.toDouble(),
+                  min: 5,
+                  max: 60,
+                  divisions: 11,
+                  label: '$selectedMinutes min',
+                  onChanged: (value) {
+                    setState(() {
+                      selectedMinutes = value.toInt();
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Members checking in after this time will be marked as late',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            );
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              await _updateAttendanceSetting('lateThresholdMinutes', selectedMinutes);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  void _showResetAttendanceSettingsDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Reset Attendance Settings'),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to reset all attendance settings to default values? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(dialogContext).pop();
+              final success = await _apiService.resetAttendanceSettings();
+              if (success && mounted) {
+                await _loadAttendanceSettings();
+                _showSnackBar(context, 'Attendance settings reset to default');
+              } else {
+                _showSnackBar(context, 'Failed to reset attendance settings');
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
     );
   }
 

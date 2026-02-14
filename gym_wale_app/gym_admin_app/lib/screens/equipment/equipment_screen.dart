@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../config/app_theme.dart';
@@ -13,6 +14,7 @@ import '../../widgets/stat_card.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../members/members_screen.dart';
+import '../attendance/attendance_screen.dart';
 import '../support/support_screen.dart';
 
 /// Equipment Management Screen
@@ -168,8 +170,11 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         );
         break;
       case 3: // Attendance
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance screen coming soon')),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AttendanceScreen(),
+          ),
         );
         break;
       case 4: // Payments
@@ -259,8 +264,14 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   }
 
   Widget _buildTopBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.only(
+        top: isDesktop ? 12 : (topPadding > 0 ? topPadding + 8 : 12),
+        bottom: 12,
+        left: isDesktop ? 16 : 12,
+        right: isDesktop ? 16 : 12,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
@@ -275,12 +286,12 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 8),
+          if (!isDesktop) const SizedBox(width: 4),
           const Icon(
             Icons.fitness_center,
             color: AppTheme.primaryColor,

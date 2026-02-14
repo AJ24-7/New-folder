@@ -137,9 +137,7 @@ class _SupportScreenState extends State<SupportScreen>
         );
         break;
       case 3: // Attendance
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/attendance');
         break;
       case 4: // Payments
         ScaffoldMessenger.of(context).showSnackBar(
@@ -214,8 +212,14 @@ class _SupportScreenState extends State<SupportScreen>
 
   Widget _buildTopBar(BuildContext context, bool isDesktop) {
     final l10n = AppLocalizations.of(context)!;
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: EdgeInsets.only(
+        top: isDesktop ? 12 : (topPadding > 0 ? topPadding + 8 : 12),
+        bottom: 12,
+        left: isDesktop ? 16 : 12,
+        right: isDesktop ? 16 : 12,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
@@ -230,12 +234,12 @@ class _SupportScreenState extends State<SupportScreen>
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 8),
+          if (!isDesktop) const SizedBox(width: 4),
           const FaIcon(
             FontAwesomeIcons.headset,
             color: AppTheme.primaryColor,

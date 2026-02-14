@@ -378,10 +378,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ThemeProvider themeProvider,
     LocaleProvider localeProvider,
   ) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 24 : 12,
-        vertical: 16,
+      padding: EdgeInsets.only(
+        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
+        bottom: 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -397,12 +400,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 8),
+          if (!isDesktop) const SizedBox(width: 4),
           Flexible(
             child: Row(
               mainAxisSize: MainAxisSize.min,

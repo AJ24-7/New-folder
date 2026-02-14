@@ -1,6 +1,6 @@
 {
-    "name": "gym_admin_app",
-    "short_name": "gym_admin_app",
+    "name": "Gym-Wale Admin",
+    "short_name": "Gym-Wale",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

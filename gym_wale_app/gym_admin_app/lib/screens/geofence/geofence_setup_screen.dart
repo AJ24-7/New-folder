@@ -103,7 +103,7 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
   Future<void> _loadExistingGeofence() async {
     try {
       final response = await _apiService.getGeofenceConfig();
-      if (response != null && response['success'] == true) {
+      if (response != null && response['success'] == true && response['data'] != null) {
         final config = GeofenceConfig.fromJson(response['data']);
         setState(() {
           _selectedType = config.type;
@@ -138,9 +138,12 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
             _updateCircle();
           }
         });
+      } else {
+        print('No geofence config found or invalid response');
       }
     } catch (e) {
       print('Error loading geofence: $e');
+      // Don't show error to user, just log it - this is expected for new setups
     }
   }
 

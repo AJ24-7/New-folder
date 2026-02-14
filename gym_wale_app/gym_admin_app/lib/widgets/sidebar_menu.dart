@@ -51,12 +51,7 @@ class SidebarMenu extends StatelessWidget {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Theme.of(context).colorScheme.primary,
-                        Theme.of(context).colorScheme.secondary,
-                      ],
-                    ),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
@@ -66,10 +61,10 @@ class SidebarMenu extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.fitness_center,
-                    color: Colors.white,
-                    size: 28,
+                  padding: const EdgeInsets.all(6),
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    fit: BoxFit.contain,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -78,14 +73,14 @@ class SidebarMenu extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       RichText(
-                        text: TextSpan(
+                        text: const TextSpan(
                           children: [
                             TextSpan(
-                              text: 'GYM',
+                              text: 'Gym',
                               style: TextStyle(
                                 fontSize: 20,
                                 fontWeight: FontWeight.bold,
-                                color: Color.fromARGB(255, 20, 100, 237), // Navy blue
+                                color: Color(0xFF225DE8), // Primary blue
                               ),
                             ),
                             TextSpan(

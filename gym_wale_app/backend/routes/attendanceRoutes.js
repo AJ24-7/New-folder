@@ -5,6 +5,12 @@ const Member = require('../models/Member');
 const Trainer = require('../models/trainerModel');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
+const attendanceSettingsController = require('../controllers/attendanceSettingsController');
+
+// Attendance Settings Routes (Gym Admin only)
+router.get('/settings', gymadminAuth, attendanceSettingsController.getAttendanceSettings);
+router.put('/settings', gymadminAuth, attendanceSettingsController.updateAttendanceSettings);
+router.post('/settings/reset', gymadminAuth, attendanceSettingsController.resetAttendanceSettings);
 
 // Enhanced rush hour analysis endpoint for gym details page with professional bar chart data
 router.get('/rush-analysis/:gymId', async (req, res) => {

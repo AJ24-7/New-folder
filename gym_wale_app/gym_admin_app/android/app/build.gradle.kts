@@ -13,6 +13,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -37,6 +38,20 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+configurations.all {
+    resolutionStrategy {
+        force("androidx.core:core:1.13.0")
+        force("androidx.core:core-ktx:1.13.0")
+        force("androidx.activity:activity:1.9.0")
+        force("androidx.activity:activity-ktx:1.9.0")
+        force("androidx.browser:browser:1.8.0")
+    }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

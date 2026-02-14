@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const geofenceConfigController = require('../controllers/geofenceConfigController');
-const { protect } = require('../middleware/authMiddleware');
+const gymadminAuth = require('../middleware/gymadminAuth');
 
-// All routes require authentication
-router.use(protect);
+// All routes require gym admin authentication
+router.use(gymadminAuth);
 
 /**
  * @route   GET /api/geofence/config

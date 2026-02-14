@@ -275,9 +275,7 @@ class _MembersScreenState extends State<MembersScreen> {
         );
         break;
       case 3: // Attendance
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/attendance');
         break;
       case 4: // Payments
         ScaffoldMessenger.of(context).showSnackBar(
@@ -358,8 +356,14 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   Widget _buildTopBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.only(
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
@@ -374,8 +378,10 @@ class _MembersScreenState extends State<MembersScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
           const Row(
             children: [

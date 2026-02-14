@@ -560,21 +560,29 @@ class ApiService {
   /// Get attendance settings
   Future<AttendanceSettings?> getAttendanceSettings() async {
     try {
-      final gymProfile = await getGymProfile();
-      if (gymProfile == null) return null;
-
-      // For now, return default settings as backend might not have this endpoint yet
-      return AttendanceSettings(
-        gymId: gymProfile.id,
-        mode: AttendanceMode.manual,
-        autoMarkEnabled: false,
-        requireCheckOut: false,
-        allowLateCheckIn: true,
-        sendNotifications: false,
-        trackDuration: true,
-      );
+      final response = await _dio.get('${ApiConfig.attendance}/settings');
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return AttendanceSettings.fromJson(response.data['settings']);
+      }
+      return null;
     } catch (e) {
       print('Error fetching attendance settings: $e');
+      
+      // Return default settings on error
+      final gymProfile = await getGymProfile();
+      if (gymProfile != null) {
+        return AttendanceSettings(
+          gymId: gymProfile.id,
+          mode: AttendanceMode.manual,
+          autoMarkEnabled: false,
+          requireCheckOut: false,
+          allowLateCheckIn: true,
+          sendNotifications: false,
+          trackDuration: true,
+          lateThresholdMinutes: 15,
+        );
+      }
       return null;
     }
   }
@@ -582,18 +590,34 @@ class ApiService {
   /// Update attendance settings
   Future<bool> updateAttendanceSettings(AttendanceSettings settings) async {
     try {
-      // Placeholder for backend endpoint
-      // final response = await _dio.put(
-      //   '${ApiConfig.attendance}/settings',
-      //   data: settings.toJson(),
-      // );
-      // return response.statusCode == 200;
+      final response = await _dio.put(
+        '${ApiConfig.attendance}/settings',
+        data: settings.toJson(),
+      );
       
-      // For now, just return true (settings will be stored locally or in future backend)
-      print('Attendance settings updated: ${settings.toJson()}');
-      return true;
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        print('Attendance settings updated successfully');
+        return true;
+      }
+      return false;
     } catch (e) {
       print('Error updating attendance settings: $e');
+      return false;
+    }
+  }
+  
+  /// Reset attendance settings to default
+  Future<bool> resetAttendanceSettings() async {
+    try {
+      final response = await _dio.post('${ApiConfig.attendance}/settings/reset');
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        print('Attendance settings reset successfully');
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('Error resetting attendance settings: $e');
       return false;
     }
   }

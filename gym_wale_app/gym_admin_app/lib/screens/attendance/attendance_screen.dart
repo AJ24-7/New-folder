@@ -13,6 +13,7 @@ import '../../models/attendance_stats.dart';
 import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/stat_card.dart';
+import '../support/support_screen.dart';
 import 'widgets/attendance_calendar.dart';
 import 'widgets/attendance_list_item.dart';
 import 'widgets/attendance_settings_dialog.dart';
@@ -130,7 +131,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
         break;
       case 7: // Support
-        Navigator.pushReplacementNamed(context, '/support');
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        final gymId = authProvider.currentAdmin?.id ?? '';
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SupportScreen(gymId: gymId),
+          ),
+        );
         break;
       case 8: // Settings
         Navigator.pushReplacementNamed(context, '/settings');
@@ -186,10 +194,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     bool isDesktop,
     bool isTablet,
   ) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: isDesktop ? 24 : 16,
-        vertical: 16,
+      padding: EdgeInsets.only(
+        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
+        bottom: 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -205,10 +216,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const Icon(Icons.menu),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 8),
+          if (!isDesktop) const SizedBox(width: 4),
           Icon(
             FontAwesomeIcons.clipboardCheck,
             color: AppTheme.primaryColor,
@@ -226,18 +239,24 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
           ),
           const Spacer(),
-          if (isDesktop || isTablet) ...[
-            IconButton(
-              icon: Badge(
-                label: Text(_settings?.mode.toString().split('.').last.toUpperCase() ?? 'MANUAL'),
-                backgroundColor: _getModeBadgeColor(),
-                textColor: Colors.white,
-                child: const Icon(Icons.settings),
-              ),
-              onPressed: _showAttendanceSettings,
-              tooltip: 'Attendance Settings',
+          // Settings button - now shown on all screen sizes
+          IconButton(
+            icon: Badge(
+              label: Text(_settings?.mode.toString().split('.').last.toUpperCase() ?? 'MANUAL'),
+              backgroundColor: _getModeBadgeColor(),
+              textColor: Colors.white,
+              child: Icon(Icons.settings, size: isDesktop ? 24 : 20),
             ),
-          ],
+            onPressed: () {
+              // Navigate to settings screen with attendance section
+              Navigator.pushNamed(
+                context,
+                '/settings',
+                arguments: {'scrollTo': 'attendance'},
+              );
+            },
+            tooltip: 'Attendance Settings',
+          ),
         ],
       ),
     );
@@ -738,27 +757,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   }
 
   // Action methods
-  void _showAttendanceSettings() async {
-    final result = await showDialog<AttendanceSettings>(
-      context: context,
-      builder: (context) => AttendanceSettingsDialog(
-        currentSettings: _settings,
-      ),
-    );
-    
-    if (result != null) {
-      final success = await _apiService.updateAttendanceSettings(result);
-      if (success && mounted) {
-        setState(() {
-          _settings = result;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance settings updated successfully')),
-        );
-      }
-    }
-  }
-
   void _showMarkAttendanceDialog(String defaultStatus) async {
     final result = await showDialog<bool>(
       context: context,
@@ -833,28 +831,5 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         );
       }
     }
-  }
-
-  void _handleLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout();
-              Navigator.pushReplacementNamed(context, '/login');
-            },
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
   }
 }
