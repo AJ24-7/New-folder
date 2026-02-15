@@ -284,63 +284,98 @@ class NotificationController {
             }
 
             // Build member filter
-            const memberFilter = { gymId };
+            const memberFilter = { gym: gymId };
             
-            if (filters.membershipStatus) {
-                memberFilter.membershipStatus = filters.membershipStatus;
-            }
+            // Note: membershipStatus filtering is done after fetching members
+            // because it's calculated based on membershipValidUntil
             
-            if (filters.membershipType) {
-                memberFilter.membershipType = filters.membershipType;
+            if (filters.planSelected) {
+                memberFilter.planSelected = filters.planSelected;
             }
             
             if (filters.ageRange) {
-                const currentDate = new Date();
                 if (filters.ageRange.min) {
-                    const maxBirthDate = new Date(currentDate.getFullYear() - filters.ageRange.min, currentDate.getMonth(), currentDate.getDate());
-                    memberFilter.dateOfBirth = { ...memberFilter.dateOfBirth, $lte: maxBirthDate };
+                    memberFilter.age = { ...memberFilter.age, $gte: filters.ageRange.min };
                 }
                 if (filters.ageRange.max) {
-                    const minBirthDate = new Date(currentDate.getFullYear() - filters.ageRange.max, currentDate.getMonth(), currentDate.getDate());
-                    memberFilter.dateOfBirth = { ...memberFilter.dateOfBirth, $gte: minBirthDate };
+                    memberFilter.age = { ...memberFilter.age, $lte: filters.ageRange.max };
                 }
             }
             
             if (filters.gender) {
-                memberFilter.gender = filters.gender;
+                // Capitalize first letter to match Member model enum
+                const genderCapitalized = filters.gender.charAt(0).toUpperCase() + filters.gender.slice(1).toLowerCase();
+                memberFilter.gender = genderCapitalized;
             }
 
             if (filters.specificMembers && filters.specificMembers.length > 0) {
                 memberFilter._id = { $in: filters.specificMembers };
             }
 
-            // Get matching members with more details for reporting
-            const members = await Member.find(memberFilter)
-                .select('userId name email membershipStatus')
-                .populate('userId', 'name email')
+            // Get matching members
+            let members = await Member.find(memberFilter)
+                .select('memberName email phone membershipValidUntil paymentStatus')
                 .lean();
             
-            const userIds = members.map(m => m.userId).filter(id => id);
+            console.log(`📋 Found ${members.length} members matching initial filter for gym ${gymId}`);
+            
+            // Filter by membership status if specified
+            if (filters.membershipStatus) {
+                const now = new Date();
+                const beforeFilterCount = members.length;
+                if (filters.membershipStatus === 'active') {
+                    members = members.filter(m => {
+                        if (!m.membershipValidUntil) return false;
+                        const validDate = new Date(m.membershipValidUntil);
+                        return validDate >= now;
+                    });
+                } else if (filters.membershipStatus === 'expired') {
+                    members = members.filter(m => {
+                        if (!m.membershipValidUntil) return true;
+                        const validDate = new Date(m.membershipValidUntil);
+                        return validDate < now;
+                    });
+                } else if (filters.membershipStatus === 'pending') {
+                    members = members.filter(m => m.paymentStatus === 'pending');
+                }
+                console.log(`🔍 Filtered from ${beforeFilterCount} to ${members.length} members by status '${filters.membershipStatus}'`);
+            }
+            
+            // Find matching users by email for notification delivery
+            const memberEmails = members.map(m => m.email);
+            const users = await User.find({ email: { $in: memberEmails } })
+                .select('_id email')
+                .lean();
+            
+            console.log(`👥 Found ${users.length} user accounts matching ${memberEmails.length} member emails`);
+            
+            // Create email to userId map
+            const emailToUserId = {};
+            users.forEach(user => {
+                emailToUserId[user.email] = user._id;
+            });
 
             // Track stats
             let successCount = 0;
             let failureCount = 0;
             const failedRecipients = [];
 
-            // Create notifications for each user
+            // Create notifications for each member
             const notifications = [];
             for (const member of members) {
-                if (!member.userId) {
+                const userId = emailToUserId[member.email];
+                
+                if (!userId) {
                     failureCount++;
                     failedRecipients.push({
                         memberId: member._id,
-                        name: member.name,
-                        reason: 'No linked user account'
+                        name: member.memberName,
+                        email: member.email,
+                        reason: 'No linked user account found'
                     });
                     continue;
                 }
 
-                const userId = member.userId._id || member.userId;
                 notifications.push({
                     title,
                     message,
@@ -356,7 +391,8 @@ class NotificationController {
                         source: 'gym-admin',
                         gymId,
                         filters,
-                        sentAt: new Date().toISOString()
+                        sentAt: new Date().toISOString(),
+                        memberName: member.memberName
                     }
                 });
             }
@@ -367,9 +403,10 @@ class NotificationController {
                     message: 'No members match the specified filters or have valid user accounts',
                     stats: {
                         totalQueried: members.length,
+                        membersWithUserAccounts: users.length,
                         successCount: 0,
                         failureCount: failureCount,
-                        failedRecipients
+                        failedRecipients: failedRecipients.length > 0 ? failedRecipients : undefined
                     }
                 });
             }
@@ -400,6 +437,7 @@ class NotificationController {
                 message: `Notification sent successfully to ${successCount} member${successCount !== 1 ? 's' : ''}`,
                 stats: {
                     totalMembers: members.length,
+                    membersWithUserAccounts: users.length,
                     successCount,
                     failureCount,
                     deliveryRate: members.length > 0 ? ((successCount / members.length) * 100).toFixed(2) + '%' : '0%'
@@ -419,7 +457,7 @@ class NotificationController {
                 response.message += ` (${failureCount} failed)`;
             }
 
-            console.log(`✅ Notification sent: ${successCount} succeeded, ${failureCount} failed`);
+            console.log(`✅ Notification sent: ${successCount} succeeded, ${failureCount} failed out of ${members.length} members`);
 
             res.json(response);
 
