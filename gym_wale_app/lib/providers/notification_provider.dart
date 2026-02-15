@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,10 +10,17 @@ class NotificationProvider with ChangeNotifier {
   bool _isLoading = false;
   int _unreadCount = 0;
   Set<String> _localReadIds = {}; // Track locally read notifications
+  
+  // Polling configuration
+  Timer? _pollingTimer;
+  DateTime? _lastPollTime;
+  bool _isPollingEnabled = false;
+  final Duration _pollingInterval = const Duration(seconds: 30); // Poll every 30 seconds
 
   List<AppNotification> get notifications => _notifications;
   bool get isLoading => _isLoading;
   int get unreadCount => _unreadCount;
+  bool get isPollingEnabled => _isPollingEnabled;
 
   List<AppNotification> get unreadNotifications =>
       _notifications.where((n) => !n.isRead).toList();
@@ -222,5 +230,102 @@ class NotificationProvider with ChangeNotifier {
       _updateBadgeCount();
     }
     notifyListeners();
+  }
+  
+  /// Start automatic polling for new notifications
+  void startPolling() {
+    if (_isPollingEnabled) return;
+    
+    _isPollingEnabled = true;
+    _lastPollTime = DateTime.now();
+    
+    _pollingTimer = Timer.periodic(_pollingInterval, (timer) {
+      _pollForNewNotifications();
+    });
+    
+    print('📡 Notification polling started (every ${_pollingInterval.inSeconds}s)');
+  }
+  
+  /// Stop automatic polling
+  void stopPolling() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+    _isPollingEnabled = false;
+    print('📡 Notification polling stopped');
+  }
+  
+  /// Poll for new notifications since last check
+  Future<void> _pollForNewNotifications() async {
+    if (_isLoading) return; // Skip if already loading
+    
+    try {
+      final since = _lastPollTime?.toIso8601String();
+      final data = await ApiService.pollNotifications(since: since);
+      
+      if (data['notifications'] != null && data['notifications'].isNotEmpty) {
+        final newNotifications = (data['notifications'] as List).map((json) {
+          final notification = AppNotification.fromJson(json);
+          // Apply local read status
+          if (!notification.isRead && _localReadIds.contains(notification.id)) {
+            return AppNotification(
+              id: notification.id,
+              title: notification.title,
+              message: notification.message,
+              type: notification.type,
+              createdAt: notification.createdAt,
+              isRead: true,
+              data: notification.data,
+              imageUrl: notification.imageUrl,
+              actionType: notification.actionType,
+              actionData: notification.actionData,
+            );
+          }
+          return notification;
+        }).toList();
+        
+        // Add new notifications to the beginning of the list
+        for (final notification in newNotifications.reversed) {
+          // Check if notification already exists
+          if (!_notifications.any((n) => n.id == notification.id)) {
+            _notifications.insert(0, notification);
+            
+            // Play sound and show visual feedback for unread notifications
+            if (!notification.isRead) {
+              _playNotificationSound();
+              print('🔔 New notification: ${notification.title}');
+            }
+          }
+        }
+        
+        // Update unread count from server
+        if (data['unreadCount'] != null) {
+          _unreadCount = data['unreadCount'];
+          await _updateBadgeCount();
+        }
+        
+        notifyListeners();
+      }
+      
+      // Update last poll time from server response if available
+      if (data['timestamp'] != null) {
+        _lastPollTime = DateTime.parse(data['timestamp']);
+      } else {
+        _lastPollTime = DateTime.now();
+      }
+    } catch (e) {
+      print('Error polling notifications: $e');
+      // Don't notify listeners on polling errors to avoid UI disruptions
+    }
+  }
+  
+  /// Manually trigger a poll (useful for pull-to-refresh)
+  Future<void> pollNow() async {
+    await _pollForNewNotifications();
+  }
+  
+  @override
+  void dispose() {
+    stopPolling();
+    super.dispose();
   }
 }

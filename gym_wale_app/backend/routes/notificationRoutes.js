@@ -350,6 +350,50 @@ router.get('/unread-count', authMiddleware, async (req, res) => {
   }
 });
 
+// Poll for new notifications since a specific timestamp (for regular app users)
+// This endpoint supports real-time notification checking
+router.get('/poll', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const since = req.query.since; // ISO timestamp
+    
+    const query = { userId };
+    
+    // If 'since' parameter is provided, only get notifications newer than that
+    if (since) {
+      const sinceDate = new Date(since);
+      if (!isNaN(sinceDate.getTime())) {
+        query.createdAt = { $gt: sinceDate };
+      }
+    }
+
+    // Get new notifications
+    const notifications = await Notification.find(query)
+      .sort({ createdAt: -1 })
+      .limit(100); // Limit to prevent excessive data transfer
+
+    // Get current unread count
+    const unreadCount = await Notification.countDocuments({
+      userId,
+      isRead: false,
+    });
+
+    res.json({
+      success: true,
+      notifications,
+      unreadCount,
+      count: notifications.length,
+      timestamp: new Date().toISOString() // Server timestamp for next poll
+    });
+  } catch (error) {
+    console.error('Error polling notifications:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to poll notifications',
+    });
+  }
+});
+
 // Mark notification as read (for regular app users)
 router.put('/:id/read', authMiddleware, async (req, res) => {
   try {

@@ -1430,6 +1430,36 @@ class ApiService {
     return 0;
   }
 
+  /// Poll for new notifications since a specific timestamp
+  /// This is used for real-time notification updates
+  static Future<Map<String, dynamic>> pollNotifications({String? since}) async {
+    if (_token == null) {
+      return {'notifications': [], 'unreadCount': 0};
+    }
+    
+    try {
+      final queryParams = since != null ? '?since=$since' : '';
+      final url = Uri.parse(ApiConfig.baseUrl + '/notifications/poll$queryParams');
+      final response = await http.get(
+        url,
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return {
+          'notifications': data['notifications'] ?? [],
+          'unreadCount': data['unreadCount'] ?? 0,
+          'count': data['count'] ?? 0,
+          'timestamp': data['timestamp'], // Server timestamp for next poll
+        };
+      }
+    } catch (e) {
+      print('Poll notifications error: $e');
+    }
+    return {'notifications': [], 'unreadCount': 0};
+  }
+
   /// Mark notification as read
   static Future<bool> markNotificationRead(String notificationId) async {
     if (_token == null) {

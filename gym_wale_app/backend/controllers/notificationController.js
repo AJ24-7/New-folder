@@ -314,48 +314,117 @@ class NotificationController {
                 memberFilter._id = { $in: filters.specificMembers };
             }
 
-            // Get matching members
-            const members = await Member.find(memberFilter).select('userId').lean();
+            // Get matching members with more details for reporting
+            const members = await Member.find(memberFilter)
+                .select('userId name email membershipStatus')
+                .populate('userId', 'name email')
+                .lean();
+            
             const userIds = members.map(m => m.userId).filter(id => id);
 
+            // Track stats
+            let successCount = 0;
+            let failureCount = 0;
+            const failedRecipients = [];
+
             // Create notifications for each user
-            const notifications = userIds.map(userId => ({
-                title,
-                message,
-                type,
-                priority,
-                userId,
-                user: userId,
-                read: false,
-                isRead: false,
-                timestamp: scheduleFor ? new Date(scheduleFor) : new Date(),
-                createdAt: new Date(),
-                metadata: {
-                    source: 'gym-admin',
-                    gymId,
-                    filters
+            const notifications = [];
+            for (const member of members) {
+                if (!member.userId) {
+                    failureCount++;
+                    failedRecipients.push({
+                        memberId: member._id,
+                        name: member.name,
+                        reason: 'No linked user account'
+                    });
+                    continue;
                 }
-            }));
+
+                const userId = member.userId._id || member.userId;
+                notifications.push({
+                    title,
+                    message,
+                    type,
+                    priority,
+                    userId,
+                    user: userId,
+                    read: false,
+                    isRead: false,
+                    timestamp: scheduleFor ? new Date(scheduleFor) : new Date(),
+                    createdAt: new Date(),
+                    metadata: {
+                        source: 'gym-admin',
+                        gymId,
+                        filters,
+                        sentAt: new Date().toISOString()
+                    }
+                });
+            }
 
             if (notifications.length === 0) {
                 return res.status(400).json({
                     success: false,
-                    message: 'No members match the specified filters'
+                    message: 'No members match the specified filters or have valid user accounts',
+                    stats: {
+                        totalQueried: members.length,
+                        successCount: 0,
+                        failureCount: failureCount,
+                        failedRecipients
+                    }
                 });
             }
 
-            // Save notifications
-            await Notification.insertMany(notifications);
+            // Save notifications with error handling
+            try {
+                const result = await Notification.insertMany(notifications, { ordered: false });
+                successCount = result.length;
+            } catch (insertError) {
+                // Handle partial success in bulk insert
+                if (insertError.writeErrors) {
+                    successCount = notifications.length - insertError.writeErrors.length;
+                    failureCount += insertError.writeErrors.length;
+                    
+                    insertError.writeErrors.forEach(err => {
+                        failedRecipients.push({
+                            reason: err.errmsg || 'Database insert error'
+                        });
+                    });
+                } else {
+                    throw insertError;
+                }
+            }
 
-            res.json({
+            // Prepare detailed response
+            const response = {
                 success: true,
-                message: `Notification sent to ${notifications.length} members`,
-                recipientCount: notifications.length,
-                scheduledFor: scheduleFor
-            });
+                message: `Notification sent successfully to ${successCount} member${successCount !== 1 ? 's' : ''}`,
+                stats: {
+                    totalMembers: members.length,
+                    successCount,
+                    failureCount,
+                    deliveryRate: members.length > 0 ? ((successCount / members.length) * 100).toFixed(2) + '%' : '0%'
+                },
+                notification: {
+                    title,
+                    type,
+                    priority,
+                    scheduledFor: scheduleFor,
+                    sentAt: new Date().toISOString()
+                }
+            };
+
+            // Include failure details if any
+            if (failureCount > 0) {
+                response.stats.failedRecipients = failedRecipients;
+                response.message += ` (${failureCount} failed)`;
+            }
+
+            console.log(`✅ Notification sent: ${successCount} succeeded, ${failureCount} failed`);
+
+            res.json(response);
 
         } catch (error) {
-            console.error('Error sending notification to members:', error);
+            console.error('❌ Error sending notification to members:', error);
             res.status(500).json({
                 success: false,
                 message: 'Error sending notification',

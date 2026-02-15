@@ -18,10 +18,10 @@ class NotificationQuickActions extends StatelessWidget {
           children: [
             Row(
               children: [
-                Icon(Icons.flash_on, color: Theme.of(context).colorScheme.primary),
+                Icon(Icons.send, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Quick Actions',
+                  'Send Notifications',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),

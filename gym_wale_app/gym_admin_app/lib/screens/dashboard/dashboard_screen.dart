@@ -18,20 +18,22 @@ import '../../providers/theme_provider.dart';
 import '../../providers/locale_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/gym_service.dart';
+import '../../services/equipment_service.dart';
 import '../../models/dashboard_stats.dart';
 import '../../models/gym_photo.dart';
 import '../../models/membership_plan.dart';
 import '../../models/gym_activity.dart';
 import '../../models/trial_booking.dart';
+import '../../models/equipment.dart';
 import '../../utils/icon_mapper.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../attendance/attendance_screen.dart';
+import '../qr_code/qr_code_template_screen.dart';
 import '../../widgets/stat_card.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/notification_quick_actions.dart';
-import '../../widgets/notification_preview_card.dart';
 
 /// Comprehensive Dashboard Screen for Gym Admin App
 /// Features: Stats cards, quick actions, membership plans, new members,
@@ -46,6 +48,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   final GymService _gymService = GymService();
+  final EquipmentService _equipmentService = EquipmentService();
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
   
   DashboardStats? _stats;
@@ -55,6 +58,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<dynamic> _recentActivities = [];
   List<GymActivity> _gymActivities = [];
   List<TrialBooking> _trialBookings = [];
+  List<Equipment> _equipmentGallery = [];
+  bool _isEquipmentExpanded = false;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -118,6 +123,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       
       // Load trial bookings independently (non-critical)
       _loadTrialBookings();
+      
+      // Load equipment gallery independently (non-critical)
+      _loadEquipmentGallery();
       
       // TODO: Load additional dashboard data (implement these methods in ApiService)
       // _newMembers = await _apiService.getNewMembers(limit: 5);
@@ -231,6 +239,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       debugPrint('Error loading trial bookings: $e');
       setState(() {
         _trialBookings = [];
+      });
+    }
+  }
+
+  Future<void> _loadEquipmentGallery() async {
+    try {
+      final equipment = await _equipmentService.getAllEquipment();
+      // Only show equipment with photos
+      final equipmentWithPhotos = equipment.where((e) => e.photos.isNotEmpty).toList();
+      setState(() {
+        _equipmentGallery = equipmentWithPhotos;
+      });
+    } catch (e) {
+      debugPrint('Error loading equipment gallery: $e');
+      setState(() {
+        _equipmentGallery = [];
       });
     }
   }
@@ -533,30 +557,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildStatsCards(l10n, isDesktop),
             const SizedBox(height: 24),
             
-            // Notification Components Row
-            if (isDesktop)
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(
-                    flex: 2,
-                    child: NotificationPreviewCard(),
-                  ),
-                  const SizedBox(width: 24),
-                  const Expanded(
-                    flex: 1,
-                    child: NotificationQuickActions(),
-                  ),
-                ],
-              )
-            else
-              Column(
-                children: [
-                  NotificationPreviewCard(),
-                  SizedBox(height: 16),
-                  NotificationQuickActions(),
-                ],
-              ),
+            // Send Notifications Section
+            const NotificationQuickActions(),
             const SizedBox(height: 24),
             
             // Quick Actions & Activities Row
@@ -565,6 +567,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             
             // Gym Photos Section
             _buildGymPhotosSection(),
+            const SizedBox(height: 24),
+            
+            // Equipment Gallery Section
+            _buildEquipmentGalleryCard(l10n),
             const SizedBox(height: 24),
             
             // Membership Plans
@@ -594,8 +600,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       children: [
                         _buildRecentActivityCard(l10n),
-                        const SizedBox(height: 24),
-                        _buildEquipmentGalleryCard(l10n),
                       ],
                     ),
                   ),
@@ -611,8 +615,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildRecentActivityCard(l10n),
                   const SizedBox(height: 24),
                   _buildAttendanceChart(l10n),
-                  const SizedBox(height: 24),
-                  _buildEquipmentGalleryCard(l10n),
                 ],
               ),
           ],
@@ -1894,22 +1896,275 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   Widget _buildEquipmentGalleryCard(AppLocalizations l10n) {
+    final displayCount = _isEquipmentExpanded ? _equipmentGallery.length : 3;
+    final hasMore = _equipmentGallery.length > 3;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                FaIcon(FontAwesomeIcons.dumbbell, color: AppTheme.primaryColor, size: 18),
-                SizedBox(width: 12),
-                Text('Equipment Gallery', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const FaIcon(FontAwesomeIcons.dumbbell, color: AppTheme.primaryColor, size: 18),
+                const SizedBox(width: 12),
+                const Text('Equipment Gallery', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (_equipmentGallery.isNotEmpty)
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/equipment');
+                    },
+                    icon: const Icon(Icons.arrow_forward, size: 16),
+                    label: const Text('View All'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 20),
-            const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No equipment added yet'))),
+            
+            if (_equipmentGallery.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(40),
+                  child: Column(
+                    children: [
+                      Icon(Icons.fitness_center, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No equipment with photos yet',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.pushNamed(context, '/equipment'),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Equipment'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: [
+                  SizedBox(
+                    height: 220,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: displayCount.clamp(0, _equipmentGallery.length),
+                      itemBuilder: (context, index) {
+                        if (index < _equipmentGallery.length) {
+                          return _buildEquipmentGalleryItem(_equipmentGallery[index]);
+                        }
+                        return const SizedBox();
+                      },
+                    ),
+                  ),
+                  
+                  if (hasMore && !_isEquipmentExpanded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isEquipmentExpanded = true;
+                          });
+                        },
+                        icon: const Icon(Icons.expand_more),
+                        label: Text('Show ${_equipmentGallery.length - 3} More'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                  
+                  if (_isEquipmentExpanded)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16),
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            _isEquipmentExpanded = false;
+                          });
+                        },
+                        icon: const Icon(Icons.expand_less),
+                        label: const Text('Show Less'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppTheme.primaryColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEquipmentGalleryItem(Equipment equipment) {
+    final statusColor = equipment.status == EquipmentStatus.available
+        ? AppTheme.successColor
+        : equipment.status == EquipmentStatus.maintenance
+            ? AppTheme.warningColor
+            : AppTheme.errorColor;
+
+    return Container(
+      width: 280,
+      margin: const EdgeInsets.only(right: 16),
+      child: Card(
+        elevation: 2,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(context, '/equipment'),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Equipment Image
+              Stack(
+                children: [
+                  equipment.photos.isNotEmpty
+                      ? Image.network(
+                          equipment.photos.first,
+                          width: double.infinity,
+                          height: 140,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: double.infinity,
+                              height: 140,
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
+                          width: double.infinity,
+                          height: 140,
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                          ),
+                        ),
+                  // Status Badge
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: statusColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        equipment.status.value.toUpperCase(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Photo Count Badge
+                  if (equipment.photos.length > 1)
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.photo_library, size: 12, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Text(
+                              '${equipment.photos.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+
+              // Equipment Info
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      equipment.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      equipment.category,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.layers, size: 14, color: Colors.grey.shade600),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Qty: ${equipment.quantity}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        if (equipment.brand != null) ...[
+                          const SizedBox(width: 8),
+                          const Text('•', style: TextStyle(color: Colors.grey)),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              equipment.brand!,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade700,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -2609,441 +2864,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Download QR code as A4 creative template
   Future<void> _downloadQRCodeA4Template(String qrData, String gymName, String gymId) async {
     try {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(
-          child: Card(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Generating A4 template...'),
-                ],
-              ),
-            ),
+      // Navigate to dedicated QR code template screen
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => QRCodeTemplateScreen(
+            qrData: qrData,
+            gymName: gymName,
+            gymId: gymId,
+            gymLogoUrl: _gymLogoUrl,
           ),
         ),
       );
-
-      // Show A4 template dialog for download
-      Navigator.pop(context); // Close loading
-      _showA4TemplateDialog(qrData, gymName, gymId);
-      
     } catch (e) {
       if (!mounted) return;
-      Navigator.pop(context); // Close loading
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to generate template: $e'),
+          content: Text('Failed to open template: $e'),
           backgroundColor: AppTheme.errorColor,
         ),
       );
     }
-  }
-
-  // Show A4 template dialog
-  void _showA4TemplateDialog(String qrData, String gymName, String gymId) {
-    final GlobalKey _a4Key = GlobalKey();
-    
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: 800,
-            maxHeight: MediaQuery.of(context).size.height * 0.9,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  border: Border(
-                    bottom: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'A4 QR Code Template',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    Row(
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            try {
-                              final boundary = _a4Key.currentContext!.findRenderObject() as RenderRepaintBoundary;
-                              final image = await boundary.toImage(pixelRatio: 3.0);
-                              await image.toByteData(format: ui.ImageByteFormat.png);
-                              
-                              // Save file (you'll need to implement platform-specific file saving)
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Template ready! Right-click and "Save As..." to download'),
-                                  backgroundColor: AppTheme.successColor,
-                                ),
-                              );
-                            } catch (e) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('Download failed: $e'),
-                                  backgroundColor: AppTheme.errorColor,
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.download, size: 18),
-                          label: const Text('Download'),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Scrollable A4 template
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(
-                    child: RepaintBoundary(
-                      key: _a4Key,
-                      child: _buildA4Template(qrData, gymName, gymId),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // Build A4 creative template
-  Widget _buildA4Template(String qrData, String gymName, String gymId) {
-    return Container(
-      width: 595, // A4 width at 72 DPI (8.27 inches)
-      height: 842, // A4 height at 72 DPI (11.69 inches)
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppTheme.primaryColor.withValues(alpha: 0.1),
-            AppTheme.secondaryColor.withValues(alpha: 0.05),
-          ],
-        ),
-        border: Border.all(color: Colors.grey.shade300, width: 2),
-      ),
-      child: Stack(
-        children: [
-          // Background pattern
-          Positioned.fill(
-            child: Opacity(
-              opacity: 0.03,
-              child: Image.asset(
-                'assets/icons/icon.png',
-                repeat: ImageRepeat.repeat,
-                errorBuilder: (context, error, stackTrace) => const SizedBox(),
-              ),
-            ),
-          ),
-          // Content
-          Padding(
-            padding: const EdgeInsets.all(40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Gym Wale Brand Header
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 20),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: AppTheme.primaryColor,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const FaIcon(
-                              FontAwesomeIcons.dumbbell,
-                              color: Colors.white,
-                              size: 32,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          const Text(
-                            'Gym Wale',
-                            style: TextStyle(
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.primaryColor,
-                              letterSpacing: 1.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.secondaryColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Text(
-                          'Powering Fitness Across India',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: AppTheme.secondaryColor,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // Decorative divider
-                Container(
-                  height: 3,
-                  width: 200,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
-                    ),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                
-                const SizedBox(height: 30),
-                
-                // Gym Name Sub-brand
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      if (_gymLogoUrl != null)
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            _gymLogoUrl!,
-                            width: 80,
-                            height: 80,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
-                              width: 80,
-                              height: 80,
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(Icons.fitness_center, size: 40, color: AppTheme.primaryColor),
-                            ),
-                          ),
-                        ),
-                      if (_gymLogoUrl != null) const SizedBox(height: 12),
-                      Text(
-                        gymName,
-                        style: const TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.darkColor,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'ID: $gymId',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey.shade600,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const Spacer(),
-                
-                // QR Code
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.2),
-                        blurRadius: 30,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                            width: 3,
-                          ),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: QrImageView(
-                          data: qrData,
-                          version: QrVersions.auto,
-                          size: 300,
-                          backgroundColor: Colors.white,
-                          embeddedImage: _gymLogoUrl != null ? NetworkImage(_gymLogoUrl!) : null,
-                          embeddedImageStyle: const QrEmbeddedImageStyle(
-                            size: Size(60, 60),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
-                          ),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          'Scan to Register',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const Spacer(),
-                
-                // Instructions
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.infoColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: AppTheme.infoColor.withValues(alpha: 0.3),
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const FaIcon(
-                            FontAwesomeIcons.mobileScreen,
-                            color: AppTheme.infoColor,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'How to Register',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.blue.shade900,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '1. Open your phone camera\n2. Point it at the QR code\n3. Tap the notification to open the registration page\n4. Fill in your details and submit',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.blue.shade800,
-                          height: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                
-                const SizedBox(height: 20),
-                
-                // Footer
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const FaIcon(
-                      FontAwesomeIcons.globe,
-                      size: 12,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'www.gym-wale.com',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    const FaIcon(
-                      FontAwesomeIcons.envelope,
-                      size: 12,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'support@gym-wale.com',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
   }
   
   void _handleLogout() {
@@ -3055,9 +2895,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('No')),
           ElevatedButton(
-            onPressed: () {
-              Provider.of<AuthProvider>(context, listen: false).logout();
-              Navigator.of(context).pushReplacementNamed('/login');
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog first
+              await Provider.of<AuthProvider>(context, listen: false).logout();
+              // Clear entire navigation stack to prevent back button access
+              if (!mounted) return;
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                '/login',
+                (route) => false, // Remove all previous routes
+              );
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
             child: const Text('Yes'),
@@ -3079,7 +2925,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         Provider.of<AuthProvider>(context, listen: false).logout();
-        Navigator.of(context).pushReplacementNamed('/login');
+        // Clear entire navigation stack on session expiration
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/login',
+          (route) => false, // Remove all previous routes
+        );
       }
     });
   }

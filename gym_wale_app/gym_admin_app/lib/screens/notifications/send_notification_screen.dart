@@ -82,7 +82,7 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
       maxAge: _maxAge,
     );
 
-    final success = await notificationProvider.sendToMembers(
+    final result = await notificationProvider.sendToMembers(
       title: _titleController.text.trim(),
       message: _messageController.text.trim(),
       priority: _selectedPriority,
@@ -93,23 +93,138 @@ class _SendNotificationScreenState extends State<SendNotificationScreen> {
     setState(() => _isSending = false);
 
     if (mounted) {
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Notification sent successfully!'),
-            backgroundColor: Colors.green,
-          ),
+      if (result['success'] == true) {
+        // Show detailed success dialog
+        final stats = result['stats'] ?? {};
+        final successCount = stats['successCount'] ?? 0;
+        final failureCount = stats['failureCount'] ?? 0;
+        final totalMembers = stats['totalMembers'] ?? 0;
+        final deliveryRate = stats['deliveryRate'] ?? '0%';
+        
+        _showSuccessDialog(
+          successCount: successCount,
+          failureCount: failureCount,
+          totalMembers: totalMembers,
+          deliveryRate: deliveryRate,
+          failedRecipients: stats['failedRecipients'],
         );
-        Navigator.pop(context);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send: ${notificationProvider.error}'),
+            content: Text('Failed to send: ${result['message'] ?? notificationProvider.error}'),
             backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
           ),
         );
       }
     }
+  }
+
+  void _showSuccessDialog({
+    required int successCount,
+    required int failureCount,
+    required int totalMembers,
+    required String deliveryRate,
+    List<dynamic>? failedRecipients,
+  }) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              failureCount == 0 ? Icons.check_circle : Icons.info,
+              color: failureCount == 0 ? Colors.green : Colors.orange,
+              size: 28,
+            ),
+            const SizedBox(width: 12),
+            const Text('Notification Sent'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your notification has been sent to members.',
+              style: const TextStyle(fontSize: 16),
+            ),
+            const SizedBox(height: 20),
+            _buildStatRow('Total Members', '$totalMembers', Icons.people),
+            _buildStatRow('Delivered', '$successCount', Icons.check_circle, Colors.green),
+            if (failureCount > 0)
+              _buildStatRow('Failed', '$failureCount', Icons.error, Colors.red),
+            _buildStatRow('Delivery Rate', deliveryRate, Icons.show_chart, Colors.blue),
+            
+            if (failedRecipients != null && failedRecipients.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              Text(
+                'Failed Recipients:',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.red.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 150),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: failedRecipients.map((recipient) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '• ${recipient['name'] ?? 'Unknown'}: ${recipient['reason'] ?? 'Unknown error'}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pop(context); // Close screen
+            },
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatRow(String label, String value, IconData icon, [Color? color]) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color ?? Colors.grey),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

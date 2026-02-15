@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/gym_profile_provider.dart';
 import 'providers/notification_provider.dart';
+import 'screens/auth/onboarding_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/members/members_screen.dart';
@@ -92,11 +94,49 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  bool _checkingOnboarding = true;
+  bool _onboardingCompleted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboardingStatus();
+  }
+
+  Future<void> _checkOnboardingStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    final completed = prefs.getBool('onboarding_completed') ?? false;
+    
+    if (mounted) {
+      setState(() {
+        _onboardingCompleted = completed;
+        _checkingOnboarding = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_checkingOnboarding) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (!_onboardingCompleted) {
+      return const OnboardingScreen();
+    }
+
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isLoggedIn) {

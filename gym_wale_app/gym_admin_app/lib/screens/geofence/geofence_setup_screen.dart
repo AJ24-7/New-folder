@@ -337,7 +337,8 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Type Selection
-                        Row(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Geofence Type:',
@@ -346,31 +347,36 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
                                 fontSize: 16,
                               ),
                             ),
-                            const SizedBox(width: 16),
-                            ChoiceChip(
-                              label: const Text('Polygon (Advanced)'),
-                              selected: _selectedType == GeofenceType.polygon,
-                              onSelected: (selected) {
-                                if (selected) {
-                                  setState(() {
-                                    _selectedType = GeofenceType.polygon;
-                                    _clearGeofence();
-                                  });
-                                }
-                              },
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('Circular (Simple)'),
-                              selected: _selectedType == GeofenceType.circular,
-                              onSelected: (selected) {
-                                if (selected) {
-                                  setState(() {
-                                    _selectedType = GeofenceType.circular;
-                                    _clearGeofence();
-                                  });
-                                }
-                              },
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: [
+                                ChoiceChip(
+                                  label: const Text('Polygon'),
+                                  selected: _selectedType == GeofenceType.polygon,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() {
+                                        _selectedType = GeofenceType.polygon;
+                                        _clearGeofence();
+                                      });
+                                    }
+                                  },
+                                ),
+                                ChoiceChip(
+                                  label: const Text('Circular'),
+                                  selected: _selectedType == GeofenceType.circular,
+                                  onSelected: (selected) {
+                                    if (selected) {
+                                      setState(() {
+                                        _selectedType = GeofenceType.circular;
+                                        _clearGeofence();
+                                      });
+                                    }
+                                  },
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -407,28 +413,35 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
                         ],
 
                         // Action Buttons
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
                             ElevatedButton.icon(
                               onPressed: _clearGeofence,
-                              icon: const Icon(Icons.clear_all),
+                              icon: const Icon(Icons.clear_all, size: 18),
                               label: const Text('Clear'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               ),
                             ),
-                            const SizedBox(width: 8),
                             ElevatedButton.icon(
                               onPressed: _loadCurrentLocation,
-                              icon: const Icon(FontAwesomeIcons.locationCrosshairs),
-                              label: const Text('My Location'),
+                              icon: const Icon(FontAwesomeIcons.locationCrosshairs, size: 16),
+                              label: const Text('Location'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
                             ),
-                            const Spacer(),
                             ElevatedButton.icon(
                               onPressed: () => _showSettingsDialog(),
-                              icon: const Icon(Icons.settings),
+                              icon: const Icon(Icons.settings, size: 18),
                               label: const Text('Settings'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
                             ),
                           ],
                         ),

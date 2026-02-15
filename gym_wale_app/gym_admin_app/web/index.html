@@ -31,6 +31,14 @@
 
   <title>Gym-Wale Admin</title>
   <link rel="manifest" href="manifest.json">
+  
+  <!-- Google Maps JavaScript API -->
+  <script>
+    // Initialize google object before the API loads to prevent errors
+    window.google = window.google || {};
+    window.google.maps = window.google.maps || {};
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY_HERE" defer></script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

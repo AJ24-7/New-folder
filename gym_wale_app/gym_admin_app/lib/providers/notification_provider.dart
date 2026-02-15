@@ -178,7 +178,7 @@ class NotificationProvider with ChangeNotifier {
   }
 
   /// Send notification to members
-  Future<bool> sendToMembers({
+  Future<Map<String, dynamic>> sendToMembers({
     required String title,
     required String message,
     String priority = 'normal',
@@ -187,7 +187,8 @@ class NotificationProvider with ChangeNotifier {
     DateTime? scheduleFor,
   }) async {
     try {
-      await _notificationService.sendToMembers(
+      _error = null;
+      final result = await _notificationService.sendToMembers(
         title: title,
         message: message,
         priority: priority,
@@ -195,11 +196,21 @@ class NotificationProvider with ChangeNotifier {
         filters: filters ?? NotificationFilters(),
         scheduleFor: scheduleFor,
       );
-      return true;
+      
+      // Return detailed stats from the response
+      return {
+        'success': true,
+        'message': result['message'] ?? 'Notification sent successfully',
+        'stats': result['stats'] ?? {},
+        'notification': result['notification'] ?? {},
+      };
     } catch (e) {
       _error = e.toString();
-      notifyListeners();
-      return false;
+      print('❌ Error in sendToMembers: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
     }
   }
 

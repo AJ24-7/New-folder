@@ -458,13 +458,9 @@ class AuthService {
 
   /// Logout
   Future<void> logout() async {
-    try {
-      await _dio.post(ApiConfig.logout);
-    } catch (e) {
-      // Continue with local logout even if API call fails
-    } finally {
-      await _storage.clearAll();
-    }
+    // No API call needed - backend doesn't have logout endpoint
+    // Just clear local storage (token, admin data, etc.)
+    await _storage.clearAll();
   }
 
   /// Check if user is logged in

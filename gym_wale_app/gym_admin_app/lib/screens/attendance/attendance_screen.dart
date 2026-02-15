@@ -16,7 +16,6 @@ import '../../widgets/stat_card.dart';
 import '../support/support_screen.dart';
 import 'widgets/attendance_calendar.dart';
 import 'widgets/attendance_list_item.dart';
-import 'widgets/attendance_settings_dialog.dart';
 import 'widgets/mark_attendance_dialog.dart';
 import 'widgets/bulk_attendance_dialog.dart';
 

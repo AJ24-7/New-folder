@@ -27,11 +27,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
       final provider = context.read<NotificationProvider>();
       await provider.initialize(); // Load local read cache
       await provider.loadNotifications(); // Load notifications with local state applied
+      
+      // Start polling for new notifications
+      provider.startPolling();
     });
   }
 
   @override
   void dispose() {
+    // Stop polling when screen is disposed
+    context.read<NotificationProvider>().stopPolling();
     _tabController.dispose();
     super.dispose();
   }
@@ -75,7 +80,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
           }
 
           return RefreshIndicator(
-            onRefresh: () => provider.loadNotifications(),
+            onRefresh: () async {
+              await provider.pollNow(); // Trigger immediate poll
+              await provider.loadNotifications(); // Also do full refresh
+            },
             child: Column(
               children: [
                 if (provider.unreadCount > 0) _buildUnreadBanner(provider.unreadCount),

@@ -177,19 +177,30 @@ class NotificationService {
         if (scheduleFor != null) 'scheduleFor': scheduleFor.toIso8601String(),
       });
 
+      print('📤 Sending notification to members...');
       final response = await http.post(
         Uri.parse('$baseUrl/notifications/send-to-members'),
         headers: headers,
         body: body,
       );
 
+      final responseData = json.decode(response.body);
+
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        // Enhanced response with detailed stats
+        print('✅ Notification sent successfully');
+        print('📊 Stats: ${responseData['stats']}');
+        return {
+          'success': true,
+          'message': responseData['message'] ?? 'Notification sent successfully',
+          'stats': responseData['stats'] ?? {},
+          'notification': responseData['notification'] ?? {},
+        };
       } else {
-        final error = json.decode(response.body);
-        throw Exception(error['message'] ?? 'Failed to send notification');
+        throw Exception(responseData['message'] ?? 'Failed to send notification');
       }
     } catch (e) {
+      print('❌ Error sending notification: $e');
       throw Exception('Error sending notification to members: $e');
     }
   }

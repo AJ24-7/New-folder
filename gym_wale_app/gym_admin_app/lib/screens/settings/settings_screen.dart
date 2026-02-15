@@ -1144,9 +1144,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Text(l10n.no),
           ),
           ElevatedButton(
-            onPressed: () {
-              authProvider.logout();
-              Navigator.of(context).pushReplacementNamed('/login');
+            onPressed: () async {
+              Navigator.pop(context); // Close dialog first
+              await authProvider.logout();
+              // Clear entire navigation stack to prevent back button access
+              if (context.mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil(
+                  '/login',
+                  (route) => false, // Remove all previous routes
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.error,
@@ -1578,7 +1585,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.of(context).pop();
-              Navigator.of(context).pushReplacementNamed('/login');
+              // Clear entire navigation stack on session expiration
+              Navigator.of(context).pushNamedAndRemoveUntil(
+                '/login',
+                (route) => false, // Remove all previous routes
+              );
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.primary,

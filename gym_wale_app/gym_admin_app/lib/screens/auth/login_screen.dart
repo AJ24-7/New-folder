@@ -23,6 +23,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   late List<AnimationController> _iconControllers;
   late List<Animation<double>> _iconAnimations;
 
+  // Brand colors
+  static const Color navyBlue = Color.fromARGB(255, 14, 101, 189);
+  static const Color orange = Color.fromARGB(255, 247, 167, 30);
+
   @override
   void initState() {
     super.initState();
@@ -73,9 +77,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         // Navigate to 2FA screen
         _show2FADialog(result['tempToken']);
       } else {
-        // Navigate to dashboard
-        Navigator.of(context).pushReplacement(
+        // Navigate to dashboard and clear all previous routes
+        Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const DashboardScreen()),
+          (route) => false, // Remove all previous routes
         );
       }
     } else {
@@ -130,8 +135,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               Navigator.pop(context);
 
               if (result['success'] == true) {
-                Navigator.of(context).pushReplacement(
+                // Navigate to dashboard and clear all previous routes
+                Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const DashboardScreen()),
+                  (route) => false, // Remove all previous routes
                 );
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -359,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.primaryColor,
+                    color: navyBlue,
                   ),
                 ),
                 TextSpan(
@@ -367,7 +374,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   style: TextStyle(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.secondaryColor,
+                    color: orange,
                   ),
                 ),
               ],
@@ -637,7 +644,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                         style: TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.bold,
-                          color: Color(0xFFFFD700),
+                          color: orange,
                         ),
                       ),
                     ],
