@@ -38,7 +38,8 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => WorkoutProvider()),
         ChangeNotifierProvider(create: (_) => GeofencingService()),
-        ProxyProvider<GeofencingService, AttendanceProvider>(
+        ChangeNotifierProxyProvider<GeofencingService, AttendanceProvider>(
+          create: (_) => AttendanceProvider(),
           update: (context, geofencingService, previous) {
             final provider = previous ?? AttendanceProvider();
             provider.initializeGeofencingService(geofencingService);

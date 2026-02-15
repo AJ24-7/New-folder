@@ -8,12 +8,14 @@ class CommunicationsTab extends StatefulWidget {
   final List<Communication> communications;
   final VoidCallback onRefresh;
   final SupportService supportService;
+  final String? communicationIdToOpen;
 
   const CommunicationsTab({
     Key? key,
     required this.communications,
     required this.onRefresh,
     required this.supportService,
+    this.communicationIdToOpen,
   }) : super(key: key);
 
   @override
@@ -23,6 +25,7 @@ class CommunicationsTab extends StatefulWidget {
 class _CommunicationsTabState extends State<CommunicationsTab> {
   String _searchQuery = '';
   String _filterStatus = 'all'; // all, active, resolved, closed
+  bool _hasOpenedInitialChat = false;
 
   List<Communication> get _filteredCommunications {
     return widget.communications.where((comm) {
@@ -42,6 +45,40 @@ class _CommunicationsTabState extends State<CommunicationsTab> {
 
       return true;
     }).toList();
+  }
+
+  @override
+  void didUpdateWidget(CommunicationsTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Auto-open chat if communicationIdToOpen is provided and we haven't opened it yet
+    if (widget.communicationIdToOpen != null && 
+        !_hasOpenedInitialChat &&
+        widget.communications.isNotEmpty) {
+      _openChatFromId(widget.communicationIdToOpen!);
+    }
+  }
+
+  void _openChatFromId(String communicationId) {
+    // Find the communication by ID
+    final communication = widget.communications.firstWhere(
+      (comm) => comm.id == communicationId,
+      orElse: () => widget.communications.isNotEmpty ? widget.communications.first : throw Exception('No communications found'),
+    );
+    
+    // Mark as having opened the chat so we don't open it again
+    if (mounted) {
+      setState(() {
+        _hasOpenedInitialChat = true;
+      });
+      
+      // Open the chat after a short delay to ensure the UI is ready
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          _showChatDialog(communication);
+        }
+      });
+    }
   }
 
   @override

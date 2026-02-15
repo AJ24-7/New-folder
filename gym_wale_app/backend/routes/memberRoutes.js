@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addMember, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass } = require('../controllers/memberController');
+const { addMember, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
 const { registerOnlineMember } = require('../controllers/onlineMembershipController');
 const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember } = require('../controllers/qrRegistrationController');
 const gymadminAuth = require('../middleware/gymadminAuth');
@@ -46,6 +46,9 @@ router.get('/check-membership/:gymId', authMiddleware, checkUserMembership);
 
 // Freeze membership
 router.post('/:membershipId/freeze', authMiddleware, freezeMembership);
+
+// Extend membership (Gym Admin only)
+router.post('/:memberId/extend', gymadminAuth, extendMembership);
 
 // Register member via QR code (original endpoint)
 router.post('/register-qr', registerMemberViaQR);

@@ -109,6 +109,9 @@ const gymSchema = new mongoose.Schema({
 
   lastLogin: { type: Date }, // Track last login for dashboard usage
 
+  // Membership Settings
+  allowMembershipFreezing: { type: Boolean, default: true },
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date },
   approvedAt: {

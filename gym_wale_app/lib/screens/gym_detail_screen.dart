@@ -7,6 +7,7 @@ import '../services/api_service.dart';
 import '../services/share_service.dart';
 import '../models/gym.dart';
 import '../models/membership.dart';
+import '../models/membership_plan.dart';
 import '../models/review.dart';
 import '../models/activity.dart';
 import '../models/user_membership.dart';
@@ -31,7 +32,7 @@ class GymDetailScreen extends StatefulWidget {
 
 class _GymDetailScreenState extends State<GymDetailScreen> {
   Gym? _gym;
-  List<Membership> _memberships = [];
+  MembershipPlan? _membershipPlan;
   List<Review> _reviews = [];
   List<GymPhoto> _photos = [];
   List<GymEquipment> _equipment = [];
@@ -81,7 +82,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     try {
       // Get raw gym data to access gymPhotos and equipment
       final gymDataRaw = await ApiService.getGymDetailsRaw(widget.gymId);
-      final memberships = await ApiService.getGymMemberships(widget.gymId);
+      final membershipPlan = await ApiService.getGymMembershipPlan(widget.gymId);
       final reviews = await ApiService.getGymReviews(widget.gymId);
       
       // Check favorite status
@@ -135,7 +136,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
 
         setState(() {
           _gym = gym;
-          _memberships = memberships;
+          _membershipPlan = membershipPlan;
           _reviews = reviews;
           _photos = photos;
           _equipment = equipment;
@@ -145,6 +146,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         });
         
         print('DEBUG: Final activities count in state: ${_activities.length}');
+        print('DEBUG: Membership plan loaded: ${membershipPlan != null}');
+        print('DEBUG: Membership plan options: ${membershipPlan?.monthlyOptions.length ?? 0}');
       }
     } catch (e) {
       print('Error loading gym details: $e');
@@ -787,7 +790,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       );
     }
     
-    if (_memberships.isEmpty) {
+    if (_membershipPlan == null || !_membershipPlan!.hasOptions) {
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(32.0),
@@ -806,38 +809,30 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       );
     }
 
-    return ListView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
+    return Padding(
       padding: const EdgeInsets.all(16),
-      itemCount: _memberships.length,
-      itemBuilder: (context, index) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: _buildEnhancedMembershipCard(_memberships[index]),
-        );
-      },
+      child: _buildMembershipPlanCard(_membershipPlan!),
     );
   }
 
-  Widget _buildEnhancedMembershipCard(Membership membership) {
+  Widget _buildMembershipPlanCard(MembershipPlan plan) {
     // Determine card color based on plan name
     Color planColor = AppTheme.primaryColor;
     IconData planIcon = Icons.fitness_center;
     
-    if (membership.name.toLowerCase().contains('basic')) {
+    if (plan.name.toLowerCase().contains('basic')) {
       planColor = const Color(0xFF38b000);
       planIcon = Icons.eco;
-    } else if (membership.name.toLowerCase().contains('standard')) {
+    } else if (plan.name.toLowerCase().contains('standard')) {
       planColor = const Color(0xFF3a86ff);
       planIcon = Icons.star;
-    } else if (membership.name.toLowerCase().contains('premium')) {
+    } else if (plan.name.toLowerCase().contains('premium')) {
       planColor = const Color(0xFF8338ec);
       planIcon = Icons.diamond;
     }
 
-    return _MembershipCardWithMonthSelection(
-      membership: membership,
+    return _MembershipPlanCardWidget(
+      membershipPlan: plan,
       gym: _gym!,
       planColor: planColor,
       planIcon: planIcon,
@@ -1694,7 +1689,398 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   }
 }
 
-// Enhanced Membership Card with Month Selection
+// Enhanced Membership Plan Card Widget
+class _MembershipPlanCardWidget extends StatefulWidget {
+  final MembershipPlan membershipPlan;
+  final Gym gym;
+  final Color planColor;
+  final IconData planIcon;
+
+  const _MembershipPlanCardWidget({
+    Key? key,
+    required this.membershipPlan,
+    required this.gym,
+    required this.planColor,
+    required this.planIcon,
+  }) : super(key: key);
+
+  @override
+  State<_MembershipPlanCardWidget> createState() => _MembershipPlanCardWidgetState();
+}
+
+class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
+  int _selectedOptionIndex = 0;
+
+  MonthlyOption get _selectedOption => widget.membershipPlan.monthlyOptions[_selectedOptionIndex];
+
+  @override
+  void initState() {
+    super.initState();
+    // Select the popular option by default, or the first if none is popular
+    final popularIndex = widget.membershipPlan.monthlyOptions.indexWhere((o) => o.isPopular);
+    if (popularIndex != -1) {
+      _selectedOptionIndex = popularIndex;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isWideScreen = MediaQuery.of(context).size.width > 600;
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: _selectedOption.isPopular
+              ? widget.planColor.withOpacity(0.5)
+              : Theme.of(context).dividerColor.withOpacity(0.5),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: widget.planColor.withOpacity(0.1),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: isWideScreen 
+        ? IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(flex: 2, child: _buildCardHeader()),
+                Expanded(flex: 3, child: _buildCardContent()),
+              ],
+            ),
+          )
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildCardHeader(),
+              _buildCardContent(),
+            ],
+          ),
+    );
+  }
+
+  Widget _buildCardHeader() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            widget.planColor.withOpacity(0.1),
+            widget.planColor.withOpacity(0.05),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: MediaQuery.of(context).size.width > 600
+            ? const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+              )
+            : const BorderRadius.only(
+                topLeft: Radius.circular(18),
+                topRight: Radius.circular(18),
+              ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (_selectedOption.discount > 0)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.red.shade400, Colors.orange.shade400],
+                ),
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Text(
+                'SAVE ${_selectedOption.discount}%',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          const SizedBox(height: 16),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: widget.planColor,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: widget.planColor.withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 5),
+                ),
+              ],
+            ),
+            child: Icon(
+              widget.planIcon,
+              size: 40,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            widget.membershipPlan.name,
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: widget.planColor,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          if (widget.membershipPlan.note.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              widget.membershipPlan.note,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCardContent() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Benefits
+          if (widget.membershipPlan.benefits.isNotEmpty) ...[
+            ...widget.membershipPlan.benefits.map((benefit) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    color: widget.planColor,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      benefit,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )),
+            const SizedBox(height: 16),
+          ],
+
+          // Month selection
+          const Text(
+            'Select Duration',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: List.generate(widget.membershipPlan.monthlyOptions.length, (index) {
+              final option = widget.membershipPlan.monthlyOptions[index];
+              final isSelected = index == _selectedOptionIndex;
+              return InkWell(
+                onTap: () => setState(() => _selectedOptionIndex = index),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? widget.planColor
+                        : Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isSelected
+                          ? widget.planColor
+                          : Colors.grey.shade300,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        option.durationLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: isSelected ? Colors.white : AppTheme.textPrimary,
+                        ),
+                      ),
+                      if (option.discount > 0)
+                        Text(
+                          '${option.discount}% off',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isSelected ? Colors.white : Colors.green,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 16),
+          
+          // Total price with discount
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: widget.planColor.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: widget.planColor.withOpacity(0.2),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Total Price',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      if (_selectedOption.discount > 0) ...[
+                        Text(
+                          '₹${_selectedOption.price.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade500,
+                            decoration: TextDecoration.lineThrough,
+                          ),
+                        ),
+                      ],
+                      Text(
+                        '₹${_selectedOption.finalPrice.toStringAsFixed(0)}',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: widget.planColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_selectedOption.discount > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      'Save ₹${(_selectedOption.price - _selectedOption.finalPrice).toStringAsFixed(0)}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green.shade700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Buy button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () {
+                // Navigate to booking with selected option
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Selected: ${_selectedOption.durationLabel} - ₹${_selectedOption.finalPrice.toStringAsFixed(0)}'),
+                  ),
+                );
+                // TODO: Implement booking navigation with MonthlyOption
+                // Navigator.push(
+                //   context,
+                //   MaterialPageRoute(
+                //     builder: (_) => BookingScreen(
+                //       gym: widget.gym,
+                //       monthlyOption: _selectedOption,
+                //     ),
+                //   ),
+                // );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.planColor,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                elevation: 4,
+                shadowColor: widget.planColor.withOpacity(0.4),
+              ),
+              child: const Text(
+                'Buy Membership',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Old Membership Card with Month Selection (DEPRECATED - kept for backwards compatibility)
 class _MembershipCardWithMonthSelection extends StatefulWidget {
   final Membership membership;
   final Gym gym;

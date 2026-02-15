@@ -44,6 +44,9 @@ class _SupportScreenState extends State<SupportScreen>
 
   int _selectedIndex = 7; // Support tab index
 
+  // Communication ID to open (from notification)
+  String? _communicationIdToOpen;
+
   @override
   void initState() {
     super.initState();
@@ -52,6 +55,23 @@ class _SupportScreenState extends State<SupportScreen>
     
     _loadAllData();
     _startAutoRefresh();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Check for navigation arguments
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null && args['communicationId'] != null) {
+      _communicationIdToOpen = args['communicationId'] as String;
+      // Switch to Communications tab (index 3)
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tabController.index != 3) {
+          _tabController.animateTo(3);
+        }
+      });
+    }
   }
 
   @override
@@ -385,6 +405,7 @@ class _SupportScreenState extends State<SupportScreen>
                 communications: _communications,
                 onRefresh: _loadAllData,
                 supportService: _supportService,
+                communicationIdToOpen: _communicationIdToOpen,
               ),
             ],
           ),

@@ -8,8 +8,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:dio/dio.dart';
-import 'dart:ui' as ui;
-import 'package:flutter/rendering.dart';
 
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import '../../config/app_theme.dart';

@@ -1410,3 +1410,89 @@ exports.getMembershipPass = async (req, res) => {
     });
   }
 };
+
+// Extend membership validity (Gym Admin only)
+exports.extendMembership = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const { days, reason } = req.body;
+    const gymId = (req.admin && (req.admin.gymId || req.admin.id));
+
+    if (!gymId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gym ID is required'
+      });
+    }
+
+    // Validate days (1-90 days)
+    if (!days || days < 1 || days > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'Extension days must be between 1 and 90'
+      });
+    }
+
+    // Find the membership
+    const member = await Member.findOne({
+      _id: memberId,
+      gym: gymId
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: 'Member not found'
+      });
+    }
+
+    // Get current valid until date
+    const currentValidUntil = new Date(member.membershipValidUntil);
+    
+    // Extend membership by specified days
+    const newValidUntil = new Date(currentValidUntil);
+    newValidUntil.setDate(newValidUntil.getDate() + days);
+
+    // Update member
+    member.membershipValidUntil = newValidUntil.toISOString().split('T')[0];
+    
+    await member.save();
+
+    // Create activity log for extension
+    const Activity = require('../models/Activity');
+    await Activity.create({
+      gym: gymId,
+      type: 'membership_extended',
+      description: `Extended membership for ${member.memberName} by ${days} days${reason ? ': ' + reason : ''}`,
+      metadata: {
+        memberId: member._id,
+        memberName: member.memberName,
+        daysExtended: days,
+        previousValidUntil: currentValidUntil.toISOString().split('T')[0],
+        newValidUntil: newValidUntil.toISOString().split('T')[0],
+        reason: reason || 'Admin extension'
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Membership extended successfully',
+      data: {
+        memberId: member._id,
+        memberName: member.memberName,
+        previousValidUntil: currentValidUntil.toISOString().split('T')[0],
+        newValidUntil: newValidUntil.toISOString().split('T')[0],
+        daysExtended: days
+      }
+    });
+
+  } catch (error) {
+    console.error('Error extending membership:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to extend membership',
+      error: error.message
+    });
+  }
+};
+

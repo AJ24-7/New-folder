@@ -104,23 +104,32 @@ router.post('/send', authMiddleware, async (req, res) => {
 
         // Create notification for gym admin
         try {
+            const userName = user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : (user.username || user.email || 'User');
+            
             const notification = new GymNotification({
                 gymId: gymId,
-                title: 'New Chat Message',
+                title: `New message from ${userName}`,
                 message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
-                type: 'chat',
+                type: 'chat-message',
                 priority: 'medium',
                 status: 'unread',
+                actionType: 'open-chat',
+                actionData: JSON.stringify({
+                    communicationId: chatTicket._id.toString(),
+                    userId: userId.toString(),
+                    userName: userName
+                }),
                 metadata: {
                     ticketId: chatTicket.ticketId,
                     userId: userId,
-                    userName: user.firstName && user.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
-                        : (user.username || user.email || 'User'),
+                    userName: userName,
                     userEmail: user.email,
                     userProfileImage: user.profileImage || '/uploads/profile-pics/default.png',
                     isChat: true,
-                    messagePreview: message.substring(0, 50)
+                    messagePreview: message.substring(0, 50),
+                    communicationId: chatTicket._id.toString()
                 }
             });
 

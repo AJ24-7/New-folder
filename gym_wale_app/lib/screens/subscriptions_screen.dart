@@ -28,6 +28,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
   List<TrialBooking> _upcomingTrials = [];
   List<UserDietSubscription> _dietSubscriptions = [];
   List<dynamic> _trainerBookings = [];
+  Map<String, bool> _gymFreezeSettings = {}; // Store freeze settings per gym
 
   bool _isLoading = true;
   int _selectedTabIndex = 0;
@@ -56,6 +57,21 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
     try {
       // Load gym memberships using getActiveMemberships (same as settings screen)
       final memberships = await ApiService.getActiveMemberships();
+
+      // Load gym settings for each membership
+      final Map<String, bool> gymSettings = {};
+      for (final membership in memberships) {
+        final gymId = membership['gym']?['_id'] ?? membership['gym']?['id'];
+        if (gymId != null && !gymSettings.containsKey(gymId)) {
+          try {
+            final settingsResult = await ApiService.getGymSettings(gymId);
+            gymSettings[gymId] = settingsResult['settings']?['allowMembershipFreezing'] ?? true;
+          } catch (e) {
+            print('Error loading gym settings for $gymId: $e');
+            gymSettings[gymId] = true; // Default to allowing freeze
+          }
+        }
+      }
 
       // Load trial bookings and filter for upcoming only
       final trialBookingsData = await ApiService.getTrialBookings();
@@ -87,6 +103,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
 
       setState(() {
         _gymMemberships = memberships;
+        _gymFreezeSettings = gymSettings;
         _upcomingTrials = upcomingTrials;
         _dietSubscriptions = diets;
         _trainerBookings = trainers;
@@ -1237,24 +1254,27 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: currentlyFrozen || totalFreezeCount > 0
-                        ? null
-                        : () => _showFreezeMembershipDialog(membershipId),
-                    icon: const Icon(Icons.ac_unit, size: 18),
-                    label: Text(
-                      totalFreezeCount > 0 ? l10n.freezeUsed : l10n.freeze,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      disabledBackgroundColor: Colors.grey,
+                // Check if gym allows membership freezing
+                if (_gymFreezeSettings[membership['gym']?['_id'] ?? membership['gym']?['id']] ?? true) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: currentlyFrozen || totalFreezeCount > 0
+                          ? null
+                          : () => _showFreezeMembershipDialog(membershipId),
+                      icon: const Icon(Icons.ac_unit, size: 18),
+                      label: Text(
+                        totalFreezeCount > 0 ? l10n.freezeUsed : l10n.freeze,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        disabledBackgroundColor: Colors.grey,
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
           ],

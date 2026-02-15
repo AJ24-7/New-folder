@@ -111,24 +111,29 @@ class NotificationProvider with ChangeNotifier {
     try {
       final data = await ApiService.getNotifications();
       _notifications = data.map((json) {
-        final notification = AppNotification.fromJson(json);
-        // Apply local read status if not already read from server
-        if (!notification.isRead && _localReadIds.contains(notification.id)) {
-          return AppNotification(
-            id: notification.id,
-            title: notification.title,
-            message: notification.message,
-            type: notification.type,
-            createdAt: notification.createdAt,
-            isRead: true, // Mark as read based on local cache
-            data: notification.data,
-            imageUrl: notification.imageUrl,
-            actionType: notification.actionType,
-            actionData: notification.actionData,
-          );
+        try {
+          final notification = AppNotification.fromJson(json);
+          // Apply local read status if not already read from server
+          if (!notification.isRead && _localReadIds.contains(notification.id)) {
+            return AppNotification(
+              id: notification.id,
+              title: notification.title,
+              message: notification.message,
+              type: notification.type,
+              createdAt: notification.createdAt,
+              isRead: true, // Mark as read based on local cache
+              data: notification.data,
+              imageUrl: notification.imageUrl,
+              actionType: notification.actionType,
+              actionData: notification.actionData,
+            );
+          }
+          return notification;
+        } catch (e) {
+          print('Error parsing notification: $e, json: $json');
+          return null;
         }
-        return notification;
-      }).toList();
+      }).whereType<AppNotification>().toList();
       _unreadCount = _notifications.where((n) => !n.isRead).length;
       await _updateBadgeCount();
     } catch (e) {
@@ -264,24 +269,29 @@ class NotificationProvider with ChangeNotifier {
       
       if (data['notifications'] != null && data['notifications'].isNotEmpty) {
         final newNotifications = (data['notifications'] as List).map((json) {
-          final notification = AppNotification.fromJson(json);
-          // Apply local read status
-          if (!notification.isRead && _localReadIds.contains(notification.id)) {
-            return AppNotification(
-              id: notification.id,
-              title: notification.title,
-              message: notification.message,
-              type: notification.type,
-              createdAt: notification.createdAt,
-              isRead: true,
-              data: notification.data,
-              imageUrl: notification.imageUrl,
-              actionType: notification.actionType,
-              actionData: notification.actionData,
-            );
+          try {
+            final notification = AppNotification.fromJson(json);
+            // Apply local read status
+            if (!notification.isRead && _localReadIds.contains(notification.id)) {
+              return AppNotification(
+                id: notification.id,
+                title: notification.title,
+                message: notification.message,
+                type: notification.type,
+                createdAt: notification.createdAt,
+                isRead: true,
+                data: notification.data,
+                imageUrl: notification.imageUrl,
+                actionType: notification.actionType,
+                actionData: notification.actionData,
+              );
+            }
+            return notification;
+          } catch (e) {
+            print('Error parsing polled notification: $e');
+            return null;
           }
-          return notification;
-        }).toList();
+        }).whereType<AppNotification>().toList();
         
         // Add new notifications to the beginning of the list
         for (final notification in newNotifications.reversed) {

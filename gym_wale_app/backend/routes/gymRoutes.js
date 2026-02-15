@@ -10,6 +10,7 @@ const sendEmail = require('../utils/sendEmail');
 // Import controllers
 const gymController = require('../controllers/gymController');
 const membershipPlanController = require('../controllers/membershipPlanController');
+const gymSettingsController = require('../controllers/gymSettingsController');
 const { getGymInfo } = require('../controllers/qrRegistrationController');
 
 // Import middleware
@@ -40,6 +41,16 @@ router.get('/membership-plans', gymadminAuth, membershipPlanController.getMember
 
 // Update all membership plans for the logged-in gym admin
 router.put('/membership-plans', gymadminAuth, membershipPlanController.updateMembershipPlans);
+
+// --- Gym Settings API ---
+// Get gym settings for the logged-in gym admin
+router.get('/settings', gymadminAuth, gymSettingsController.getGymSettings);
+
+// Update gym settings for the logged-in gym admin
+router.put('/settings', gymadminAuth, gymSettingsController.updateGymSettings);
+
+// Get gym settings by gym ID (public endpoint for user app)
+router.get('/:gymId/settings', gymSettingsController.getGymSettingsById);
 
 // --- QR Code Registration API ---
 // Get gym info for QR code registration (public endpoint)

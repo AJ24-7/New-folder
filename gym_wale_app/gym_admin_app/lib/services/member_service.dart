@@ -327,4 +327,33 @@ class MemberService {
     // TODO: Implement export functionality
     throw UnimplementedError('Export functionality not implemented yet');
   }
+
+  /// Extend membership validity for a member
+  Future<Map<String, dynamic>> extendMembership({
+    required String memberId,
+    required int days,
+    String? reason,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConfig.members}/$memberId/extend',
+        data: {
+          'days': days,
+          'reason': reason,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return {
+          'success': response.data['success'] ?? true,
+          'message': response.data['message'] ?? 'Membership extended successfully',
+          'data': response.data['data'],
+        };
+      } else {
+        throw Exception(response.data['message'] ?? 'Failed to extend membership');
+      }
+    } catch (e) {
+      throw Exception('Error extending membership: $e');
+    }
+  }
 }

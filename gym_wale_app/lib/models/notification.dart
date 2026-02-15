@@ -24,17 +24,29 @@ class AppNotification {
   });
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic dateValue) {
+      try {
+        if (dateValue == null) return DateTime.now();
+        if (dateValue is DateTime) return dateValue;
+        if (dateValue is String) return DateTime.parse(dateValue);
+        return DateTime.now();
+      } catch (e) {
+        print('Error parsing notification date: $e');
+        return DateTime.now();
+      }
+    }
+
     return AppNotification(
-      id: json['_id'] ?? json['id'] ?? '',
-      title: json['title'] ?? '',
-      message: json['message'] ?? '',
-      type: json['type'] ?? 'general',
-      createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
-      isRead: json['isRead'] ?? false,
-      data: json['data'],
-      imageUrl: json['imageUrl'],
-      actionType: json['actionType'],
-      actionData: json['actionData'],
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+      type: json['type']?.toString() ?? 'general',
+      createdAt: parseDate(json['createdAt'] ?? json['timestamp'] ?? json['created_at']),
+      isRead: json['isRead'] ?? json['read'] ?? false,
+      data: json['data'] is Map<String, dynamic> ? json['data'] : null,
+      imageUrl: json['imageUrl']?.toString(),
+      actionType: json['actionType']?.toString(),
+      actionData: json['actionData']?.toString(),
     );
   }
 

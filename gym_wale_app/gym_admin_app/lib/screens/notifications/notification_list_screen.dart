@@ -1,4 +1,5 @@
 // lib/screens/notifications/notification_list_screen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -189,7 +190,13 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           if (!notification.read) {
             context.read<NotificationProvider>().markAsRead(notification.id);
           }
-          _showNotificationDetails(context, notification);
+          
+          // Handle different notification actions
+          if (notification.actionType == 'open-chat' && notification.actionData != null) {
+            _handleChatNotification(context, notification);
+          } else {
+            _showNotificationDetails(context, notification);
+          }
         },
       ),
     );
@@ -200,15 +207,23 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     Color iconColor;
 
     switch (notification.type) {
+      case 'chat-message':
+      case 'chat':
+        iconData = Icons.chat_bubble;
+        iconColor = Colors.purple;
+        break;
       case 'membership-renewal':
+      case 'membership':
         iconData = Icons.card_membership;
         iconColor = Colors.orange;
         break;
       case 'payment':
+      case 'payment-received':
         iconData = Icons.payment;
         iconColor = Colors.green;
         break;
       case 'holiday-notice':
+      case 'holiday':
         iconData = Icons.beach_access;
         iconColor = Colors.blue;
         break;
@@ -217,8 +232,37 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         iconColor = Colors.red;
         break;
       case 'system-alert':
+      case 'alert':
         iconData = Icons.warning;
         iconColor = Colors.amber;
+        break;
+      case 'announcement':
+      case 'general':
+        iconData = Icons.campaign;
+        iconColor = Colors.indigo;
+        break;
+      case 'review':
+      case 'feedback':
+        iconData = Icons.star;
+        iconColor = Colors.yellow[700]!;
+        break;
+      case 'grievance':
+      case 'complaint':
+        iconData = Icons.report_problem;
+        iconColor = Colors.deepOrange;
+        break;
+      case 'attendance':
+        iconData = Icons.checklist;
+        iconColor = Colors.teal;
+        break;
+      case 'promotion':
+      case 'offer':
+        iconData = Icons.local_offer;
+        iconColor = Colors.pink;
+        break;
+      case 'maintenance':
+        iconData = Icons.construction;
+        iconColor = Colors.brown;
         break;
       default:
         iconData = Icons.notifications;
@@ -270,6 +314,44 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         ],
       ),
     );
+  }
+
+  void _handleChatNotification(BuildContext context, GymNotification notification) {
+    try {
+      // Parse actionData to get communicationId
+      final actionData = notification.actionData;
+      String? communicationId;
+      
+      if (actionData != null) {
+        // Try to parse as JSON
+        try {
+          final data = json.decode(actionData);
+          communicationId = data['communicationId'] as String?;
+        } catch (e) {
+          // If not JSON, might be direct string
+          communicationId = actionData;
+        }
+      }
+      
+      // Fallback to metadata if actionData doesn't have it
+      communicationId ??= notification.metadata?['communicationId'] as String?;
+      
+      if (communicationId == null) {
+        // If no communicationId, just show details
+        _showNotificationDetails(context, notification);
+        return;
+      }
+      
+      // Navigate to support screen with the communication ID
+      Navigator.pushNamed(
+        context,
+        '/support',
+        arguments: {'communicationId': communicationId},
+      );
+    } catch (e) {
+      print('Error handling chat notification: $e');
+      _showNotificationDetails(context, notification);
+    }
   }
 
   String _formatTimestamp(DateTime timestamp) {

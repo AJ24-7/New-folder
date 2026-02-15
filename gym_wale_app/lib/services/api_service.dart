@@ -9,6 +9,7 @@ import '../config/api_config.dart';
 import '../models/user.dart';
 import '../models/gym.dart';
 import '../models/membership.dart';
+import '../models/membership_plan.dart';
 import '../models/booking.dart';
 import '../models/payment.dart';
 import '../models/review.dart';
@@ -596,6 +597,33 @@ class ApiService {
     return [];
   }
 
+  /// Get gym membership plan template
+  static Future<MembershipPlan?> getGymMembershipPlan(String gymId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/gyms/$gymId/membership-plans');
+      print('Fetching membership plan from: $url');
+      
+      final response = await http.get(
+        url,
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      print('Membership plan response status: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        print('Membership plan response data: $data');
+        
+        return MembershipPlan.fromJson(data);
+      } else {
+        print('Membership plan error response: ${response.body}');
+      }
+    } catch (e) {
+      print('Get membership plan error: $e');
+    }
+    return null;
+  }
+
   /// Get user's active memberships
   static Future<Map<String, dynamic>> getUserMemberships() async {
     try {
@@ -846,6 +874,38 @@ class ApiService {
       return {
         'success': false,
         'message': 'Connection error: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Get gym settings by gym ID
+  static Future<Map<String, dynamic>> getGymSettings(String gymId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/gym/$gymId/settings');
+      print('Getting gym settings: $url');
+      final response = await http.get(url).timeout(const Duration(seconds: 30));
+
+      final data = jsonDecode(response.body);
+      print('Gym settings response: $data');
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'settings': data['settings'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to get gym settings',
+          'settings': {'allowMembershipFreezing': true}, // Default value
+        };
+      }
+    } catch (e) {
+      print('Get gym settings error: $e');
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+        'settings': {'allowMembershipFreezing': true}, // Default value on error
       };
     }
   }
@@ -1339,7 +1399,15 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data['notifications'] ?? []);
+        if (data is Map && data.containsKey('notifications')) {
+          final notifications = data['notifications'];
+          if (notifications is List) {
+            return notifications.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+          }
+        }
+        return [];
+      } else {
+        print('Get notifications failed with status ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
       print('Get notifications error: $e');
