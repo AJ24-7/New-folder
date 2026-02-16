@@ -46,10 +46,16 @@ class NotificationScheduler {
       this.sendPaymentReminders();
     });
 
+    // Auto-unfreeze memberships (run every hour)
+    cron.schedule('0 * * * *', () => {
+      this.autoUnfreezeMemberships();
+    });
+
     // Run initial check after 5 minutes of server start
     setTimeout(() => {
       this.checkMembershipExpiry();
       this.sendUserMembershipExpiryNotifications();
+      this.autoUnfreezeMemberships();
     }, 5 * 60 * 1000);
   }
 
@@ -588,6 +594,78 @@ class NotificationScheduler {
     console.log('🔧 Manual expiry check triggered');
     await this.checkMembershipExpiry();
     await this.sendUserMembershipExpiryNotifications();
+  }
+
+  // Auto-unfreeze memberships that have passed their freeze end date
+  async autoUnfreezeMemberships() {
+    try {
+      console.log('❄️ Checking for memberships to auto-unfreeze...');
+      
+      const now = new Date();
+      
+      // Find all frozen members whose freeze end date has passed
+      const membersToUnfreeze = await Member.find({
+        currentlyFrozen: true,
+        freezeEndDate: { $lt: now }
+      }).populate('gym', 'gymName');
+
+      if (membersToUnfreeze.length === 0) {
+        console.log('ℹ️ No memberships to auto-unfreeze');
+        return;
+      }
+
+      let unfrozenCount = 0;
+      
+      for (const member of membersToUnfreeze) {
+        try {
+          // Move current freeze to history
+          if (member.freezeStartDate && member.freezeEndDate) {
+            member.freezeHistory.push({
+              freezeStartDate: member.freezeStartDate,
+              freezeEndDate: member.freezeEndDate,
+              unfrozenAt: new Date()
+            });
+          }
+
+          // Unfreeze the membership
+          member.currentlyFrozen = false;
+          member.freezeStartDate = null;
+          member.freezeEndDate = null;
+
+          await member.save();
+          unfrozenCount++;
+
+          console.log(`✅ Auto-unfroze membership for ${member.memberName} (${member.membershipId})`);
+
+          // Create notification for gym admin
+          if (member.gym && member.gym._id) {
+            const notification = new Notification({
+              title: 'Membership Auto-Unfrozen',
+              message: `${member.memberName}'s membership (${member.membershipId}) has been automatically unfrozen as the freeze period has ended.`,
+              type: 'membership-unfreeze',
+              priority: 'low',
+              icon: 'fa-snowflake',
+              color: '#4ade80',
+              user: member.gym._id,
+              metadata: {
+                memberId: member._id,
+                memberName: member.memberName,
+                membershipId: member.membershipId,
+                unfrozenAt: new Date()
+              }
+            });
+
+            await notification.save();
+          }
+        } catch (memberError) {
+          console.error(`❌ Error auto-unfreezing member ${member.membershipId}:`, memberError);
+        }
+      }
+
+      console.log(`✅ Auto-unfroze ${unfrozenCount} membership(s)`);
+    } catch (error) {
+      console.error('❌ Error in auto-unfreeze process:', error);
+    }
   }
 
   // Stop scheduler

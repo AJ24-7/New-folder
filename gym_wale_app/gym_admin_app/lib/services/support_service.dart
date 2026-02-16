@@ -379,7 +379,7 @@ class SupportService {
       if (priority != null) queryParams['priority'] = priority;
 
       final response = await _dio.get(
-        '/member-problems/gym/all',
+        '/api/member-problems/gym/all',
         queryParameters: queryParams,
       );
       
@@ -397,7 +397,7 @@ class SupportService {
   /// POST /api/member-problems/:reportId/respond
   Future<void> respondToMemberProblem(String reportId, String message, {String? status}) async {
     try {
-      await _dio.post('/member-problems/$reportId/respond', data: {
+      await _dio.post('/api/member-problems/$reportId/respond', data: {
         'message': message,
         if (status != null) 'status': status,
       });
@@ -411,7 +411,7 @@ class SupportService {
   /// PATCH /api/member-problems/:reportId/status
   Future<void> updateProblemReportStatus(String reportId, String status, {String? resolutionNotes}) async {
     try {
-      await _dio.patch('/member-problems/$reportId/status', data: {
+      await _dio.patch('/api/member-problems/$reportId/status', data: {
         'status': status,
         if (resolutionNotes != null) 'resolutionNotes': resolutionNotes,
       });

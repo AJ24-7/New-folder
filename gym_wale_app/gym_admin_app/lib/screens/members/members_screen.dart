@@ -668,6 +668,7 @@ class _MembersScreenState extends State<MembersScreen> {
   Widget _buildMemberCard(Member member) {
     return Card(
       elevation: 2,
+      color: member.currentlyFrozen ? Colors.yellow.shade50 : null,
       child: InkWell(
         onTap: () => _showMemberDetails(member),
         child: Stack(
@@ -702,7 +703,7 @@ class _MembersScreenState extends State<MembersScreen> {
                 ],
               ),
             ),
-            // Frozen membership badge
+            // Frozen membership badge - Yellow highlight
             if (member.currentlyFrozen)
               Positioned(
                 top: 8,
@@ -710,21 +711,21 @@ class _MembersScreenState extends State<MembersScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
+                    color: Colors.yellow.shade100,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.shade300),
+                    border: Border.all(color: Colors.orange.shade400, width: 1.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.pause_circle, size: 14, color: Colors.blue.shade700),
+                      Icon(Icons.ac_unit, size: 14, color: Colors.orange.shade700),
                       const SizedBox(width: 4),
                       Text(
-                        'Frozen',
+                        'FROZEN',
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade700,
+                          color: Colors.orange.shade800,
                         ),
                       ),
                     ],

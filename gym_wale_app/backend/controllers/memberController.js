@@ -568,7 +568,39 @@ exports.getMembers = async (req, res) => {
     }
     
     const members = await Member.find({ gym: gymId });
-    res.status(200).json({ members });
+    
+    // Ensure all members have membershipValidUntil calculated
+    const membersWithValidUntil = members.map(member => {
+      const memberObj = member.toObject();
+      
+      // If membershipValidUntil is missing, calculate it from joinDate and monthlyPlan
+      if (!memberObj.membershipValidUntil && memberObj.joinDate && memberObj.monthlyPlan) {
+        let months = 1;
+        if (/3\s*Months?/i.test(memberObj.monthlyPlan)) months = 3;
+        else if (/6\s*Months?/i.test(memberObj.monthlyPlan)) months = 6;
+        else if (/12\s*Months?/i.test(memberObj.monthlyPlan)) months = 12;
+        
+        const validUntil = new Date(memberObj.joinDate);
+        validUntil.setMonth(validUntil.getMonth() + months);
+        memberObj.membershipValidUntil = validUntil.toISOString().split('T')[0];
+        
+        // Update the database record asynchronously (don't block response)
+        setTimeout(async () => {
+          try {
+            await Member.findByIdAndUpdate(member._id, {
+              membershipValidUntil: memberObj.membershipValidUntil
+            });
+            console.log(`✅ Updated membershipValidUntil for member ${member.membershipId}`);
+          } catch (err) {
+            console.error(`❌ Error updating membershipValidUntil for member ${member.membershipId}:`, err);
+          }
+        }, 100);
+      }
+      
+      return memberObj;
+    });
+    
+    res.status(200).json({ members: membersWithValidUntil });
   } catch (err) {
     console.error('Error fetching members:', err);
     res.status(500).json({ message: 'Server error while fetching members' });
@@ -1302,12 +1334,31 @@ exports.freezeMembership = async (req, res) => {
       console.error('❌ Membership validity date is not set for member:', {
         membershipId: member._id,
         memberName: member.memberName,
-        email: member.email
+        email: member.email,
+        joinDate: member.joinDate,
+        monthlyPlan: member.monthlyPlan
       });
-      return res.status(400).json({
-        success: false,
-        message: 'Membership validity date is not set. Please contact the gym to update your membership details.'
-      });
+      
+      // Attempt to calculate it from joinDate and monthlyPlan
+      if (member.joinDate && member.monthlyPlan) {
+        let months = 1;
+        if (/3\s*Months?/i.test(member.monthlyPlan)) months = 3;
+        else if (/6\s*Months?/i.test(member.monthlyPlan)) months = 6;
+        else if (/12\s*Months?/i.test(member.monthlyPlan)) months = 12;
+        
+        const validUntil = new Date(member.joinDate);
+        validUntil.setMonth(validUntil.getMonth() + months);
+        member.membershipValidUntil = validUntil.toISOString().split('T')[0];
+        
+        await member.save();
+        
+        console.log(`✅ Auto-calculated and saved membershipValidUntil for member ${member.membershipId}: ${member.membershipValidUntil}`);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Membership validity date is not set and cannot be calculated. Please renew your membership or contact the gym to update your membership details.'
+        });
+      }
     }
 
     // Check if membership is valid

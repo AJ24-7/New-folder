@@ -458,19 +458,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  color: Colors.yellow.withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.blue),
+                                  border: Border.all(color: Colors.orange, width: 1.5),
                                 ),
                                 child: Row(
                                   children: [
-                                    const Icon(Icons.ac_unit, color: Colors.blue, size: 20),
+                                    const Icon(Icons.ac_unit, color: Colors.orange, size: 20),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: Text(
                                         'FROZEN until ${pass['freezeEndDate'] != null ? DateFormat('MMM dd').format(DateTime.parse(pass['freezeEndDate'])) : 'N/A'}',
                                         style: const TextStyle(
-                                          color: Colors.blue,
+                                          color: Colors.orange,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 12,
                                         ),
@@ -1234,21 +1234,21 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
+                  color: Colors.yellow.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue),
+                  border: Border.all(color: Colors.orange, width: 1.5),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.ac_unit, size: 18, color: Colors.blue),
+                    const Icon(Icons.ac_unit, size: 18, color: Colors.orange),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '${l10n.membershipFrozenUntil} ${DateFormat('MMM dd, yyyy').format(freezeEndDate)}',
                         style: const TextStyle(
                           fontSize: 12,
-                          color: Colors.blue,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.orange,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
