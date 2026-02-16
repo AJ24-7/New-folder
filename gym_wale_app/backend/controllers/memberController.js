@@ -1273,6 +1273,15 @@ exports.freezeMembership = async (req, res) => {
       email: userEmail
     }).populate('gym');
 
+    console.log('📊 Member data:', {
+      found: !!member,
+      membershipValidUntil: member?.membershipValidUntil,
+      currentlyFrozen: member?.currentlyFrozen,
+      totalFreezeCount: member?.totalFreezeCount,
+      membershipId: member?._id,
+      email: member?.email
+    });
+
     if (!member) {
       return res.status(404).json({
         success: false,
@@ -1290,9 +1299,14 @@ exports.freezeMembership = async (req, res) => {
 
     // Validate membershipValidUntil date
     if (!member.membershipValidUntil) {
+      console.error('❌ Membership validity date is not set for member:', {
+        membershipId: member._id,
+        memberName: member.memberName,
+        email: member.email
+      });
       return res.status(400).json({
         success: false,
-        message: 'Membership validity date is not set'
+        message: 'Membership validity date is not set. Please contact the gym to update your membership details.'
       });
     }
 

@@ -19,7 +19,8 @@ exports.submitMemberProblemReport = async (req, res) => {
       gymId,
       category,
       subject,
-      imagesCount: images.length
+      imagesCount: images.length,
+      userEmail: req.user.email
     });
 
     // Verify the user has an active membership at this gym
@@ -143,7 +144,29 @@ exports.getMemberProblemReports = async (req, res) => {
 // Admin: Get all problem reports for their gym
 exports.getGymProblemReports = async (req, res) => {
   try {
-    const gymId = req.admin.gymId || req.admin.id;
+    // Extract gymId from various possible locations in req.admin
+    const gymIdRaw = req.admin.gymId || req.admin.id || req.admin._id;
+    
+    // Convert to ObjectId if it's a string
+    const mongoose = require('mongoose');
+    const gymId = mongoose.Types.ObjectId.isValid(gymIdRaw) 
+      ? new mongoose.Types.ObjectId(gymIdRaw) 
+      : gymIdRaw;
+    
+    console.log('📋 Fetching problem reports for gym:', {
+      gymIdRaw,
+      gymId,
+      adminData: { id: req.admin.id, gymId: req.admin.gymId, email: req.admin.email },
+      filters: req.query
+    });
+
+    if (!gymId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gym ID not found in authentication data'
+      });
+    }
+
     const { status, category, priority } = req.query;
 
     const filter = { gymId };
@@ -155,6 +178,8 @@ exports.getGymProblemReports = async (req, res) => {
       .populate('memberId', 'memberName membershipId phone email')
       .populate('userId', 'name email')
       .sort({ createdAt: -1 });
+
+    console.log(`✅ Found ${reports.length} problem reports for gym ${gymId}`);
 
     res.json({
       success: true,
