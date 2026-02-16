@@ -12,6 +12,7 @@ import '../widgets/attendance_widget_new.dart';
 import '../l10n/app_localizations.dart';
 import 'diet_plan_detail_screen.dart';
 import 'workout_assistant_screen.dart';
+import 'report_problem_screen.dart';
 
 class SubscriptionsScreen extends StatefulWidget {
   const SubscriptionsScreen({Key? key}) : super(key: key);
@@ -784,6 +785,39 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
     }
   }
 
+  /// Navigate to report problem screen
+  Future<void> _navigateToReportProblem(dynamic membership) async {
+    final gymId = _extractGymId(membership);
+    final gymName = membership['gym']?['name'] ?? 'Unknown Gym';
+    final membershipId = membership['id'] ?? membership['membershipId'] ?? '';
+
+    if (gymId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unable to identify gym'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ReportProblemScreen(
+          gymId: gymId,
+          gymName: gymName,
+          membershipId: membershipId,
+        ),
+      ),
+    );
+
+    // If report was submitted successfully, reload subscriptions
+    if (result == true) {
+      _loadAllSubscriptions();
+    }
+  }
+
   void _scheduleTrialReminder(TrialBooking trial) {
     final l10n = AppLocalizations.of(context)!;
     // Notification scheduling logic
@@ -1286,6 +1320,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
               const SizedBox(height: 12),
             ],
             
+            // Action Buttons Row
             Row(
               children: [
                 Expanded(
@@ -1300,29 +1335,44 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                     ),
                   ),
                 ),
-                // Check if gym allows membership freezing
-                if (_gymFreezeSettings[_extractGymId(membership)] == true) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: currentlyFrozen || totalFreezeCount > 0
-                          ? null
-                          : () => _showFreezeMembershipDialog(membershipId),
-                      icon: const Icon(Icons.ac_unit, size: 18),
-                      label: Text(
-                        totalFreezeCount > 0 ? l10n.freezeUsed : l10n.freeze,
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primaryColor,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        disabledBackgroundColor: Colors.grey,
-                      ),
+                const SizedBox(width: 8),
+                // Report Problem Button
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _navigateToReportProblem(membership),
+                    icon: const Icon(Icons.report_problem_outlined, size: 18),
+                    label: const Text('Report'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.orange,
+                      side: const BorderSide(color: Colors.orange),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
-                ],
+                ),
               ],
             ),
+            // Freeze Button Row (if enabled)
+            if (_gymFreezeSettings[_extractGymId(membership)] == true) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: currentlyFrozen || totalFreezeCount > 0
+                      ? null
+                      : () => _showFreezeMembershipDialog(membershipId),
+                  icon: const Icon(Icons.ac_unit, size: 18),
+                  label: Text(
+                    totalFreezeCount > 0 ? l10n.freezeUsed : l10n.freeze,
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    disabledBackgroundColor: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

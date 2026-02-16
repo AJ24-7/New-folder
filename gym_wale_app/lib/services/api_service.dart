@@ -881,7 +881,7 @@ class ApiService {
   /// Get gym settings by gym ID
   static Future<Map<String, dynamic>> getGymSettings(String gymId) async {
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/gym/$gymId/settings');
+      final url = Uri.parse('${ApiConfig.baseUrl}/gyms/$gymId/settings');
       print('Getting gym settings for gymId: $gymId, URL: $url');
       final response = await http.get(url).timeout(const Duration(seconds: 30));
 
@@ -1920,6 +1920,75 @@ class ApiService {
       ).timeout(ApiConfig.timeout);
 
       final data = jsonDecode(response.body);
+      print('Problem report response: $data');
+
+      if (response.statusCode == 201 && data['success'] == true) {
+        return {
+          'success': true,
+          'reportId': data['reportId'],
+          'message': data['message'] ?? 'Problem reported successfully',
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to submit problem report',
+        };
+      }
+    } catch (e) {
+      print('Submit problem error: $e');
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Submit a member problem report with images
+  static Future<Map<String, dynamic>> submitMemberProblemReport({
+    required String gymId,
+    required String category,
+    required String subject,
+    required String description,
+    String priority = 'normal',
+    List<XFile>? images,
+  }) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/member-problems/submit');
+      print('Submitting problem report with images to: $url');
+
+      var request = http.MultipartRequest('POST', url);
+      
+      // Add authorization header
+      if (_token != null) {
+        request.headers['Authorization'] = 'Bearer $_token';
+      }
+
+      // Add form fields
+      request.fields['gymId'] = gymId;
+      request.fields['category'] = category;
+      request.fields['subject'] = subject;
+      request.fields['description'] = description;
+      request.fields['priority'] = priority;
+
+      // Add images if provided
+      if (images != null && images.isNotEmpty) {
+        for (var i = 0; i < images.length; i++) {
+          final image = images[i];
+          final bytes = await image.readAsBytes();
+          final multipartFile = http.MultipartFile.fromBytes(
+            'images',
+            bytes,
+            filename: 'image_$i.jpg',
+            contentType: MediaType('image', 'jpeg'),
+          );
+          request.files.add(multipartFile);
+        }
+      }
+
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      final response = await http.Response.fromStream(streamedResponse);
+      final data = jsonDecode(response.body);
+
       print('Problem report response: $data');
 
       if (response.statusCode == 201 && data['success'] == true) {

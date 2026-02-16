@@ -21,12 +21,49 @@ class GrievancesTab extends StatefulWidget {
   State<GrievancesTab> createState() => _GrievancesTabState();
 }
 
-class _GrievancesTabState extends State<GrievancesTab> {
+class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   String _searchQuery = '';
   String _filterStatus = 'all'; // all, open, in-progress, resolved, closed
   String _filterPriority = 'all'; // all, low, medium, high, urgent
+  String _viewType = 'all'; // all, grievances, member-reports
+  List<Map<String, dynamic>> _memberReports = [];
+  bool _isLoadingReports = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMemberReports();
+  }
+
+  Future<void> _loadMemberReports() async {
+    setState(() {
+      _isLoadingReports = true;
+    });
+
+    try {
+      final reports = await widget.supportService.getMemberProblemReports();
+      if (mounted) {
+        setState(() {
+          _memberReports = reports;
+          _isLoadingReports = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading member reports: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingReports = false;
+        });
+      }
+    }
+  }
 
   List<Grievance> get _filteredGrievances {
+    if (_viewType == 'member-reports') return [];
+    
     return widget.grievances.where((grievance) {
       // Search filter
       if (_searchQuery.isNotEmpty) {
@@ -52,25 +89,115 @@ class _GrievancesTabState extends State<GrievancesTab> {
     }).toList();
   }
 
+  List<Map<String, dynamic>> get _filteredMemberReports {
+    if (_viewType == 'grievances') return [];
+    
+    return _memberReports.where((report) {
+      // Search filter
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final subject = (report['subject'] ?? '').toString().toLowerCase();
+        final description = (report['description'] ?? '').toString().toLowerCase();
+        final memberName = (report['memberId']?['memberName'] ?? '').toString().toLowerCase();
+        
+        if (!subject.contains(query) &&
+            !description.contains(query) &&
+            !memberName.contains(query)) {
+          return false;
+        }
+      }
+
+      // Status filter
+      if (_filterStatus != 'all' && report['status'] != _filterStatus) {
+        return false;
+      }
+
+      // Priority filter
+      if (_filterPriority != 'all' && report['priority'] != _filterPriority) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
+    super.build(context);
+    final showGrievances = _viewType == 'all' || _viewType == 'grievances';
+    final showReports = _viewType == 'all' || _viewType == 'member-reports';
+    final hasAnyItems = (showGrievances && _filteredGrievances.isNotEmpty) || 
+                        (showReports && _filteredMemberReports.isNotEmpty);
+
     return Column(
       children: [
         // Search, Filters, and Raise Grievance button
         _buildHeaderSection(),
-        // Grievances List
+        // Grievances and Reports List
         Expanded(
-          child: _filteredGrievances.isEmpty
+          child: _isLoadingReports
+              ? const Center(child: CircularProgressIndicator())
+              : !hasAnyItems
               ? _buildEmptyState()
               : RefreshIndicator(
-                  onRefresh: () async => widget.onRefresh(),
-                  child: ListView.separated(
+                  onRefresh: () async {
+                    widget.onRefresh();
+                    await _loadMemberReports();
+                  },
+                  child: ListView(
                     padding: const EdgeInsets.all(16),
-                    itemCount: _filteredGrievances.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 12),
-                    itemBuilder: (context, index) {
-                      return _buildGrievanceCard(_filteredGrievances[index]);
-                    },
+                    children: [
+                      if (showReports && _filteredMemberReports.isNotEmpty) ...[
+                        if (_viewType == 'all') ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.report_problem, color: Colors.orange, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Member Problem Reports (${_filteredMemberReports.length})',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        ..._filteredMemberReports.map((report) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildMemberReportCard(report),
+                        )),
+                        if (_viewType == 'all' && _filteredGrievances.isNotEmpty)
+                          const Divider(height: 32, thickness: 2),
+                      ],
+                      if (showGrievances && _filteredGrievances.isNotEmpty) ...[
+                        if (_viewType == 'all') ...[
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Row(
+                              children: [
+                                Icon(Icons.support_agent, color: Colors.blue, size: 20),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Support Grievances (${_filteredGrievances.length})',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        ..._filteredGrievances.map((grievance) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildGrievanceCard(grievance),
+                        )),
+                      ],
+                    ],
                   ),
                 ),
         ),
@@ -84,6 +211,27 @@ class _GrievancesTabState extends State<GrievancesTab> {
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Column(
         children: [
+          // View Type Selector
+          Row(
+            children: [
+              Expanded(
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'all', label: Text('All'), icon: Icon(Icons.list, size: 16)),
+                    ButtonSegment(value: 'member-reports', label: Text('Reports'), icon: Icon(Icons.report_problem, size: 16)),
+                    ButtonSegment(value: 'grievances', label: Text('Grievances'), icon: Icon(Icons.support_agent, size: 16)),
+                  ],
+                  selected: {_viewType},
+                  onSelectionChanged: (Set<String> newSelection) {
+                    setState(() {
+                      _viewType = newSelection.first;
+                    });
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           // Raise Grievance button
           SizedBox(
             width: double.infinity,
@@ -100,7 +248,7 @@ class _GrievancesTabState extends State<GrievancesTab> {
           // Search bar
           TextField(
             decoration: InputDecoration(
-              hintText: 'Search grievances...',
+              hintText: 'Search ${_viewType == 'member-reports' ? 'reports' : _viewType == 'grievances' ? 'grievances' : 'all issues'}...',
               prefixIcon: const Icon(Icons.search),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -132,6 +280,7 @@ class _GrievancesTabState extends State<GrievancesTab> {
                   items: const [
                     DropdownMenuItem(value: 'all', child: Text('All Status')),
                     DropdownMenuItem(value: 'open', child: Text('Open')),
+                    DropdownMenuItem(value: 'acknowledged', child: Text('Acknowledged')),
                     DropdownMenuItem(value: 'in-progress', child: Text('In Progress')),
                     DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
                     DropdownMenuItem(value: 'closed', child: Text('Closed')),
@@ -159,6 +308,7 @@ class _GrievancesTabState extends State<GrievancesTab> {
                     DropdownMenuItem(value: 'all', child: Text('All Priorities')),
                     DropdownMenuItem(value: 'low', child: Text('Low')),
                     DropdownMenuItem(value: 'medium', child: Text('Medium')),
+                    DropdownMenuItem(value: 'normal', child: Text('Normal')),
                     DropdownMenuItem(value: 'high', child: Text('High')),
                     DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
                   ],
@@ -290,6 +440,186 @@ class _GrievancesTabState extends State<GrievancesTab> {
                         color: Colors.blue,
                       ),
                     ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMemberReportCard(Map<String, dynamic> report) {
+    final status = report['status'] ?? 'open';
+    final priority = report['priority'] ?? 'normal';
+    final statusColor = _getStatusColor(status);
+    final priorityColor = _getPriorityColor(priority);
+    final subject = report['subject'] ?? 'No Subject';
+    final description = report['description'] ?? '';
+    final category = report['category'] ?? 'other';
+    final memberInfo = report['memberId'] as Map<String, dynamic>?;
+    final memberName = memberInfo?['memberName'] ?? 'Unknown Member';
+    final membershipId = memberInfo?['membershipId'] ?? '';
+    final createdAt = report['createdAt'] != null 
+        ? DateTime.parse(report['createdAt']) 
+        : DateTime.now();
+    final images = List<String>.from(report['images'] ?? []);
+    final hasResponse = report['adminResponse'] != null;
+
+    return Card(
+      elevation: 2,
+      child: InkWell(
+        onTap: () => _showMemberReportDetail(report),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with title and badges
+              Row(
+                children: [
+                  Icon(Icons.report_problem, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      subject,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: priorityColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      priority.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: priorityColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      status.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Description
+              Text(
+                description,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Meta information
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                children: [
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        memberName,
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                  if (membershipId.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.badge, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(
+                          membershipId,
+                          style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.category, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        category.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' '),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.access_time, size: 14, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(
+                        timeago.format(createdAt),
+                        style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (images.isNotEmpty || hasResponse) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (images.isNotEmpty) ...[
+                      const Icon(Icons.image, size: 14, color: Colors.green),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${images.length} image(s)',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.green,
+                        ),
+                      ),
+                      if (hasResponse) const SizedBox(width: 16),
+                    ],
+                    if (hasResponse) ...[
+                      const Icon(Icons.reply, size: 14, color: Colors.blue),
+                      const SizedBox(width: 4),
+                      const Text(
+                        'Response sent',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ],
@@ -593,6 +923,287 @@ class _GrievancesTabState extends State<GrievancesTab> {
         ),
       ],
     );
+  }
+
+  void _showMemberReportDetail(Map<String, dynamic> report) {
+    final status = report['status'] ?? 'open';
+    final subject = report['subject'] ?? 'No Subject';
+    final description = report['description'] ?? '';
+    final memberInfo = report['memberId'] as Map<String, dynamic>?;
+    final memberName = memberInfo?['memberName'] ?? 'Unknown Member';
+    final membershipId = memberInfo?['membershipId'] ?? '';
+    final category = report['category'] ?? 'other';
+    final priority = report['priority'] ?? 'normal';
+    final createdAt = report['createdAt'] != null 
+        ? DateTime.parse(report['createdAt']) 
+        : DateTime.now();
+    final images = List<String>.from(report['images'] ?? []);
+    final adminResponse = report['adminResponse'] as Map<String, dynamic>?;
+    final reportId = report['_id'] ?? '';
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700, maxHeight: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                color: _getStatusColor(status).withValues(alpha: 0.1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.report_problem, color: Colors.orange, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            subject,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('By $memberName'),
+                        if (membershipId.isNotEmpty) ...[
+                          Text(' • '),
+                          Text('ID: $membershipId'),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      timeago.format(createdAt),
+                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Details
+                      Row(
+                        children: [
+                          _buildDetailBadge('Status', status, _getStatusColor(status)),
+                          const SizedBox(width: 12),
+                          _buildDetailBadge('Priority', priority, _getPriorityColor(priority)),
+                          const SizedBox(width: 12),
+                          _buildDetailBadge('Category', category.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' '), Colors.blue),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Description:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(description),
+                      // Images
+                      if (images.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Attached Images:',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 120,
+                          child: ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            itemCount: images.length,
+                            itemBuilder: (context, index) {
+                              return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(
+                                    images[index],
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stack) => Container(
+                                      width: 120,
+                                      height: 120,
+                                      color: Colors.grey[300],
+                                      child: const Icon(Icons.error),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      // Admin Response
+                      const Text(
+                        'Admin Response:',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      if (adminResponse != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.admin_panel_settings, size: 16, color: Colors.blue),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Admin Response',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    adminResponse['respondedAt'] != null
+                                        ? timeago.format(DateTime.parse(adminResponse['respondedAt']))
+                                        : '',
+                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(adminResponse['message'] ?? ''),
+                            ],
+                          ),
+                        ),
+                      ] else ...[
+                        _buildRespondField(reportId),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              // Actions
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainer,
+                  border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButton<String>(
+                        value: status,
+                        isExpanded: true,
+                        items: const [
+                          DropdownMenuItem(value: 'open', child: Text('Open')),
+                          DropdownMenuItem(value: 'acknowledged', child: Text('Acknowledged')),
+                          DropdownMenuItem(value: 'in-progress', child: Text('In Progress')),
+                          DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
+                          DropdownMenuItem(value: 'closed', child: Text('Closed')),
+                        ],
+                        onChanged: (newStatus) {
+                          if (newStatus != null && reportId.isNotEmpty) {
+                            _updateReportStatus(reportId, newStatus);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRespondField(String reportId) {
+    final TextEditingController controller = TextEditingController();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            hintText: 'Type your response to the member...',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.send),
+          label: const Text('Send Response'),
+          onPressed: () async {
+            if (controller.text.trim().isNotEmpty && reportId.isNotEmpty) {
+              try {
+                await widget.supportService.respondToMemberProblem(
+                  reportId,
+                  controller.text.trim(),
+                  status: 'acknowledged',
+                );
+                controller.clear();
+                await _loadMemberReports();
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Response sent successfully')),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to send response: $e')),
+                  );
+                }
+              }
+            }
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _updateReportStatus(String reportId, String newStatus) async {
+    try {
+      await widget.supportService.updateProblemReportStatus(reportId, newStatus);
+      await _loadMemberReports();
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Status updated successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update status: $e')),
+        );
+      }
+    }
   }
 
   void _showRaiseGrievanceDialog() {

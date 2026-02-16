@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const gymadminAuth = require('../middleware/gymadminAuth');
+const upload = require('../middleware/upload');
 const {
   submitMemberProblemReport,
   getMemberProblemReports,
@@ -15,7 +16,7 @@ const {
 console.log('📋 Member Problem Report Routes loading...');
 
 // User routes (requires authentication)
-router.post('/submit', authMiddleware, submitMemberProblemReport);
+router.post('/submit', authMiddleware, upload.array('images', 5), submitMemberProblemReport);
 router.get('/my-reports/:gymId', authMiddleware, getMemberProblemReports);
 router.get('/:reportId', authMiddleware, getProblemReportById);
 

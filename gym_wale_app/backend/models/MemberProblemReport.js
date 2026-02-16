@@ -55,6 +55,9 @@ const memberProblemReportSchema = new mongoose.Schema({
     required: true,
     maxlength: 2000
   },
+  images: [{
+    type: String, // Cloudinary URLs
+  }],
   priority: {
     type: String,
     enum: ['low', 'normal', 'high', 'urgent'],

@@ -10,12 +10,16 @@ exports.submitMemberProblemReport = async (req, res) => {
   try {
     const { gymId, category, subject, description, priority } = req.body;
     const userId = req.user._id;
+    
+    // Get uploaded image URLs from Cloudinary
+    const images = req.files ? req.files.map(file => file.path) : [];
 
     console.log('📝 Member Problem Report Submission:', {
       userId,
       gymId,
       category,
-      subject
+      subject,
+      imagesCount: images.length
     });
 
     // Verify the user has an active membership at this gym
@@ -50,7 +54,8 @@ exports.submitMemberProblemReport = async (req, res) => {
       category,
       subject,
       description,
-      priority: priority || 'normal'
+      priority: priority || 'normal',
+      images
     });
 
     await problemReport.save();
@@ -70,7 +75,9 @@ exports.submitMemberProblemReport = async (req, res) => {
           memberId: activeMember._id,
           membershipId: activeMember.membershipId,
           category,
-          subject
+          subject,
+          hasImages: images.length > 0,
+          imageCount: images.length
         }
       });
 
@@ -90,6 +97,7 @@ exports.submitMemberProblemReport = async (req, res) => {
         category,
         subject,
         status: problemReport.status,
+        images,
         createdAt: problemReport.createdAt
       }
     });

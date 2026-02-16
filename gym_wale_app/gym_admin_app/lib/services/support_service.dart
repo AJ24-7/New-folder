@@ -362,4 +362,62 @@ class SupportService {
       ),
     );
   }
+
+  // ========== MEMBER PROBLEM REPORTS ==========
+
+  /// Get all problem reports for the gym
+  /// GET /api/member-problems/gym/all
+  Future<List<Map<String, dynamic>>> getMemberProblemReports({
+    String? status,
+    String? category,
+    String? priority,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{};
+      if (status != null) queryParams['status'] = status;
+      if (category != null) queryParams['category'] = category;
+      if (priority != null) queryParams['priority'] = priority;
+
+      final response = await _dio.get(
+        '/member-problems/gym/all',
+        queryParameters: queryParams,
+      );
+      
+      if (response.data['success'] == true) {
+        return List<Map<String, dynamic>>.from(response.data['reports'] ?? []);
+      }
+      return [];
+    } on DioException catch (e) {
+      print('Error fetching member problem reports: ${e.message}');
+      throw Exception('Failed to load problem reports: ${e.message}');
+    }
+  }
+
+  /// Respond to a member problem report
+  /// POST /api/member-problems/:reportId/respond
+  Future<void> respondToMemberProblem(String reportId, String message, {String? status}) async {
+    try {
+      await _dio.post('/member-problems/$reportId/respond', data: {
+        'message': message,
+        if (status != null) 'status': status,
+      });
+    } on DioException catch (e) {
+      print('Error responding to problem report: ${e.message}');
+      throw Exception('Failed to send response: ${e.message}');
+    }
+  }
+
+  /// Update problem report status
+  /// PATCH /api/member-problems/:reportId/status
+  Future<void> updateProblemReportStatus(String reportId, String status, {String? resolutionNotes}) async {
+    try {
+      await _dio.patch('/member-problems/$reportId/status', data: {
+        'status': status,
+        if (resolutionNotes != null) 'resolutionNotes': resolutionNotes,
+      });
+    } on DioException catch (e) {
+      print('Error updating problem report status: ${e.message}');
+      throw Exception('Failed to update status: ${e.message}');
+    }
+  }
 }
