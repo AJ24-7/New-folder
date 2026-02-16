@@ -1271,7 +1271,7 @@ exports.freezeMembership = async (req, res) => {
     const member = await Member.findOne({
       _id: membershipId,
       email: userEmail
-    });
+    }).populate('gym');
 
     if (!member) {
       return res.status(404).json({
@@ -1280,10 +1280,35 @@ exports.freezeMembership = async (req, res) => {
       });
     }
 
+    // Check if gym allows membership freezing
+    if (member.gym && member.gym.allowMembershipFreezing === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Membership freezing is not allowed by your gym'
+      });
+    }
+
+    // Validate membershipValidUntil date
+    if (!member.membershipValidUntil) {
+      return res.status(400).json({
+        success: false,
+        message: 'Membership validity date is not set'
+      });
+    }
+
     // Check if membership is valid
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const validUntil = new Date(member.membershipValidUntil);
+    
+    // Check if date is valid
+    if (isNaN(validUntil.getTime())) {
+      console.error('Invalid membership valid until date:', member.membershipValidUntil);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid membership validity date format'
+      });
+    }
     
     if (validUntil < today) {
       return res.status(400).json({

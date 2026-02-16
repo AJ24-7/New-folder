@@ -51,6 +51,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
     super.dispose();
   }
 
+  /// Helper to extract consistent gym ID
+  String? _extractGymId(dynamic membership) {
+    if (membership == null) return null;
+    final gym = membership['gym'];
+    if (gym == null) return null;
+    return gym['_id'] ?? gym['id'];
+  }
+
   Future<void> _loadAllSubscriptions() async {
     setState(() => _isLoading = true);
 
@@ -61,14 +69,24 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
       // Load gym settings for each membership
       final Map<String, bool> gymSettings = {};
       for (final membership in memberships) {
-        final gymId = membership['gym']?['_id'] ?? membership['gym']?['id'];
+        final gymId = _extractGymId(membership);
         if (gymId != null && !gymSettings.containsKey(gymId)) {
           try {
             final settingsResult = await ApiService.getGymSettings(gymId);
-            gymSettings[gymId] = settingsResult['settings']?['allowMembershipFreezing'] ?? true;
+            print('Settings result for gym $gymId: $settingsResult');
+            
+            if (settingsResult['success'] == true && settingsResult['settings'] != null) {
+              final allowFreezing = settingsResult['settings']['allowMembershipFreezing'];
+              gymSettings[gymId] = allowFreezing ?? false; // Default to false if not specified
+              print('Gym $gymId allows freezing: ${gymSettings[gymId]}');
+            } else {
+              // If settings couldn't be loaded, default to false for safety
+              gymSettings[gymId] = false;
+              print('Failed to load settings for gym $gymId, defaulting to false');
+            }
           } catch (e) {
             print('Error loading gym settings for $gymId: $e');
-            gymSettings[gymId] = true; // Default to allowing freeze
+            gymSettings[gymId] = false; // Default to NOT allowing freeze for safety
           }
         }
       }
@@ -1236,9 +1254,37 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
             
             // Attendance Widget - Show for gym memberships
             AttendanceWidget(
-              gymId: membership['gym']?['_id'] ?? membership['gym']?['id'] ?? '',
+              gymId: _extractGymId(membership) ?? '',
             ),
             const SizedBox(height: 12),
+            
+            // Show info when freeze is disabled by gym
+            if (_gymFreezeSettings[_extractGymId(membership)] == false && !currentlyFrozen) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline, size: 18, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Membership freezing is currently not available at this gym',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[700],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             
             Row(
               children: [
@@ -1255,7 +1301,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                   ),
                 ),
                 // Check if gym allows membership freezing
-                if (_gymFreezeSettings[membership['gym']?['_id'] ?? membership['gym']?['id']] ?? true) ...[
+                if (_gymFreezeSettings[_extractGymId(membership)] == true) ...[
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton.icon(

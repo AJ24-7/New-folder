@@ -13,6 +13,7 @@ class Gym {
   final String? logoUrl;
   final List<String> images;
   final List<String> amenities;
+  final List<String> activities;
   final String? openingTime;
   final String? closingTime;
   final double rating;
@@ -36,6 +37,7 @@ class Gym {
     this.logoUrl,
     this.images = const [],
     this.amenities = const [],
+    this.activities = const [],
     this.openingTime,
     this.closingTime,
     this.rating = 0.0,
@@ -155,6 +157,7 @@ class Gym {
       logoUrl: json['logoUrl']?.toString(),
       images: _safeParseImages(json),
       amenities: _safeParseList(json['amenities']),
+      activities: _safeParseActivities(json['activities']),
       openingTime: json['openingTime']?.toString(),
       closingTime: json['closingTime']?.toString(),
       rating: safeParseDouble(json['rating']),
@@ -234,6 +237,34 @@ class Gym {
     return [];
   }
   
+  static List<String> _safeParseActivities(dynamic value) {
+    try {
+      if (value == null) return [];
+      if (value is List) {
+        final result = <String>[];
+        for (var item in value) {
+          try {
+            if (item is Map && item['name'] != null) {
+              // Extract activity name from object
+              final name = item['name'].toString();
+              if (name.isNotEmpty) result.add(name);
+            } else if (item is String && item.isNotEmpty) {
+              // Direct string activity name
+              result.add(item);
+            }
+          } catch (e) {
+            print('Error parsing activity item: $e');
+            continue;
+          }
+        }
+        return result;
+      }
+    } catch (e) {
+      print('Error parsing activities: $e');
+    }
+    return [];
+  }
+  
   static DateTime _safeParseDatetime(dynamic value) {
     if (value == null) return DateTime.now();
     if (value is DateTime) return value;
@@ -262,6 +293,7 @@ class Gym {
       'email': email,
       'images': images,
       'amenities': amenities,
+      'activities': activities,
       'openingTime': openingTime,
       'closingTime': closingTime,
       'rating': rating,
@@ -286,6 +318,7 @@ class Gym {
     String? email,
     List<String>? images,
     List<String>? amenities,
+    List<String>? activities,
     String? openingTime,
     String? closingTime,
     double? rating,
@@ -308,6 +341,7 @@ class Gym {
       email: email ?? this.email,
       images: images ?? this.images,
       amenities: amenities ?? this.amenities,
+      activities: activities ?? this.activities,
       openingTime: openingTime ?? this.openingTime,
       closingTime: closingTime ?? this.closingTime,
       rating: rating ?? this.rating,

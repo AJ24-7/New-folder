@@ -31,7 +31,7 @@ class GymSettingsService {
   /// Get gym settings
   Future<Map<String, dynamic>> getGymSettings() async {
     try {
-      final response = await _dio.get('/api/gym/settings');
+      final response = await _dio.get('/api/gyms/settings');
       
       if (response.statusCode == 200) {
         return {
@@ -56,7 +56,7 @@ class GymSettingsService {
         data['allowMembershipFreezing'] = allowMembershipFreezing;
       }
 
-      final response = await _dio.put('/api/gym/settings', data: data);
+      final response = await _dio.put('/api/gyms/settings', data: data);
       
       if (response.statusCode == 200) {
         return {

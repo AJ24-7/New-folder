@@ -126,9 +126,15 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         if (gymDataRaw['activities'] != null && gymDataRaw['activities'] is List) {
           try {
             activities = (gymDataRaw['activities'] as List)
-                .map((a) => Activity.fromJson(a as Map<String, dynamic>))
+                .map((a) {
+                  print('DEBUG: Parsing activity item: $a');
+                  return Activity.fromJson(a as Map<String, dynamic>);
+                })
                 .toList();
             print('DEBUG: Parsed ${activities.length} activities');
+            activities.forEach((activity) {
+              print('DEBUG: Activity - Name: ${activity.name}, Icon: ${activity.icon}, Desc: ${activity.description}');
+            });
           } catch (e) {
             print('Error parsing activities: $e');
           }
@@ -674,24 +680,28 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         
-        // Activities section
+        // Activities section - always show header with better empty state
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Icon(
+              Icons.fitness_center,
+              color: AppTheme.primaryColor,
+              size: 24,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Activities & Classes',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        
+        // Show activities or empty state
         if (_activities.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Icon(
-                Icons.fitness_center,
-                color: AppTheme.primaryColor,
-                size: 24,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Activities & Classes',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
           Text(
             'Tap any activity to learn more',
             style: TextStyle(
@@ -700,25 +710,57 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          ActivityGrid(activities: _activities),
-        ],
-        
-        if (_gym!.amenities.isNotEmpty) ...[
-          const SizedBox(height: 24),
-          Text(
-            'Amenities',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: _gym!.amenities.map((amenity) {
-              return Chip(
-                label: Text(amenity),
-                backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          // Use grid for better visual presentation
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  childAspectRatio: 1.0,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _activities.length,
+                itemBuilder: (context, index) {
+                  final activity = _activities[index];
+                  print('DEBUG: Rendering activity: ${activity.name}, icon: ${activity.icon}');
+                  return ActivityCard(activity: activity);
+                },
               );
-            }).toList(),
+            },
+          ),
+        ] else ...[
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Colors.grey.withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: Colors.grey[600],
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Activity information not available for this gym yet.',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[700],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ],

@@ -154,7 +154,18 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             gym.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             (gym.city?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false);
         
-        return matchesPrice && matchesSearch;
+        // Activities filter - check if gym has any of the selected activities
+        bool matchesActivities = true;
+        if (_selectedActivities.isNotEmpty) {
+          // Gym must have at least one of the selected activities
+          matchesActivities = _selectedActivities.any((selectedActivity) => 
+            gym.activities.any((gymActivity) => 
+              gymActivity.toLowerCase() == selectedActivity.toLowerCase()
+            )
+          );
+        }
+        
+        return matchesPrice && matchesSearch && matchesActivities;
       }).toList();
       
       // Apply sort

@@ -402,7 +402,8 @@ router.get('/:id', async (req, res) => {
       closingTime: gym.closingTime,
       rating: Math.round(avgRating * 10) / 10,
       reviewCount: reviews.length,
-      amenities: (gym.activities || []).map(a => a.name),
+      activities: gym.activities || [], // Return full activity objects with name, icon, description
+      amenities: [], // Amenities field kept empty for future use
       equipment: gym.equipment || [],
       membershipPlans: gym.membershipPlans || [],
       createdAt: gym.createdAt

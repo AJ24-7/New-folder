@@ -882,11 +882,11 @@ class ApiService {
   static Future<Map<String, dynamic>> getGymSettings(String gymId) async {
     try {
       final url = Uri.parse('${ApiConfig.baseUrl}/gym/$gymId/settings');
-      print('Getting gym settings: $url');
+      print('Getting gym settings for gymId: $gymId, URL: $url');
       final response = await http.get(url).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
-      print('Gym settings response: $data');
+      print('Gym settings response for $gymId: $data');
 
       if (response.statusCode == 200) {
         return {
@@ -894,10 +894,11 @@ class ApiService {
           'settings': data['settings'],
         };
       } else {
+        print('Failed to get gym settings: ${data['message']}');
         return {
           'success': false,
           'message': data['message'] ?? 'Failed to get gym settings',
-          'settings': {'allowMembershipFreezing': true}, // Default value
+          'settings': null, // Don't provide default on error
         };
       }
     } catch (e) {
@@ -905,7 +906,7 @@ class ApiService {
       return {
         'success': false,
         'message': 'Connection error: ${e.toString()}',
-        'settings': {'allowMembershipFreezing': true}, // Default value on error
+        'settings': null, // Don't provide default on error
       };
     }
   }

@@ -3,41 +3,71 @@ import '../config/app_theme.dart';
 import '../models/activity.dart';
 
 /// Helper method to map FontAwesome icon classes to Flutter Icons
+/// Comprehensive mapping to match dashboard implementation
 IconData mapFontAwesomeToFlutter(String fontAwesomeIcon) {
+  // Remove 'fa-' prefix if present (normalize input)
+  final cleanName = fontAwesomeIcon.toLowerCase().startsWith('fa-') 
+      ? fontAwesomeIcon.toLowerCase().substring(3) 
+      : fontAwesomeIcon.toLowerCase();
+  
   final iconMap = {
-    'fa-dumbbell': Icons.fitness_center,
-    'fa-running': Icons.directions_run,
-    'fa-swimmer': Icons.pool,
-    'fa-bicycle': Icons.directions_bike,
-    'fa-heart': Icons.favorite,
-    'fa-yoga': Icons.self_improvement,
-    'fa-weight': Icons.monitor_weight,
-    'fa-boxing': Icons.sports_mma,
-    'fa-tennis': Icons.sports_tennis,
-    'fa-basketball': Icons.sports_basketball,
-    'fa-volleyball': Icons.sports_volleyball,
-    'fa-football': Icons.sports_football,
-    'fa-baseball': Icons.sports_baseball,
-    'fa-golf': Icons.golf_course,
-    'fa-skating': Icons.downhill_skiing,
-    'fa-hiking': Icons.hiking,
-    'fa-martial-arts': Icons.sports_martial_arts,
-    'fa-gym': Icons.fitness_center,
-    'fa-crossfit': Icons.accessibility_new,
-    'fa-cardio': Icons.monitor_heart,
-    'fa-strength': Icons.sentiment_very_satisfied,
-    'fa-aerobics': Icons.accessibility,
-    'fa-dance': Icons.music_note,
-    'fa-pilates': Icons.self_improvement,
-    'fa-meditation': Icons.spa,
-    'fa-stretching': Icons.airline_seat_recline_extra,
-    'fa-training': Icons.model_training,
-    'fa-zumba': Icons.music_note,
-    'fa-spinning': Icons.pedal_bike,
-    'fa-hiit': Icons.bolt,
+    // Core fitness activities
+    'dumbbell': Icons.fitness_center,
+    'weight-hanging': Icons.monitor_weight,
+    'person-praying': Icons.self_improvement,
+    'music': Icons.music_note,
+    'heartbeat': Icons.favorite,
+    'heartpulse': Icons.monitor_heart,
+    'child': Icons.child_care,
+    'bolt': Icons.bolt,
+    
+    // Sports & Activities
+    'running': Icons.directions_run,
+    'person-running': Icons.directions_run,
+    'swimmer': Icons.pool,
+    'person-swimming': Icons.pool,
+    'bicycle': Icons.directions_bike,
+    'person-biking': Icons.directions_bike,
+    'hand-fist': Icons.sports_mma,
+    'hand-rock': Icons.sports_kabaddi,
+    'hand-back-fist': Icons.sports_kabaddi,
+    'boxing': Icons.sports_mma,
+    'boxing-glove': Icons.sports_mma,
+    'user-tie': Icons.person,
+    'shoe-prints': Icons.directions_walk,
+    'arrows-up-down': Icons.sync_alt,
+    
+    // Traditional mappings
+    'heart': Icons.favorite,
+    'yoga': Icons.self_improvement,
+    'weight': Icons.monitor_weight,
+    'tennis': Icons.sports_tennis,
+    'basketball': Icons.sports_basketball,
+    'volleyball': Icons.sports_volleyball,
+    'football': Icons.sports_football,
+    'baseball': Icons.sports_baseball,
+    'golf': Icons.golf_course,
+    'skating': Icons.downhill_skiing,
+    'hiking': Icons.hiking,
+    'martial-arts': Icons.sports_martial_arts,
+    'gym': Icons.fitness_center,
+    'crossfit': Icons.accessibility_new,
+    'cardio': Icons.monitor_heart,
+    'strength': Icons.fitness_center,
+    'aerobics': Icons.accessibility,
+    'dance': Icons.music_note,
+    'pilates': Icons.self_improvement,
+    'meditation': Icons.spa,
+    'stretching': Icons.airline_seat_recline_extra,
+    'training': Icons.model_training,
+    'zumba': Icons.music_note,
+    'spinning': Icons.pedal_bike,
+    'hiit': Icons.bolt,
+    'fist-raised': Icons.sports_martial_arts,
+    'spa': Icons.spa,
   };
   
-  return iconMap[fontAwesomeIcon.toLowerCase()] ?? Icons.fitness_center;
+  return iconMap[cleanName] ?? Icons.fitness_center;
 }
 
 /// Enhanced Activity Card Widget with description
