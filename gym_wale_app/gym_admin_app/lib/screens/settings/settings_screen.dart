@@ -9,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/session_timer_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
+import '../../services/gym_settings_service.dart';
 import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/session_warning_dialog.dart';
@@ -30,9 +31,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _attendanceSettingsKey = GlobalKey();
   final ApiService _apiService = ApiService();
+  final GymSettingsService _gymSettingsService = GymSettingsService();
   
   AttendanceSettings? _attendanceSettings;
   bool _isLoadingSettings = true;
+  bool _allowMembershipFreezing = true;
+  bool _isLoadingGymSettings = true;
 
   @override
   void initState() {
@@ -49,6 +53,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       
       // Load attendance settings
       _loadAttendanceSettings();
+      _loadGymSettings();
       
       // Handle navigation arguments to scroll to specific section
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
@@ -75,6 +80,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isLoadingSettings = false;
         });
       }
+    }
+  }
+  
+  Future<void> _loadGymSettings() async {
+    try {
+      final response = await _gymSettingsService.getGymSettings();
+      if (mounted && response['success'] == true) {
+        final settings = response['settings'] as Map<String, dynamic>?;
+        setState(() {
+          _allowMembershipFreezing = settings?['allowMembershipFreezing'] ?? true;
+          _isLoadingGymSettings = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading gym settings: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingGymSettings = false;
+        });
+      }
+    }
+  }
+  
+  Future<void> _updateMembershipFreezeSetting(bool value) async {
+    try {
+      final response = await _gymSettingsService.updateGymSettings(
+        allowMembershipFreezing: value,
+      );
+      
+      if (mounted && response['success'] == true) {
+        setState(() {
+          _allowMembershipFreezing = value;
+        });
+        _showSnackBar(context, response['message'] ?? 'Settings updated successfully');
+      }
+    } catch (e) {
+      _showSnackBar(context, 'Failed to update settings: $e');
     }
   }
   
@@ -419,6 +461,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 // Export data
                               },
                             ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Membership Settings Section
+                        _buildSectionCard(
+                          context,
+                          title: 'Membership Settings',
+                          icon: Icons.card_membership,
+                          children: [
+                            if (_isLoadingGymSettings)
+                              const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            else
+                              _buildSettingTile(
+                                context,
+                                title: 'Allow Membership Freezing',
+                                subtitle: 'Let members freeze their memberships',
+                                leading: Icon(
+                                  Icons.pause_circle_outline,
+                                  color: Theme.of(context).colorScheme.primary,
+                                ),
+                                trailing: Switch(
+                                  value: _allowMembershipFreezing,
+                                  onChanged: (value) {
+                                    _updateMembershipFreezeSetting(value);
+                                  },
+                                ),
+                              ),
                           ],
                         ),
 

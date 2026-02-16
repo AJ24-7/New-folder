@@ -1338,6 +1338,35 @@ exports.freezeMembership = async (req, res) => {
 
     await member.save();
 
+    // Create notification for gym admin about the freeze
+    try {
+      const Notification = require('../models/Notification');
+      
+      const notification = new Notification({
+        title: 'Membership Freeze Request',
+        message: `${member.memberName} has frozen their membership for ${freezeDays} days${reason ? `. Reason: ${reason}` : ''}`,
+        type: 'membership-freeze',
+        priority: 'normal',
+        icon: 'fa-pause-circle',
+        color: '#2196f3',
+        user: member.gym,
+        metadata: {
+          memberName: member.memberName,
+          membershipId: member.membershipId,
+          freezeDays,
+          reason: reason || 'User requested freeze',
+          freezeStartDate: freezeStartDate.toISOString(),
+          freezeEndDate: freezeEndDate.toISOString(),
+          memberId: member._id
+        }
+      });
+      await notification.save();
+      console.log('✅ Freeze notification created for gym admin');
+    } catch (notifError) {
+      console.error('Error creating freeze notification:', notifError);
+      // Don't block freeze if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Membership frozen successfully',

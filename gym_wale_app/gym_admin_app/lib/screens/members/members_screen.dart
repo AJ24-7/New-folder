@@ -670,35 +670,68 @@ class _MembersScreenState extends State<MembersScreen> {
       elevation: 2,
       child: InkWell(
         onTap: () => _showMemberDetails(member),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(child: _buildProfileImage(member)),
-              const SizedBox(height: 8),
-              Text(
-                member.memberName,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: _buildProfileImage(member)),
+                  const SizedBox(height: 8),
+                  Text(
+                    member.memberName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    member.membershipId ?? 'N/A',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  _buildValidUntilCell(member),
+                  const SizedBox(height: 4),
+                  Text(
+                    _currencyFormat.format(member.paymentAmount),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.successColor,
+                    ),
+                  ),
+                ],
               ),
-              Text(
-                member.membershipId ?? 'N/A',
-                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 12),
-              ),
-              const Spacer(),
-              _buildValidUntilCell(member),
-              const SizedBox(height: 4),
-              Text(
-                _currencyFormat.format(member.paymentAmount),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.successColor,
+            ),
+            // Frozen membership badge
+            if (member.currentlyFrozen)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade300),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.pause_circle, size: 14, color: Colors.blue.shade700),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Frozen',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -1207,6 +1240,129 @@ class _MemberDetailsSheet extends StatelessWidget {
               'Payment Status',
               'Pending - ${currencyFormat.format(member.pendingPaymentAmount)}',
             ),
+          
+          // Freeze Status Section
+          if (member.currentlyFrozen) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.shade300),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.pause_circle, color: Colors.blue.shade700),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Membership Frozen',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  if (member.freezeStartDate != null && member.freezeEndDate != null) ...[
+                    Text(
+                      'From: ${dateFormat.format(member.freezeStartDate!)}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    Text(
+                      'Until: ${dateFormat.format(member.freezeEndDate!)}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    Text(
+                      'Days: ${member.freezeEndDate!.difference(member.freezeStartDate!).inDays} days',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          
+          // Freeze History Section
+          if (member.freezeHistory.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'Freeze History (${member.freezeHistory.length})',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.primaryColor,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ...member.freezeHistory.map((freeze) => Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor,
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '${dateFormat.format(freeze.freezeStartDate)} - ${dateFormat.format(freeze.freezeEndDate)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${freeze.freezeDays} days',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (freeze.reason != null && freeze.reason!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Reason: ${freeze.reason}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Text(
+                    'Requested: ${dateFormat.format(freeze.requestedAt)}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).textTheme.bodySmall?.color,
+                    ),
+                  ),
+                ],
+              ),
+            )),
+          ],
+          
           const SizedBox(height: 24),
           Row(
             children: [

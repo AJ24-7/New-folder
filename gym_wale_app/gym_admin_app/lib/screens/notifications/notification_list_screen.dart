@@ -207,6 +207,10 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
     Color iconColor;
 
     switch (notification.type) {
+      case 'membership-freeze':
+        iconData = Icons.pause_circle;
+        iconColor = Colors.blue;
+        break;
       case 'chat-message':
       case 'chat':
         iconData = Icons.chat_bubble;
@@ -291,6 +295,38 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
             children: [
               Text(notification.message),
               const SizedBox(height: 16),
+              
+              // Show additional details for membership-freeze notifications
+              if (notification.type == 'membership-freeze' && notification.metadata != null) ...[
+                const Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Freeze Details',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildDetailRow('Member', notification.metadata!['memberName'] ?? 'N/A'),
+                _buildDetailRow('Membership ID', notification.metadata!['membershipId'] ?? 'N/A'),
+                _buildDetailRow('Freeze Days', '${notification.metadata!['freezeDays'] ?? 0} days'),
+                if (notification.metadata!['reason'] != null)
+                  _buildDetailRow('Reason', notification.metadata!['reason']),
+                if (notification.metadata!['freezeStartDate'] != null)
+                  _buildDetailRow(
+                    'Start Date',
+                    DateFormat('MMM d, y').format(DateTime.parse(notification.metadata!['freezeStartDate'])),
+                  ),
+                if (notification.metadata!['freezeEndDate'] != null)
+                  _buildDetailRow(
+                    'End Date',
+                    DateFormat('MMM d, y').format(DateTime.parse(notification.metadata!['freezeEndDate'])),
+                  ),
+                const SizedBox(height: 16),
+              ],
+              
               Text(
                 'Type: ${notification.type}',
                 style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -310,6 +346,34 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
         ],
       ),
