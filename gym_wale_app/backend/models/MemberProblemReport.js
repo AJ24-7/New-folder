@@ -5,7 +5,7 @@ const memberProblemReportSchema = new mongoose.Schema({
   reportId: {
     type: String,
     unique: true,
-    required: true
+    // Not required here as it's auto-generated in pre-save hook
   },
   memberId: {
     type: mongoose.Schema.Types.ObjectId,

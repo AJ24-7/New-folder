@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import '../services/api_service.dart';
 import '../config/app_theme.dart';
@@ -106,6 +108,50 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
 
   Future<void> _pickImage(ImageSource source) async {
     try {
+      // Request permissions on mobile platforms
+      if (!kIsWeb) {
+        PermissionStatus permission;
+        
+        if (source == ImageSource.camera) {
+          permission = await Permission.camera.request();
+        } else {
+          // For gallery, request photos permission
+          if (Platform.isIOS) {
+            permission = await Permission.photos.request();
+          } else {
+            // Android 13+ uses granular media permissions
+            if (await Permission.photos.isGranted) {
+              permission = PermissionStatus.granted;
+            } else {
+              permission = await Permission.photos.request();
+            }
+          }
+        }
+        
+        if (permission.isDenied || permission.isPermanentlyDenied) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  source == ImageSource.camera
+                      ? 'Camera permission is required to take photos'
+                      : 'Storage permission is required to access photos',
+                ),
+                backgroundColor: AppTheme.errorColor,
+                action: SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: () {
+                    openAppSettings();
+                  },
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+      
       final XFile? image = await _picker.pickImage(
         source: source,
         maxWidth: 1920,
@@ -458,12 +504,35 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(_selectedImages[index].path),
-                              width: 120,
-                              height: 120,
-                              fit: BoxFit.cover,
-                            ),
+                            child: kIsWeb
+                                ? Image.network(
+                                    _selectedImages[index].path,
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: 120,
+                                        height: 120,
+                                        color: Colors.grey[300],
+                                        child: const Icon(Icons.error),
+                                      );
+                                    },
+                                  )
+                                : Image.file(
+                                    File(_selectedImages[index].path),
+                                    width: 120,
+                                    height: 120,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        width: 120,
+                                        height: 120,
+                                        color: Colors.grey[300],
+                                        child: const Icon(Icons.error),
+                                      );
+                                    },
+                                  ),
                           ),
                           Positioned(
                             top: 4,
