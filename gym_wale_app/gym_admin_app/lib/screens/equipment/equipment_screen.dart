@@ -178,9 +178,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         );
         break;
       case 4: // Payments
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/payments');
         break;
       case 5: // Equipment
         // Already on equipment screen, do nothing

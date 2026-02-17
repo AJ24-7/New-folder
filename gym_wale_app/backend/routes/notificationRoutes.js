@@ -895,4 +895,8 @@ router.post('/send-to-super-admin', gymadminAuth, notificationController.sendToS
 router.post('/renewal-reminders', gymadminAuth, notificationController.sendRenewalReminders);
 router.post('/holiday-notice', gymadminAuth, notificationController.sendHolidayNotice);
 
+// Cleanup old notifications (keeps screen organized)
+// Supports query params: ?daysOld=10&dryRun=true
+router.delete('/cleanup-old', gymadminAuth, notificationController.cleanupOldNotifications);
+
 module.exports = router;

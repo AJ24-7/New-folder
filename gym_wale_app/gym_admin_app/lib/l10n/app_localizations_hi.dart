@@ -496,6 +496,51 @@ class AppLocalizationsHi extends AppLocalizations {
   String get selectSessionTimeout => 'सत्र समय समाप्ति चुनें';
 
   @override
+  String get paymentManagement => 'भुगतान प्रबंधन';
+
+  @override
+  String get addPayment => 'भुगतान जोड़ें';
+
+  @override
+  String get amountReceived => 'प्राप्त राशि';
+
+  @override
+  String get amountPaid => 'भुगतान की गई राशि';
+
+  @override
+  String get paymentTrends => 'भुगतान रुझान';
+
+  @override
+  String get dues => 'बकाया';
+
+  @override
+  String get recentPayments => 'हाल के भुगतान';
+
+  @override
+  String get paymentType => 'भुगतान प्रकार';
+
+  @override
+  String get paymentMethod => 'भुगतान विधि';
+
+  @override
+  String get amount => 'राशि';
+
+  @override
+  String get memberName => 'सदस्य का नाम';
+
+  @override
+  String get notes => 'नोट्स';
+
+  @override
+  String get paidOn => 'भुगतान तिथि';
+
+  @override
+  String get dueOn => 'बकाया तिथि';
+
+  @override
+  String get markAsPaid => 'भुगतान के रूप में चिह्नित करें';
+
+  @override
   String get totalEquipment => 'कुल उपकरण';
 
   @override

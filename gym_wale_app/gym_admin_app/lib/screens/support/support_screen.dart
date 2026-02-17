@@ -165,9 +165,7 @@ class _SupportScreenState extends State<SupportScreen>
         Navigator.pushReplacementNamed(context, '/attendance');
         break;
       case 4: // Payments
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/payments');
         break;
       case 5: // Equipment
         Navigator.pushReplacement(
@@ -485,11 +483,13 @@ class _SupportScreenState extends State<SupportScreen>
   Widget _buildGrievanceStatCard() {
     if (_stats == null) return const SizedBox.shrink();
     final l10n = AppLocalizations.of(context)!;
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
     
     return Card(
       elevation: 2,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isDesktop ? 12 : 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           gradient: LinearGradient(
@@ -510,14 +510,14 @@ class _SupportScreenState extends State<SupportScreen>
                 Icon(
                   Icons.report_problem,
                   color: AppTheme.errorColor,
-                  size: 24,
+                  size: isDesktop ? 20 : 24,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isDesktop ? 6 : 8),
                 Expanded(
                   child: Text(
                     l10n.grievances,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: isDesktop ? 13 : 14,
                       fontWeight: FontWeight.w500,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -526,16 +526,16 @@ class _SupportScreenState extends State<SupportScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isDesktop ? 4 : 8),
             Text(
               _stats!.grievances.total.toString(),
               style: TextStyle(
-                fontSize: 28,
+                fontSize: isDesktop ? 24 : 28,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.errorColor,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isDesktop ? 4 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -545,15 +545,15 @@ class _SupportScreenState extends State<SupportScreen>
                     children: [
                       Icon(
                         Icons.pending_actions,
-                        size: 14,
+                        size: isDesktop ? 12 : 14,
                         color: Colors.orange,
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: isDesktop ? 2 : 4),
                       Flexible(
                         child: Text(
                           '${_stats!.grievances.open}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isDesktop ? 11 : 12,
                             color: Colors.orange,
                             fontWeight: FontWeight.bold,
                           ),
@@ -563,22 +563,22 @@ class _SupportScreenState extends State<SupportScreen>
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isDesktop ? 4 : 8),
                 Flexible(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.check_circle,
-                        size: 14,
+                        size: isDesktop ? 12 : 14,
                         color: Colors.green,
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: isDesktop ? 2 : 4),
                       Flexible(
                         child: Text(
                           '${_stats!.grievances.closed}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isDesktop ? 11 : 12,
                             color: Colors.green,
                             fontWeight: FontWeight.bold,
                           ),
@@ -598,11 +598,13 @@ class _SupportScreenState extends State<SupportScreen>
 
   Widget _buildChatStatCard() {
     if (_stats == null) return const SizedBox.shrink();
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
     
     return Card(
       elevation: 2,
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(isDesktop ? 12 : 16),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(8),
           gradient: LinearGradient(
@@ -623,14 +625,14 @@ class _SupportScreenState extends State<SupportScreen>
                 Icon(
                   Icons.chat,
                   color: AppTheme.successColor,
-                  size: 24,
+                  size: isDesktop ? 20 : 24,
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isDesktop ? 6 : 8),
                 Expanded(
                   child: Text(
                     'Chats',
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: isDesktop ? 13 : 14,
                       fontWeight: FontWeight.w500,
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -639,16 +641,16 @@ class _SupportScreenState extends State<SupportScreen>
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isDesktop ? 4 : 8),
             Text(
               _stats!.communications.total.toString(),
               style: TextStyle(
-                fontSize: 28,
+                fontSize: isDesktop ? 24 : 28,
                 fontWeight: FontWeight.bold,
                 color: AppTheme.successColor,
               ),
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: isDesktop ? 4 : 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -658,15 +660,15 @@ class _SupportScreenState extends State<SupportScreen>
                     children: [
                       Icon(
                         Icons.mark_chat_unread,
-                        size: 14,
+                        size: isDesktop ? 12 : 14,
                         color: Colors.red,
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: isDesktop ? 2 : 4),
                       Flexible(
                         child: Text(
                           '${_stats!.communications.unread}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isDesktop ? 11 : 12,
                             color: Colors.red,
                             fontWeight: FontWeight.bold,
                           ),
@@ -676,22 +678,22 @@ class _SupportScreenState extends State<SupportScreen>
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: isDesktop ? 4 : 8),
                 Flexible(
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
                         Icons.reply,
-                        size: 14,
+                        size: isDesktop ? 12 : 14,
                         color: Colors.blue,
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: isDesktop ? 2 : 4),
                       Flexible(
                         child: Text(
                           '${_stats!.communications.replied}',
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: isDesktop ? 11 : 12,
                             color: Colors.blue,
                             fontWeight: FontWeight.bold,
                           ),

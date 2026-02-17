@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const Gym = require('../models/gym');
 const TrialBooking = require('../models/TrialBooking');
+const notificationController = require('../controllers/notificationController');
 
 class NotificationScheduler {
   constructor() {
@@ -49,6 +50,12 @@ class NotificationScheduler {
     // Auto-unfreeze memberships (run every hour)
     cron.schedule('0 * * * *', () => {
       this.autoUnfreezeMemberships();
+    });
+
+    // Auto cleanup old notifications (run every day at 2 AM)
+    // Removes notifications older than 10 days to keep the system organized
+    cron.schedule('0 2 * * *', () => {
+      this.cleanupOldNotifications();
     });
 
     // Run initial check after 5 minutes of server start
@@ -665,6 +672,24 @@ class NotificationScheduler {
       console.log(`✅ Auto-unfroze ${unfrozenCount} membership(s)`);
     } catch (error) {
       console.error('❌ Error in auto-unfreeze process:', error);
+    }
+  }
+
+  // Auto cleanup old notifications (older than 10 days)
+  async cleanupOldNotifications() {
+    try {
+      console.log('🧹 Starting automatic cleanup of old notifications...');
+      
+      // Call the auto cleanup function from notification controller
+      const result = await notificationController.autoCleanupOldNotifications(10);
+      
+      if (result.success) {
+        console.log(`✅ Auto-cleanup completed: ${result.totalDeleted} notifications removed`);
+      } else {
+        console.error('❌ Auto-cleanup failed:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Error during automatic notification cleanup:', error);
     }
   }
 

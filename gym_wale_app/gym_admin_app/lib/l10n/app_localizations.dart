@@ -1052,6 +1052,96 @@ abstract class AppLocalizations {
   /// **'Select Session Timeout'**
   String get selectSessionTimeout;
 
+  /// No description provided for @paymentManagement.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Management'**
+  String get paymentManagement;
+
+  /// No description provided for @addPayment.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Payment'**
+  String get addPayment;
+
+  /// No description provided for @amountReceived.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount Received'**
+  String get amountReceived;
+
+  /// No description provided for @amountPaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount Paid'**
+  String get amountPaid;
+
+  /// No description provided for @paymentTrends.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Trends'**
+  String get paymentTrends;
+
+  /// No description provided for @dues.
+  ///
+  /// In en, this message translates to:
+  /// **'Dues'**
+  String get dues;
+
+  /// No description provided for @recentPayments.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent Payments'**
+  String get recentPayments;
+
+  /// No description provided for @paymentType.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Type'**
+  String get paymentType;
+
+  /// No description provided for @paymentMethod.
+  ///
+  /// In en, this message translates to:
+  /// **'Payment Method'**
+  String get paymentMethod;
+
+  /// No description provided for @amount.
+  ///
+  /// In en, this message translates to:
+  /// **'Amount'**
+  String get amount;
+
+  /// No description provided for @memberName.
+  ///
+  /// In en, this message translates to:
+  /// **'Member Name'**
+  String get memberName;
+
+  /// No description provided for @notes.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get notes;
+
+  /// No description provided for @paidOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Paid On'**
+  String get paidOn;
+
+  /// No description provided for @dueOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Due On'**
+  String get dueOn;
+
+  /// No description provided for @markAsPaid.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark as Paid'**
+  String get markAsPaid;
+
   /// No description provided for @totalEquipment.
   ///
   /// In en, this message translates to:

@@ -117,9 +117,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         // Already on attendance
         break;
       case 4: // Payments
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/payments');
         break;
       case 5: // Equipment
         Navigator.pushReplacementNamed(context, '/equipment');

@@ -755,6 +755,160 @@ class NotificationController {
             });
         }
     }
+
+    /**
+     * Clean up old notifications (older than specified days)
+     * This helps keep the notifications screen organized and improves performance
+     */
+    async cleanupOldNotifications(req, res) {
+        try {
+            const { daysOld = 10, dryRun = false } = req.query;
+            const gymId = req.gym?.id;
+            const adminId = req.admin?.id;
+
+            // Calculate the cutoff date
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - parseInt(daysOld));
+
+            console.log(`🧹 Cleaning up notifications older than ${daysOld} days (before ${cutoffDate.toISOString()})...`);
+
+            let notificationStats = { deletedCount: 0 };
+            let gymNotificationStats = { deletedCount: 0 };
+
+            // Build filters
+            const dateFilter = {
+                $or: [
+                    { createdAt: { $lt: cutoffDate } },
+                    { timestamp: { $lt: cutoffDate } }
+                ]
+            };
+
+            if (dryRun === 'true') {
+                // Count what would be deleted without actually deleting
+                if (gymId) {
+                    notificationStats.deletedCount = await Notification.countDocuments({
+                        user: gymId,
+                        ...dateFilter
+                    });
+                    gymNotificationStats.deletedCount = await GymNotification.countDocuments({
+                        gymId: gymId,
+                        ...dateFilter
+                    });
+                } else if (adminId) {
+                    notificationStats.deletedCount = await Notification.countDocuments({
+                        user: adminId,
+                        ...dateFilter
+                    });
+                } else {
+                    // Super admin - count all old notifications
+                    notificationStats.deletedCount = await Notification.countDocuments(dateFilter);
+                    gymNotificationStats.deletedCount = await GymNotification.countDocuments(dateFilter);
+                }
+
+                console.log(`📊 Dry run: Would delete ${notificationStats.deletedCount + gymNotificationStats.deletedCount} notifications`);
+                
+                return res.json({
+                    success: true,
+                    message: 'Dry run completed',
+                    dryRun: true,
+                    stats: {
+                        notificationsToDelete: notificationStats.deletedCount,
+                        gymNotificationsToDelete: gymNotificationStats.deletedCount,
+                        totalToDelete: notificationStats.deletedCount + gymNotificationStats.deletedCount,
+                        cutoffDate: cutoffDate.toISOString(),
+                        daysOld: parseInt(daysOld)
+                    }
+                });
+            }
+
+            // Perform actual deletion
+            if (gymId) {
+                notificationStats = await Notification.deleteMany({
+                    user: gymId,
+                    ...dateFilter
+                });
+                gymNotificationStats = await GymNotification.deleteMany({
+                    gymId: gymId,
+                    ...dateFilter
+                });
+            } else if (adminId) {
+                notificationStats = await Notification.deleteMany({
+                    user: adminId,
+                    ...dateFilter
+                });
+            } else {
+                // Super admin - cleanup all old notifications system-wide
+                notificationStats = await Notification.deleteMany(dateFilter);
+                gymNotificationStats = await GymNotification.deleteMany(dateFilter);
+            }
+
+            const totalDeleted = notificationStats.deletedCount + gymNotificationStats.deletedCount;
+
+            console.log(`✅ Cleanup completed: Deleted ${totalDeleted} notifications`);
+
+            res.json({
+                success: true,
+                message: 'Old notifications cleaned up successfully',
+                stats: {
+                    notificationsDeleted: notificationStats.deletedCount,
+                    gymNotificationsDeleted: gymNotificationStats.deletedCount,
+                    totalDeleted,
+                    cutoffDate: cutoffDate.toISOString(),
+                    daysOld: parseInt(daysOld)
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Error cleaning up old notifications:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error cleaning up notifications',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Auto cleanup function (to be called by cron job)
+     * Deletes notifications older than 10 days for all gyms
+     */
+    async autoCleanupOldNotifications(daysOld = 10) {
+        try {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+
+            console.log(`🧹 [AUTO-CLEANUP] Removing notifications older than ${daysOld} days (before ${cutoffDate.toISOString()})...`);
+
+            const dateFilter = {
+                $or: [
+                    { createdAt: { $lt: cutoffDate } },
+                    { timestamp: { $lt: cutoffDate } }
+                ]
+            };
+
+            const notificationStats = await Notification.deleteMany(dateFilter);
+            const gymNotificationStats = await GymNotification.deleteMany(dateFilter);
+
+            const totalDeleted = notificationStats.deletedCount + gymNotificationStats.deletedCount;
+
+            console.log(`✅ [AUTO-CLEANUP] Deleted ${totalDeleted} old notifications (Notifications: ${notificationStats.deletedCount}, GymNotifications: ${gymNotificationStats.deletedCount})`);
+
+            return {
+                success: true,
+                notificationsDeleted: notificationStats.deletedCount,
+                gymNotificationsDeleted: gymNotificationStats.deletedCount,
+                totalDeleted,
+                cutoffDate: cutoffDate.toISOString()
+            };
+
+        } catch (error) {
+            console.error('❌ [AUTO-CLEANUP] Error cleaning up old notifications:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
 }
 
 module.exports = new NotificationController();

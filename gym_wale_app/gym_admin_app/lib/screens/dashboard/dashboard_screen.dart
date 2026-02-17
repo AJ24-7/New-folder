@@ -294,9 +294,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
         break;
       case 4: // Payments
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments screen coming soon')),
-        );
+        Navigator.pushReplacementNamed(context, '/payments');
         break;
       case 5: // Equipment
         // Navigate to Equipment screen with proper screen replacement

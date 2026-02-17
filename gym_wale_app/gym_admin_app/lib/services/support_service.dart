@@ -363,8 +363,13 @@ class SupportService {
     final totalGrievances = grievances.length + (memberReports?.length ?? 0);
 
     // Communications stats
-    final unreadChats = communications.where((c) => c.unreadCount > 0).length;
-    final repliedChats = communications.where((c) => c.repliedCount > 0).length;
+    // Sum up total unread messages and total admin replies across all conversations
+    int totalUnreadMessages = 0;
+    int totalAdminReplies = 0;
+    for (var comm in communications) {
+      totalUnreadMessages += comm.unreadCount;
+      totalAdminReplies += comm.repliedCount;
+    }
     final activeChats = communications.where((c) => c.status == 'active').length;
 
     return SupportStats(
@@ -389,8 +394,8 @@ class SupportService {
       ),
       communications: CommunicationStats(
         total: communications.length,
-        unread: unreadChats,
-        replied: repliedChats,
+        unread: totalUnreadMessages,
+        replied: totalAdminReplies,
         active: activeChats,
         responseTime: 2, // Mock average response time in hours
       ),

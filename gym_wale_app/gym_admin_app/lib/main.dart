@@ -13,6 +13,7 @@ import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/members/members_screen.dart';
 import 'screens/attendance/attendance_screen.dart';
+import 'screens/payments/payments_screen.dart';
 import 'screens/geofence/geofence_setup_screen.dart';
 import 'screens/equipment/equipment_screen.dart';
 import 'screens/settings/settings_screen.dart';
@@ -70,6 +71,8 @@ class MyApp extends StatelessWidget {
                   return MaterialPageRoute(builder: (_) => const MembersScreen());
                 case '/attendance':
                   return MaterialPageRoute(builder: (_) => const AttendanceScreen());
+                case '/payments':
+                  return MaterialPageRoute(builder: (_) => const PaymentsScreen());
                 case '/equipment':
                   return MaterialPageRoute(builder: (_) => const EquipmentScreen());
                 case '/geofence-setup':

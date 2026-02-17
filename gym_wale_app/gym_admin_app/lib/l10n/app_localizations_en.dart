@@ -494,6 +494,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectSessionTimeout => 'Select Session Timeout';
 
   @override
+  String get paymentManagement => 'Payment Management';
+
+  @override
+  String get addPayment => 'Add Payment';
+
+  @override
+  String get amountReceived => 'Amount Received';
+
+  @override
+  String get amountPaid => 'Amount Paid';
+
+  @override
+  String get paymentTrends => 'Payment Trends';
+
+  @override
+  String get dues => 'Dues';
+
+  @override
+  String get recentPayments => 'Recent Payments';
+
+  @override
+  String get paymentType => 'Payment Type';
+
+  @override
+  String get paymentMethod => 'Payment Method';
+
+  @override
+  String get amount => 'Amount';
+
+  @override
+  String get memberName => 'Member Name';
+
+  @override
+  String get notes => 'Notes';
+
+  @override
+  String get paidOn => 'Paid On';
+
+  @override
+  String get dueOn => 'Due On';
+
+  @override
+  String get markAsPaid => 'Mark as Paid';
+
+  @override
   String get totalEquipment => 'Total Equipment';
 
   @override
