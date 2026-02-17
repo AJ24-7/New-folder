@@ -612,6 +612,7 @@ class _MembersScreenState extends State<MembersScreen> {
         columns: const [
           DataColumn(label: Text('Profile')),
           DataColumn(label: Text('Name')),
+          DataColumn(label: Text('Status')),
           DataColumn(label: Text('Membership ID')),
           DataColumn(label: Text('Age')),
           DataColumn(label: Text('Gender')),
@@ -625,9 +626,16 @@ class _MembersScreenState extends State<MembersScreen> {
         ],
         rows: members.map((member) {
           return DataRow(
+              color: WidgetStateProperty.resolveWith<Color?>((Set<WidgetState> states) {
+                if (member.currentlyFrozen) {
+                  return Colors.yellow.shade50;
+                }
+                return null; // Use default color
+              }),
               cells: [
                 DataCell(_buildProfileImage(member)),
                 DataCell(Text(member.memberName)),
+                DataCell(_buildStatusBadge(member)),
                 DataCell(Text(member.membershipId ?? 'N/A')),
                 DataCell(Text(member.age.toString())),
                 DataCell(Text(member.gender)),
@@ -765,6 +773,59 @@ class _MembersScreenState extends State<MembersScreen> {
       child: Text(
         member.memberName[0].toUpperCase(),
         style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildStatusBadge(Member member) {
+    if (member.currentlyFrozen) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.orange.shade700, width: 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.ac_unit,
+              size: 14,
+              color: Colors.orange.shade900,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'Frozen',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.orange.shade900,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.check_circle,
+            size: 14,
+            color: AppTheme.successColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            'Active',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppTheme.successColor,
+            ),
+          ),
+        ],
       ),
     );
   }

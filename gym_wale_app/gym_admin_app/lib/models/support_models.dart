@@ -460,7 +460,7 @@ class SupportStats {
     return SupportStats(
       notifications: NotificationStats(total: 0, unread: 0, system: 0, priority: 0),
       reviews: ReviewStats(total: 0, average: 0.0, pending: 0, recent: 0),
-      grievances: GrievanceStats(total: 0, open: 0, resolved: 0, urgent: 0),
+      grievances: GrievanceStats(total: 0, open: 0, resolved: 0, closed: 0, urgent: 0),
       communications: CommunicationStats(total: 0, unread: 0, replied: 0, active: 0, responseTime: 0),
     );
   }
@@ -498,12 +498,14 @@ class GrievanceStats {
   final int total;
   final int open;
   final int resolved;
+  final int closed;
   final int urgent;
 
   GrievanceStats({
     required this.total,
     required this.open,
     required this.resolved,
+    required this.closed,
     required this.urgent,
   });
 }

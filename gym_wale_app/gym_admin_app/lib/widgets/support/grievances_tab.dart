@@ -61,6 +61,20 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
     }
   }
 
+  // Silent refresh without showing loading indicator
+  Future<void> _refreshMemberReportsSilently() async {
+    try {
+      final reports = await widget.supportService.getMemberProblemReports();
+      if (mounted) {
+        setState(() {
+          _memberReports = reports;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error refreshing member reports: $e');
+    }
+  }
+
   List<Grievance> get _filteredGrievances {
     if (_viewType == 'member-reports') return [];
     
@@ -243,83 +257,6 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                 padding: const EdgeInsets.all(16),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Search bar
-          TextField(
-            decoration: InputDecoration(
-              hintText: 'Search ${_viewType == 'member-reports' ? 'reports' : _viewType == 'grievances' ? 'grievances' : 'all issues'}...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              filled: true,
-              fillColor: Theme.of(context).colorScheme.surface,
-            ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-              });
-            },
-          ),
-          const SizedBox(height: 12),
-          // Filters
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _filterStatus,
-                  decoration: InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All Status')),
-                    DropdownMenuItem(value: 'open', child: Text('Open')),
-                    DropdownMenuItem(value: 'acknowledged', child: Text('Acknowledged')),
-                    DropdownMenuItem(value: 'in-progress', child: Text('In Progress')),
-                    DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
-                    DropdownMenuItem(value: 'closed', child: Text('Closed')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _filterStatus = value ?? 'all';
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _filterPriority,
-                  decoration: InputDecoration(
-                    labelText: 'Priority',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surface,
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'all', child: Text('All Priorities')),
-                    DropdownMenuItem(value: 'low', child: Text('Low')),
-                    DropdownMenuItem(value: 'medium', child: Text('Medium')),
-                    DropdownMenuItem(value: 'normal', child: Text('Normal')),
-                    DropdownMenuItem(value: 'high', child: Text('High')),
-                    DropdownMenuItem(value: 'urgent', child: Text('Urgent')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _filterPriority = value ?? 'all';
-                    });
-                  },
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -951,43 +888,48 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
             children: [
               // Header
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 color: _getStatusColor(status).withValues(alpha: 0.1),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Icon(Icons.report_problem, color: Colors.orange, size: 24),
-                        const SizedBox(width: 12),
+                        Icon(Icons.report_problem, color: Colors.orange, size: 20),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             subject,
                             style: const TextStyle(
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close),
+                          icon: const Icon(Icons.close, size: 20),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Row(
+                    Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
                       children: [
-                        Text('By $memberName'),
+                        Text('By $memberName', style: const TextStyle(fontSize: 13)),
                         if (membershipId.isNotEmpty) ...[
-                          Text(' • '),
-                          Text('ID: $membershipId'),
+                          const Text(' • ', style: TextStyle(fontSize: 13)),
+                          Text('ID: $membershipId', style: const TextStyle(fontSize: 13)),
                         ],
                       ],
                     ),
+                    const SizedBox(height: 4),
                     Text(
                       timeago.format(createdAt),
-                      style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                      style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -995,37 +937,37 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
               // Content
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Details
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
                         children: [
                           _buildDetailBadge('Status', status, _getStatusColor(status)),
-                          const SizedBox(width: 12),
                           _buildDetailBadge('Priority', priority, _getPriorityColor(priority)),
-                          const SizedBox(width: 12),
                           _buildDetailBadge('Category', category.split('-').map((w) => w[0].toUpperCase() + w.substring(1)).join(' '), Colors.blue),
                         ],
                       ),
                       const SizedBox(height: 16),
                       const Text(
                         'Description:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                       const SizedBox(height: 8),
-                      Text(description),
+                      Text(description, style: const TextStyle(fontSize: 13)),
                       // Images
                       if (images.isNotEmpty) ...[
                         const SizedBox(height: 16),
                         const Text(
                           'Attached Images:',
-                          style: TextStyle(fontWeight: FontWeight.bold),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                         ),
                         const SizedBox(height: 12),
                         SizedBox(
-                          height: 120,
+                          height: 100,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,
                             itemCount: images.length,
@@ -1036,14 +978,14 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                                   borderRadius: BorderRadius.circular(8),
                                   child: Image.network(
                                     images[index],
-                                    width: 120,
-                                    height: 120,
+                                    width: 100,
+                                    height: 100,
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stack) => Container(
-                                      width: 120,
-                                      height: 120,
+                                      width: 100,
+                                      height: 100,
                                       color: Colors.grey[300],
-                                      child: const Icon(Icons.error),
+                                      child: const Icon(Icons.error, size: 20),
                                     ),
                                   ),
                                 ),
@@ -1052,16 +994,16 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                           ),
                         ),
                       ],
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
                       // Admin Response
                       const Text(
                         'Admin Response:',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: 14,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       if (adminResponse != null) ...[
                         Container(
                           padding: const EdgeInsets.all(12),
@@ -1075,23 +1017,28 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.admin_panel_settings, size: 16, color: Colors.blue),
+                                  const Icon(Icons.admin_panel_settings, size: 14, color: Colors.blue),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    'Admin Response',
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  const Flexible(
+                                    child: Text(
+                                      'Admin Response',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
                                   ),
-                                  const Spacer(),
-                                  Text(
-                                    adminResponse['respondedAt'] != null
-                                        ? timeago.format(DateTime.parse(adminResponse['respondedAt']))
-                                        : '',
-                                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                  const SizedBox(width: 8),
+                                  Flexible(
+                                    child: Text(
+                                      adminResponse['respondedAt'] != null
+                                          ? timeago.format(DateTime.parse(adminResponse['respondedAt']))
+                                          : '',
+                                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                      textAlign: TextAlign.right,
+                                    ),
                                   ),
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Text(adminResponse['message'] ?? ''),
+                              Text(adminResponse['message'] ?? '', style: const TextStyle(fontSize: 13)),
                             ],
                           ),
                         ),
@@ -1104,32 +1051,31 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
               ),
               // Actions
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainer,
                   border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
                 ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: status,
-                        isExpanded: true,
-                        items: const [
-                          DropdownMenuItem(value: 'open', child: Text('Open')),
-                          DropdownMenuItem(value: 'acknowledged', child: Text('Acknowledged')),
-                          DropdownMenuItem(value: 'in-progress', child: Text('In Progress')),
-                          DropdownMenuItem(value: 'resolved', child: Text('Resolved')),
-                          DropdownMenuItem(value: 'closed', child: Text('Closed')),
-                        ],
-                        onChanged: (newStatus) {
-                          if (newStatus != null && reportId.isNotEmpty) {
-                            _updateReportStatus(reportId, newStatus);
-                          }
-                        },
-                      ),
-                    ),
+                child: DropdownButtonFormField<String>(
+                  value: status,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Update Status',
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'open', child: Text('Open', style: TextStyle(fontSize: 13))),
+                    DropdownMenuItem(value: 'acknowledged', child: Text('Acknowledged', style: TextStyle(fontSize: 13))),
+                    DropdownMenuItem(value: 'in-progress', child: Text('In Progress', style: TextStyle(fontSize: 13))),
+                    DropdownMenuItem(value: 'resolved', child: Text('Resolved', style: TextStyle(fontSize: 13))),
+                    DropdownMenuItem(value: 'closed', child: Text('Closed', style: TextStyle(fontSize: 13))),
                   ],
+                  onChanged: (newStatus) {
+                    if (newStatus != null && reportId.isNotEmpty) {
+                      _updateReportStatus(reportId, newStatus);
+                    }
+                  },
                 ),
               ),
             ],
@@ -1150,38 +1096,43 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
           decoration: const InputDecoration(
             hintText: 'Type your response to the member...',
             border: OutlineInputBorder(),
+            contentPadding: EdgeInsets.all(12),
           ),
+          style: const TextStyle(fontSize: 13),
           maxLines: 3,
         ),
         const SizedBox(height: 8),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.send),
-          label: const Text('Send Response'),
-          onPressed: () async {
-            if (controller.text.trim().isNotEmpty && reportId.isNotEmpty) {
-              try {
-                await widget.supportService.respondToMemberProblem(
-                  reportId,
-                  controller.text.trim(),
-                  status: 'acknowledged',
-                );
-                controller.clear();
-                await _loadMemberReports();
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Response sent successfully')),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.send, size: 18),
+            label: const Text('Send Response', style: TextStyle(fontSize: 13)),
+            onPressed: () async {
+              if (controller.text.trim().isNotEmpty && reportId.isNotEmpty) {
+                try {
+                  await widget.supportService.respondToMemberProblem(
+                    reportId,
+                    controller.text.trim(),
+                    status: 'acknowledged',
                   );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to send response: $e')),
-                  );
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Response sent successfully')),
+                    );
+                    // Refresh data silently in background
+                    _refreshMemberReportsSilently();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to send response: $e')),
+                    );
+                  }
                 }
               }
-            }
-          },
+            },
+          ),
         ),
       ],
     );
@@ -1190,12 +1141,13 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
   Future<void> _updateReportStatus(String reportId, String newStatus) async {
     try {
       await widget.supportService.updateProblemReportStatus(reportId, newStatus);
-      await _loadMemberReports();
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Status updated successfully')),
         );
+        // Refresh data silently in background
+        _refreshMemberReportsSilently();
       }
     } catch (e) {
       if (mounted) {

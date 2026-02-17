@@ -57,7 +57,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<GymActivity> _gymActivities = [];
   List<TrialBooking> _trialBookings = [];
   List<Equipment> _equipmentGallery = [];
-  bool _isEquipmentExpanded = false;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -1894,12 +1893,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   Widget _buildEquipmentGalleryCard(AppLocalizations l10n) {
-    final displayCount = _isEquipmentExpanded ? _equipmentGallery.length : 3;
-    final hasMore = _equipmentGallery.length > 3;
+    final size = MediaQuery.of(context).size;
+    final isTablet = size.width > 600 && size.width <= 900;
+    final isMobile = size.width <= 600;
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1951,56 +1951,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )
             else
-              Column(
-                children: [
-                  SizedBox(
-                    height: 220,
-                    child: ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: displayCount.clamp(0, _equipmentGallery.length),
-                      itemBuilder: (context, index) {
-                        if (index < _equipmentGallery.length) {
-                          return _buildEquipmentGalleryItem(_equipmentGallery[index]);
-                        }
-                        return const SizedBox();
-                      },
-                    ),
-                  ),
-                  
-                  if (hasMore && !_isEquipmentExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _isEquipmentExpanded = true;
-                          });
-                        },
-                        icon: const Icon(Icons.expand_more),
-                        label: Text('Show ${_equipmentGallery.length - 3} More'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ),
-                  
-                  if (_isEquipmentExpanded)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 16),
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          setState(() {
-                            _isEquipmentExpanded = false;
-                          });
-                        },
-                        icon: const Icon(Icons.expand_less),
-                        label: const Text('Show Less'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.primaryColor,
-                        ),
-                      ),
-                    ),
-                ],
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isMobile ? 2 : (isTablet ? 3 : 4),
+                  crossAxisSpacing: isMobile ? 8 : 12,
+                  mainAxisSpacing: isMobile ? 8 : 12,
+                  childAspectRatio: isMobile ? 0.85 : 1.2,
+                ),
+                itemCount: _equipmentGallery.length,
+                itemBuilder: (context, index) {
+                  return _buildEquipmentGalleryItem(_equipmentGallery[index]);
+                },
               ),
           ],
         ),
@@ -2015,154 +1978,146 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ? AppTheme.warningColor
             : AppTheme.errorColor;
 
-    return Container(
-      width: 280,
-      margin: const EdgeInsets.only(right: 16),
-      child: Card(
-        elevation: 2,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => Navigator.pushNamed(context, '/equipment'),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Equipment Image
-              Stack(
-                children: [
-                  equipment.photos.isNotEmpty
-                      ? Image.network(
-                          equipment.photos.first,
-                          width: double.infinity,
-                          height: 140,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              width: double.infinity,
-                              height: 140,
-                              color: Colors.grey[300],
-                              child: const Center(
-                                child: Icon(Icons.fitness_center, size: 48, color: Colors.grey),
-                              ),
-                            );
-                          },
-                        )
-                      : Container(
-                          width: double.infinity,
-                          height: 140,
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Icon(Icons.fitness_center, size: 48, color: Colors.grey),
-                          ),
-                        ),
-                  // Status Badge
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: statusColor,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        equipment.status.value.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // Photo Count Badge
-                  if (equipment.photos.length > 1)
-                    Positioned(
-                      top: 8,
-                      left: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.photo_library, size: 12, color: Colors.white),
-                            const SizedBox(width: 4),
-                            Text(
-                              '${equipment.photos.length}',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
-              ),
+    final statusText = equipment.status == EquipmentStatus.available
+        ? 'Available'
+        : equipment.status == EquipmentStatus.maintenance
+            ? 'Maintenance'
+            : 'Out of Service';
 
-              // Equipment Info
-              Padding(
-                padding: const EdgeInsets.all(12),
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.pushNamed(context, '/equipment'),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // Equipment Image
+            equipment.photos.isNotEmpty
+                ? Image.network(
+                    equipment.photos.first,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => Container(
+                      color: Colors.grey[300],
+                      child: const Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                    ),
+                  )
+                : Container(
+                    color: Colors.grey[300],
+                    child: const Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                  ),
+            // Overlay gradient and text at bottom
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.8),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       equipment.name,
                       style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                        fontSize: 12,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      equipment.category,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
                     Row(
                       children: [
-                        Icon(Icons.layers, size: 14, color: Colors.grey.shade600),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Qty: ${equipment.quantity}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
+                        Flexible(
+                          child: Text(
+                            equipment.category,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (equipment.brand != null) ...[
-                          const SizedBox(width: 8),
-                          const Text('•', style: TextStyle(color: Colors.grey)),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: Text(
-                              equipment.brand!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade700,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                        const Text(
+                          ' • ',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
                           ),
-                        ],
+                        ),
+                        Text(
+                          'Qty: ${equipment.quantity}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 10,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+            // Status badge at top right
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  statusText.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            // Photo count badge at top left
+            if (equipment.photos.length > 1)
+              Positioned(
+                top: 4,
+                left: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.photo_library, size: 10, color: Colors.white),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${equipment.photos.length}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );

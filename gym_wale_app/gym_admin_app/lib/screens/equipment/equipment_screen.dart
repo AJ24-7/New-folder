@@ -553,14 +553,18 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       return _buildEmptyState();
     }
 
+    final size = MediaQuery.of(context).size;
+    final isTablet = size.width > 600 && size.width <= 900;
+    final isMobile = size.width <= 600;
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: isDesktop ? 3 : (MediaQuery.of(context).size.width > 600 ? 2 : 1),
-        crossAxisSpacing: 16,
-        mainAxisSpacing: 16,
-        childAspectRatio: isDesktop ? 0.85 : 0.9,
+        crossAxisCount: isDesktop ? 4 : (isTablet ? 3 : 2),
+        crossAxisSpacing: isMobile ? 8 : (isTablet ? 12 : 16),
+        mainAxisSpacing: isMobile ? 8 : (isTablet ? 12 : 16),
+        childAspectRatio: isMobile ? 0.75 : (isTablet ? 0.85 : 0.9),
       ),
       itemCount: _filteredEquipment.length,
       itemBuilder: (context, index) {
@@ -570,131 +574,154 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   }
 
   Widget _buildEquipmentCard(Equipment equipment) {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final isTablet = size.width > 600 && size.width <= 900;
+
     final statusColor = equipment.status == EquipmentStatus.available
         ? AppTheme.successColor
         : equipment.status == EquipmentStatus.maintenance
             ? AppTheme.warningColor
             : AppTheme.errorColor;
 
+    final statusText = equipment.status == EquipmentStatus.available
+        ? 'AVAILABLE'
+        : equipment.status == EquipmentStatus.maintenance
+            ? 'MAINTENANCE'
+            : 'OUT OF SERVICE';
+
     return Card(
       elevation: 2,
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _showEquipmentDetails(equipment),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            // Image
-            Stack(
-              children: [
-                equipment.photos.isNotEmpty
-                    ? Image.network(
-                        equipment.photos.first,
-                        height: 160,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            _buildPlaceholderImage(),
-                      )
-                    : _buildPlaceholderImage(),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      equipment.status.displayName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+            // Equipment Image
+            equipment.photos.isNotEmpty
+                ? Image.network(
+                    equipment.photos.first,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => _buildPlaceholderImage(),
+                  )
+                : _buildPlaceholderImage(),
+
+            // Bottom gradient overlay with equipment info
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: EdgeInsets.all(isMobile ? 8 : 12),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: isMobile ? 0.85 : 0.9),
+                      Colors.black.withValues(alpha: 0.6),
+                      Colors.transparent,
+                    ],
                   ),
                 ),
-              ],
-            ),
-
-            // Content
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Category
+                    // Category Badge
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
+                        color: AppTheme.primaryColor.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        equipment.category,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.primaryColor,
-                          fontWeight: FontWeight.w600,
+                        equipment.category.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: isMobile ? 8 : 10,
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: isMobile ? 4 : 6),
 
-                    // Name
+                    // Equipment Name
                     Text(
                       equipment.name,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
+                        fontSize: isMobile ? 13 : (isTablet ? 14 : 15),
                       ),
-                      maxLines: 2,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
 
-                    // Brand & Model
+                    // Brand and Model
                     if (equipment.brand != null)
                       Text(
                         '${equipment.brand}${equipment.model != null ? " ${equipment.model}" : ""}',
                         style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[600],
+                          color: Colors.white70,
+                          fontSize: isMobile ? 10 : 11,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
 
-                    const Spacer(),
+                    SizedBox(height: isMobile ? 4 : 6),
 
-                    // Quantity & Location
+                    // Quantity and Location
                     Row(
                       children: [
-                        Icon(Icons.numbers, size: 14, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Qty: ${equipment.quantity}',
-                          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.numbers, size: isMobile ? 11 : 12, color: Colors.white70),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${equipment.quantity}',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: isMobile ? 10 : 11,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         if (equipment.location != null) ...[
-                          const SizedBox(width: 12),
-                          Icon(Icons.location_on, size: 14, color: Colors.grey[600]),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              equipment.location!,
-                              style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          const Text(
+                            ' • ',
+                            style: TextStyle(color: Colors.white70, fontSize: 10),
+                          ),
+                          Flexible(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.location_on, size: isMobile ? 11 : 12, color: Colors.white70),
+                                const SizedBox(width: 3),
+                                Flexible(
+                                  child: Text(
+                                    equipment.location!,
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: isMobile ? 10 : 11,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ],
                     ),
 
-                    const SizedBox(height: 8),
+                    SizedBox(height: isMobile ? 6 : 8),
 
                     // Action Buttons
                     Row(
@@ -702,19 +729,38 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                         Expanded(
                           child: OutlinedButton.icon(
                             onPressed: () => _showEditEquipmentDialog(equipment),
-                            icon: const Icon(Icons.edit, size: 16),
-                            label: const Text('Edit', style: TextStyle(fontSize: 12)),
+                            icon: Icon(Icons.edit, size: isMobile ? 14 : 16),
+                            label: Text(
+                              'Edit',
+                              style: TextStyle(fontSize: isMobile ? 11 : 12),
+                            ),
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              foregroundColor: Colors.white,
+                              side: const BorderSide(color: Colors.white70),
+                              padding: EdgeInsets.symmetric(
+                                vertical: isMobile ? 6 : 8,
+                                horizontal: isMobile ? 8 : 12,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 8),
-                        IconButton(
-                          onPressed: () => _deleteEquipment(equipment),
-                          icon: const Icon(Icons.delete, color: AppTheme.errorColor),
-                          iconSize: 20,
-                          tooltip: 'Delete',
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.errorColor.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: IconButton(
+                            onPressed: () => _deleteEquipment(equipment),
+                            icon: const Icon(Icons.delete, color: Colors.white),
+                            iconSize: isMobile ? 18 : 20,
+                            padding: EdgeInsets.all(isMobile ? 6 : 8),
+                            constraints: BoxConstraints(
+                              minWidth: isMobile ? 36 : 40,
+                              minHeight: isMobile ? 36 : 40,
+                            ),
+                            tooltip: 'Delete',
+                          ),
                         ),
                       ],
                     ),
@@ -722,6 +768,73 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
                 ),
               ),
             ),
+
+            // Status badge at top right
+            Positioned(
+              top: isMobile ? 6 : 8,
+              right: isMobile ? 6 : 8,
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: isMobile ? 6 : 8,
+                  vertical: isMobile ? 3 : 4,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor,
+                  borderRadius: BorderRadius.circular(isMobile ? 10 : 12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: isMobile ? 8 : 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+            // Photo count badge at top left
+            if (equipment.photos.length > 1)
+              Positioned(
+                top: isMobile ? 6 : 8,
+                left: isMobile ? 6 : 8,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 5 : 6,
+                    vertical: isMobile ? 2 : 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(isMobile ? 8 : 10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.photo_library,
+                        size: isMobile ? 10 : 11,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${equipment.photos.length}',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 9 : 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -730,8 +843,8 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
 
   Widget _buildPlaceholderImage() {
     return Container(
-      height: 160,
       width: double.infinity,
+      height: double.infinity,
       color: Colors.grey[300],
       child: const Center(
         child: Icon(Icons.fitness_center, size: 64, color: Colors.grey),
@@ -788,6 +901,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
   }
 
   void _showEditEquipmentDialog(Equipment equipment) {
+    debugPrint('✏️ Editing equipment: ${equipment.name} with ID: ${equipment.id}');
     showDialog(
       context: context,
       builder: (context) => _EquipmentFormDialog(
@@ -826,7 +940,10 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Equipment added successfully')),
+          const SnackBar(
+            content: Text('Equipment added successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
         );
         _loadEquipmentData();
       }
@@ -835,7 +952,10 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add equipment: $e')),
+          SnackBar(
+            content: Text('Failed to add equipment: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -872,7 +992,10 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Equipment updated successfully')),
+          const SnackBar(
+            content: Text('Equipment updated successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
         );
         _loadEquipmentData();
       }
@@ -881,7 +1004,10 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update equipment: $e')),
+          SnackBar(
+            content: Text('Failed to update equipment: ${e.toString().replaceAll('Exception: ', '')}'),
+            backgroundColor: AppTheme.errorColor,
+          ),
         );
       }
     }
@@ -903,6 +1029,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
             onPressed: () => Navigator.pop(context, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.errorColor,
+              foregroundColor: Colors.white,
             ),
             child: Text(l10n.delete),
           ),
@@ -911,18 +1038,37 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
     );
 
     if (confirmed == true) {
+      // Show loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) => const Center(child: CircularProgressIndicator()),
+      );
+
       try {
+        debugPrint('🗑️ Attempting to delete equipment: ${equipment.name} with ID: ${equipment.id}');
         await _equipmentService.deleteEquipment(equipment.id);
+        
+        // Close loading dialog
         if (mounted) {
+          Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Equipment deleted successfully')),
+            const SnackBar(
+              content: Text('Equipment deleted successfully'),
+              backgroundColor: AppTheme.successColor,
+            ),
           );
+          _loadEquipmentData();
         }
-        _loadEquipmentData();
       } catch (e) {
+        // Close loading dialog
         if (mounted) {
+          Navigator.of(context).pop();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to delete equipment: $e')),
+            SnackBar(
+              content: Text('Failed to delete equipment: ${e.toString().replaceAll('Exception: ', '')}'),
+              backgroundColor: AppTheme.errorColor,
+            ),
           );
         }
       }
@@ -1133,7 +1279,37 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
     _nameController.text = eq.name;
     _brandController.text = eq.brand ?? '';
     _modelController.text = eq.model ?? '';
-    _selectedCategory = eq.category;
+    
+    // Normalize category to match EquipmentCategories.all (titlecase)
+    // Handle mapping of old categories to new ones
+    String normalizedCategory;
+    final categoryLower = eq.category.toLowerCase();
+    
+    switch (categoryLower) {
+      case 'cardio':
+        normalizedCategory = 'Cardio';
+        break;
+      case 'strength':
+        normalizedCategory = 'Strength';
+        break;
+      case 'functional':
+        normalizedCategory = 'Functional';
+        break;
+      case 'flexibility':
+      case 'free weights': // Map old category
+        normalizedCategory = 'Flexibility';
+        break;
+      case 'accessories':
+        normalizedCategory = 'Accessories';
+        break;
+      case 'other':
+      case 'general': // Map old category
+      default:
+        normalizedCategory = 'Other';
+        break;
+    }
+    
+    _selectedCategory = normalizedCategory;
     _quantityController.text = eq.quantity.toString();
     _selectedStatus = eq.status;
     _purchaseDate = eq.purchaseDate;
@@ -1185,7 +1361,7 @@ class _EquipmentFormDialogState extends State<_EquipmentFormDialog> {
     final data = {
       'name': _nameController.text.trim(),
       'brand': _brandController.text.trim().isEmpty ? null : _brandController.text.trim(),
-      'category': _selectedCategory,
+      'category': _selectedCategory.toLowerCase(), // Convert to lowercase for backend
       'model': _modelController.text.trim().isEmpty ? null : _modelController.text.trim(),
       'quantity': int.parse(_quantityController.text),
       'status': _selectedStatus,

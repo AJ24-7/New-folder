@@ -306,6 +306,7 @@ class SupportService {
     required List<GymReview> reviews,
     required List<Grievance> grievances,
     required List<Communication> communications,
+    List<Map<String, dynamic>>? memberReports,
   }) async {
     // Notifications stats
     final unreadNotifications = notifications.where((n) => !n.read).length;
@@ -322,12 +323,44 @@ class SupportService {
     final weekAgo = DateTime.now().subtract(const Duration(days: 7));
     final recentReviews = reviews.where((r) => r.createdAt.isAfter(weekAgo)).length;
 
-    // Grievances stats
+    // Grievances stats (includes both grievances and member problem reports)
     final openGrievances = grievances
         .where((g) => g.status == 'open' || g.status == 'in-progress')
         .length;
     final resolvedGrievances = grievances.where((g) => g.status == 'resolved').length;
+    final closedGrievances = grievances.where((g) => g.status == 'closed').length;
     final urgentGrievances = grievances.where((g) => g.priority == 'urgent').length;
+    
+    // Add member problem reports to grievances stats
+    int openReports = 0;
+    int resolvedReports = 0;
+    int closedReports = 0;
+    int urgentReports = 0;
+    
+    if (memberReports != null) {
+      for (var report in memberReports) {
+        final status = report['status'] ?? 'open';
+        final priority = report['priority'] ?? 'normal';
+        
+        if (status == 'open' || status == 'in-progress') {
+          openReports++;
+        } else if (status == 'resolved') {
+          resolvedReports++;
+        } else if (status == 'closed') {
+          closedReports++;
+        }
+        
+        if (priority == 'urgent') {
+          urgentReports++;
+        }
+      }
+    }
+    
+    final totalOpen = openGrievances + openReports;
+    final totalResolved = resolvedGrievances + resolvedReports;
+    final totalClosed = closedGrievances + closedReports;
+    final totalUrgent = urgentGrievances + urgentReports;
+    final totalGrievances = grievances.length + (memberReports?.length ?? 0);
 
     // Communications stats
     final unreadChats = communications.where((c) => c.unreadCount > 0).length;
@@ -348,10 +381,11 @@ class SupportService {
         recent: recentReviews,
       ),
       grievances: GrievanceStats(
-        total: grievances.length,
-        open: openGrievances,
-        resolved: resolvedGrievances,
-        urgent: urgentGrievances,
+        total: totalGrievances,
+        open: totalOpen,
+        resolved: totalResolved,
+        closed: totalClosed,
+        urgent: totalUrgent,
       ),
       communications: CommunicationStats(
         total: communications.length,

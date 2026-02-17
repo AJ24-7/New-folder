@@ -37,8 +37,16 @@ class Equipment {
   });
 
   factory Equipment.fromJson(Map<String, dynamic> json) {
+    // Debug: Print the ID fields to understand what's being parsed
+    final customId = json['id'];
+    final mongoId = json['_id'];
+    print('🔍 Equipment JSON parsing - id: $customId, _id: $mongoId');
+    
+    final finalId = json['id'] ?? json['_id']?.toString() ?? '';
+    print('✅ Final equipment ID selected: $finalId');
+    
     return Equipment(
-      id: json['_id'] ?? json['id'] ?? '',
+      id: finalId,
       name: json['name'] ?? '',
       brand: json['brand'],
       category: json['category'] ?? 'General',
@@ -191,9 +199,9 @@ class EquipmentCategories {
   static const List<String> all = [
     'Cardio',
     'Strength',
-    'Free Weights',
     'Functional',
+    'Flexibility',
     'Accessories',
-    'General',
+    'Other',
   ];
 }

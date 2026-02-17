@@ -308,7 +308,7 @@ class _ReportProblemScreenState extends State<ReportProblemScreen> {
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
-              value: _selectedCategory,
+              initialValue: _selectedCategory,
               decoration: InputDecoration(
                 prefixIcon: Icon(_categoryIcons[_selectedCategory]),
                 border: OutlineInputBorder(

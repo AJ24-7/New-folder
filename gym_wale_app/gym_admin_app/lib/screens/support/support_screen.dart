@@ -32,6 +32,7 @@ class _SupportScreenState extends State<SupportScreen>
   List<GymReview> _reviews = [];
   List<Grievance> _grievances = [];
   List<Communication> _communications = [];
+  List<Map<String, dynamic>> _memberReports = [];
   SupportStats? _stats;
 
   // Loading states
@@ -105,18 +106,21 @@ class _SupportScreenState extends State<SupportScreen>
         _supportService.getReviews(widget.gymId),
         _supportService.getGrievances(widget.gymId),
         _supportService.getCommunications(widget.gymId),
+        _supportService.getMemberProblemReports(),
       ]);
 
       final notifications = results[0] as List<SupportNotification>;
       final reviews = results[1] as List<GymReview>;
       final grievances = results[2] as List<Grievance>;
       final communications = results[3] as List<Communication>;
+      final memberReports = results[4] as List<Map<String, dynamic>>;
 
       final stats = await _supportService.calculateStats(
         notifications: notifications,
         reviews: reviews,
         grievances: grievances,
         communications: communications,
+        memberReports: memberReports,
       );
 
       if (mounted) {
@@ -125,6 +129,7 @@ class _SupportScreenState extends State<SupportScreen>
           _reviews = reviews;
           _grievances = grievances;
           _communications = communications;
+          _memberReports = memberReports;
           _stats = stats;
           _isLoading = false;
         });
@@ -470,14 +475,123 @@ class _SupportScreenState extends State<SupportScreen>
             icon: Icons.star,
             color: Colors.orange,
           ),
-          StatCard(
-            title: l10n.grievances,
-            value: _stats!.grievances.total.toString(),
-            icon: Icons.report_problem,
-            color: AppTheme.errorColor,
-          ),
+          _buildGrievanceStatCard(),
           _buildChatStatCard(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGrievanceStatCard() {
+    if (_stats == null) return const SizedBox.shrink();
+    final l10n = AppLocalizations.of(context)!;
+    
+    return Card(
+      elevation: 2,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.errorColor.withValues(alpha: 0.1),
+              AppTheme.errorColor.withValues(alpha: 0.05),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  Icons.report_problem,
+                  color: AppTheme.errorColor,
+                  size: 24,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    l10n.grievances,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _stats!.grievances.total.toString(),
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.errorColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.pending_actions,
+                        size: 14,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${_stats!.grievances.open}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.check_circle,
+                        size: 14,
+                        color: Colors.green,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          '${_stats!.grievances.closed}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.green,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

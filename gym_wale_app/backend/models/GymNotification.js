@@ -9,7 +9,16 @@ const gymNotificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['grievance-reply', 'support-reply', 'system-alert', 'general'],
+    enum: [
+      'grievance-reply', 
+      'support-reply', 
+      'system-alert', 
+      'general',
+      'member-problem-report',
+      'chat-message',
+      'payment-reminder',
+      'membership-expiry'
+    ],
     required: true
   },
   title: {

@@ -16,6 +16,7 @@ import '../../widgets/session_warning_dialog.dart';
 import '../members/members_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../support/support_screen.dart';
+import '../attendance/attendance_screen.dart';
 import 'gym_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -159,8 +160,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         break;
       case 3:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Attendance screen coming soon')),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AttendanceScreen(),
+          ),
         );
         break;
       case 4:

@@ -19,7 +19,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   late Animation<double> _fadeAnimation;
 
   // Brand colors
-  static const Color navyBlue = Color(0xFF001F3F);
+  static const Color navyBlue = Color.fromARGB(255, 16, 42, 240);
   static const Color orange = Color(0xFFFF6B35);
 
   @override

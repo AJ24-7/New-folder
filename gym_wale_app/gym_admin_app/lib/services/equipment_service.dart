@@ -58,6 +58,12 @@ class EquipmentService {
         final gymData = response.data['gym'] ?? response.data['data'] ?? response.data;
         final List<dynamic> equipmentList = gymData['equipment'] ?? [];
         print('📦 Fetched ${equipmentList.length} equipment items');
+        
+        // Debug: Print first equipment item to verify ID structure
+        if (equipmentList.isNotEmpty) {
+          print('📋 Sample equipment data: ${equipmentList.first}');
+        }
+        
         return equipmentList.map((json) => Equipment.fromJson(json)).toList();
       }
       return [];
@@ -215,6 +221,7 @@ class EquipmentService {
       };
 
       print('📤 Updating equipment $id with data: $updateData');
+      print('📍 API URL: ${ApiConfig.equipmentById(id)}');
 
       final response = await _dio.put(
         ApiConfig.equipmentById(id),
@@ -231,6 +238,9 @@ class EquipmentService {
       throw Exception('Failed to update equipment');
     } catch (e) {
       print('❌ Error updating equipment: $e');
+      if (e.toString().contains('404')) {
+        throw Exception('Equipment not found. The equipment may have been deleted or the ID is invalid.');
+      }
       throw Exception('Failed to update equipment: $e');
     }
   }
@@ -238,10 +248,17 @@ class EquipmentService {
   /// Delete equipment
   Future<bool> deleteEquipment(String id) async {
     try {
+      print('🗑️ Deleting equipment with ID: $id');
+      print('📍 Delete API URL: ${ApiConfig.equipmentById(id)}');
+      
       final response = await _dio.delete(ApiConfig.equipmentById(id));
+      print('✅ Equipment deleted: ${response.statusCode}');
       return response.statusCode == 200;
     } catch (e) {
-      print('Error deleting equipment: $e');
+      print('❌ Error deleting equipment: $e');
+      if (e.toString().contains('404')) {
+        throw Exception('Equipment not found. The equipment may have been deleted or the ID is invalid.');
+      }
       throw Exception('Failed to delete equipment: $e');
     }
   }

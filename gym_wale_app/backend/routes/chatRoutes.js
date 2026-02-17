@@ -4,7 +4,7 @@ const router = express.Router();
 const Support = require('../models/Support');
 const User = require('../models/User');
 const Gym = require('../models/gym');
-const GymNotification = require('../models/GymNotification');
+const Notification = require('../models/Notification');
 const authMiddleware = require('../middleware/authMiddleware');
 const gymadminAuth = require('../middleware/gymadminAuth');
 
@@ -102,41 +102,40 @@ router.post('/send', authMiddleware, async (req, res) => {
 
         await chatTicket.save();
 
-        // Create notification for gym admin
+        // Create notification for gym admin (matching membership freeze pattern)
         try {
             const userName = user.firstName && user.lastName 
                 ? `${user.firstName} ${user.lastName}` 
                 : (user.username || user.email || 'User');
             
-            const notification = new GymNotification({
-                gymId: gymId,
+            const notification = new Notification({
                 title: `New message from ${userName}`,
                 message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
                 type: 'chat-message',
                 priority: 'medium',
-                status: 'unread',
-                actionType: 'open-chat',
-                actionData: JSON.stringify({
-                    communicationId: chatTicket._id.toString(),
-                    userId: userId.toString(),
-                    userName: userName
-                }),
+                icon: 'fa-comments',
+                color: '#4caf50',
+                user: gymId,
                 metadata: {
                     ticketId: chatTicket.ticketId,
-                    userId: userId,
+                    userId: userId.toString(),
                     userName: userName,
                     userEmail: user.email,
                     userProfileImage: user.profileImage || '/uploads/profile-pics/default.png',
                     isChat: true,
                     messagePreview: message.substring(0, 50),
-                    communicationId: chatTicket._id.toString()
-                }
+                    communicationId: chatTicket._id.toString(),
+                    source: 'chat-message'
+                },
+                actionType: 'navigate',
+                actionData: '/support'
             });
 
             await notification.save();
-            console.log('✅ Gym notification created for chat message');
+            console.log('✅ Gym notification created for chat message:', notification._id);
         } catch (notificationError) {
-            console.error('Error creating gym notification:', notificationError);
+            console.error('❌ Error creating gym notification:', notificationError);
+            console.error('❌ Notification error details:', notificationError.message);
         }
 
         res.json({
@@ -768,33 +767,41 @@ router.post('/quick-message', authMiddleware, async (req, res) => {
 
         await chatTicket.save();
 
-        // Create notification for gym admin
+        // Create notification for gym admin (matching membership freeze pattern)
         try {
-            const notification = new GymNotification({
-                gymId: gymId,
+            const userName = user.firstName && user.lastName 
+                ? `${user.firstName} ${user.lastName}` 
+                : (user.username || user.email || 'User');
+            
+            const notification = new Notification({
                 title: 'Quick Message Response Sent',
-                message: `Automated response sent for ${quickMessageType}`,
-                type: 'chat',
+                message: `Automated response sent for ${quickMessageType} to ${userName}`,
+                type: 'chat-message',
                 priority: 'low',
-                status: 'unread',
+                icon: 'fa-robot',
+                color: '#9c27b0',
+                user: gymId,
                 metadata: {
                     ticketId: chatTicket.ticketId,
-                    userId: userId,
-                    userName: user.firstName && user.lastName 
-                        ? `${user.firstName} ${user.lastName}` 
-                        : (user.username || user.email || 'User'),
+                    userId: userId.toString(),
+                    userName: userName,
                     userEmail: user.email,
                     userProfileImage: user.profileImage || '/uploads/profile-pics/default.png',
                     isChat: true,
                     isAutomated: true,
-                    quickMessageType: quickMessageType
-                }
+                    quickMessageType: quickMessageType,
+                    communicationId: chatTicket._id.toString(),
+                    source: 'quick-message'
+                },
+                actionType: 'navigate',
+                actionData: '/support'
             });
 
             await notification.save();
-            console.log('✅ Gym notification created for quick message');
+            console.log('✅ Gym notification created for quick message:', notification._id);
         } catch (notificationError) {
-            console.error('Error creating gym notification:', notificationError);
+            console.error('❌ Error creating gym notification for quick message:', notificationError);
+            console.error('❌ Notification error details:', notificationError.message);
         }
 
         res.json({

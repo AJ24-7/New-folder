@@ -3,7 +3,6 @@ const MemberProblemReport = require('../models/MemberProblemReport');
 const Member = require('../models/Member');
 const Gym = require('../models/gym');
 const Notification = require('../models/Notification');
-const GymNotification = require('../models/GymNotification');
 
 // Submit a problem report from active gym member
 exports.submitMemberProblemReport = async (req, res) => {
@@ -63,29 +62,36 @@ exports.submitMemberProblemReport = async (req, res) => {
 
     console.log('✅ Problem report created:', problemReport.reportId);
 
-    // Create notification for gym admin
+    // Create notification for gym admin (matching membership freeze pattern)
     try {
-      const gymNotification = new GymNotification({
-        gym: gymId,
+      const notification = new Notification({
         title: `New Member Problem Report: ${category}`,
         message: `${activeMember.memberName} (${activeMember.membershipId}) reported: ${subject}`,
         type: 'member-problem-report',
         priority: priority || 'normal',
+        icon: 'fa-exclamation-triangle',
+        color: '#ff9800',
+        user: gymId,
         metadata: {
           reportId: problemReport.reportId,
-          memberId: activeMember._id,
+          memberId: activeMember._id.toString(),
           membershipId: activeMember.membershipId,
+          memberName: activeMember.memberName,
           category,
           subject,
           hasImages: images.length > 0,
-          imageCount: images.length
-        }
+          imageCount: images.length,
+          source: 'member-problem-report'
+        },
+        actionType: 'navigate',
+        actionData: '/support'
       });
 
-      await gymNotification.save();
-      console.log('✅ Gym notification created for problem report');
+      await notification.save();
+      console.log('✅ Gym notification created for problem report:', notification._id);
     } catch (notifError) {
       console.error('⚠️ Error creating gym notification:', notifError);
+      console.error('⚠️ Notification error details:', notifError.message);
       // Don't fail the request if notification fails
     }
 
