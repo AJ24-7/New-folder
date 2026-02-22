@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../config/app_theme.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/locale_provider.dart';
 import '../../providers/auth_provider.dart';
@@ -10,13 +11,16 @@ import '../../services/session_timer_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/api_service.dart';
 import '../../services/gym_settings_service.dart';
+import '../../services/passcode_service.dart';
 import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/session_warning_dialog.dart';
+import '../../widgets/passcode_dialog.dart';
 import '../members/members_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../support/support_screen.dart';
 import '../attendance/attendance_screen.dart';
+import '../payments/payments_screen.dart';
 import 'gym_profile_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -33,11 +37,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final GlobalKey _attendanceSettingsKey = GlobalKey();
   final ApiService _apiService = ApiService();
   final GymSettingsService _gymSettingsService = GymSettingsService();
+  final PasscodeService _passcodeService = PasscodeService();
   
   AttendanceSettings? _attendanceSettings;
   bool _isLoadingSettings = true;
   bool _allowMembershipFreezing = true;
   bool _isLoadingGymSettings = true;
+  
+  // Passcode settings
+  bool _passcodeEnabled = false;
+  String _passcodeType = 'none'; // 'none', 'app', 'payments'
+  bool _hasPasscode = false;
 
   @override
   void initState() {
@@ -91,6 +101,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final settings = response['settings'] as Map<String, dynamic>?;
         setState(() {
           _allowMembershipFreezing = settings?['allowMembershipFreezing'] ?? true;
+          _passcodeEnabled = settings?['passcodeEnabled'] ?? false;
+          _passcodeType = settings?['passcodeType'] ?? 'none';
+          _hasPasscode = settings?['hasPasscode'] ?? false;
           _isLoadingGymSettings = false;
         });
       }
@@ -118,6 +131,162 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
     } catch (e) {
       _showSnackBar(context, 'Failed to update settings: $e');
+    }
+  }
+  
+  Future<void> _setupPasscode() async {
+    final passcode = await PasscodeDialog.show(
+      context,
+      title: 'Set Passcode',
+      subtitle: 'Create a 4-digit passcode',
+      isSetup: true,
+      dismissible: true,
+    );
+
+    if (passcode == null || !mounted) return;
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final response = await _passcodeService.setPasscode(
+        passcode: passcode,
+        enabled: true,
+        type: 'app', // Default to app-wide
+      );
+
+      if (mounted) Navigator.pop(context); // Close loading
+
+      if (mounted && response['success'] == true) {
+        await _loadGymSettings();
+        _showSnackBar(context, 'Passcode set successfully');
+      } else {
+        if (mounted) {
+          _showSnackBar(context, response['message'] ?? 'Failed to set passcode');
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Close loading
+      _showSnackBar(context, 'Error setting passcode: $e');
+    }
+  }
+
+  Future<void> _changePasscode() async {
+    // First verify current passcode
+    final currentPasscode = await PasscodeDialog.show(
+      context,
+      title: 'Verify Current Passcode',
+      subtitle: 'Enter your current passcode',
+      isSetup: false,
+      dismissible: true,
+    );
+
+    if (currentPasscode == null || !mounted) return;
+
+    // Verify with backend
+    final isValid = await _passcodeService.verifyPasscode(currentPasscode);
+    if (!isValid) {
+      if (mounted) {
+        _showSnackBar(context, 'Incorrect passcode');
+      }
+      return;
+    }
+
+    // Now set new passcode
+    if (mounted) {
+      await _setupPasscode();
+    }
+  }
+
+  Future<void> _removePasscode() async {
+    // Verify current passcode first
+    final passcode = await PasscodeDialog.show(
+      context,
+      title: 'Verify Passcode',
+      subtitle: 'Enter your passcode to remove it',
+      isSetup: false,
+      dismissible: true,
+    );
+
+    if (passcode == null || !mounted) return;
+
+    // Verify with backend
+    final isValid = await _passcodeService.verifyPasscode(passcode);
+    if (!isValid) {
+      if (mounted) {
+        _showSnackBar(context, 'Incorrect passcode');
+      }
+      return;
+    }
+
+    // Confirm removal
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Passcode'),
+        content: const Text(
+          'Are you sure you want to remove the passcode? This will disable passcode protection.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final response = await _passcodeService.removePasscode();
+
+      if (mounted) Navigator.pop(context); // Close loading
+
+      if (mounted && response['success'] == true) {
+        await _loadGymSettings();
+        _showSnackBar(context, 'Passcode removed successfully');
+      } else {
+        if (mounted) {
+          _showSnackBar(context, response['message'] ?? 'Failed to remove passcode');
+        }
+      }
+    } catch (e) {
+      if (mounted) Navigator.pop(context); // Close loading
+      _showSnackBar(context, 'Error removing passcode: $e');
+    }
+  }
+
+  Future<void> _updatePasscodeType(String type) async {
+    try {
+      final response = await _passcodeService.updatePasscodeType(type);
+      
+      if (mounted && response['success'] == true) {
+        setState(() {
+          _passcodeType = type;
+        });
+        _showSnackBar(context, 'Passcode type updated');
+      }
+    } catch (e) {
+      _showSnackBar(context, 'Failed to update passcode type: $e');
     }
   }
   
@@ -168,8 +337,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
         break;
       case 4:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Payments screen coming soon')),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const PaymentsScreen()),
         );
         break;
       case 5:
@@ -239,7 +409,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       color: Theme.of(context).cardColor,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
+                          color: Colors.black.withValues(alpha: 0.05),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -497,6 +667,124 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   },
                                 ),
                               ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // Passcode Security Section
+                        _buildSectionCard(
+                          context,
+                          title: 'Passcode Security',
+                          icon: FontAwesomeIcons.lock,
+                          children: [
+                            if (_isLoadingGymSettings)
+                              const Padding(
+                                padding: EdgeInsets.all(20),
+                                child: Center(child: CircularProgressIndicator()),
+                              )
+                            else ...[
+                              // Passcode Status
+                              _buildSettingTile(
+                                context,
+                                title: _hasPasscode ? 'Passcode Enabled' : 'No Passcode Set',
+                                subtitle: _hasPasscode
+                                    ? 'Your account is protected with a passcode'
+                                    : 'Set a passcode to secure your account',
+                                leading: Icon(
+                                  _hasPasscode
+                                      ? FontAwesomeIcons.shieldHalved
+                                      : FontAwesomeIcons.shield,
+                                  color: _hasPasscode
+                                      ? AppTheme.successColor
+                                      : Colors.grey,
+                                ),
+                                trailing: _hasPasscode
+                                    ? null
+                                    : ElevatedButton(
+                                        onPressed: _setupPasscode,
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: AppTheme.primaryColor,
+                                          foregroundColor: Colors.white,
+                                        ),
+                                        child: const Text('Setup'),
+                                      ),
+                              ),
+
+                              // Passcode Type Options (only if passcode is set)
+                              if (_hasPasscode) ...[
+                                const Divider(height: 1),
+                                Padding(
+                                  padding: const EdgeInsets.all(16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Passcode Protection Type',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      RadioListTile<String>(
+                                        title: const Text('Entire App'),
+                                        subtitle: const Text('Require passcode when opening app'),
+                                        value: 'app',
+                                        groupValue: _passcodeType,
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            _updatePasscodeType(value);
+                                          }
+                                        },
+                                        activeColor: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      RadioListTile<String>(
+                                        title: const Text('Payments Tab Only'),
+                                        subtitle: const Text('Require passcode for payments tab'),
+                                        value: 'payments',
+                                        groupValue: _passcodeType,
+                                        onChanged: (value) {
+                                          if (value != null) {
+                                            _updatePasscodeType(value);
+                                          }
+                                        },
+                                        activeColor: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                
+                                const Divider(height: 1),
+                                
+                                // Change Passcode
+                                _buildSettingTile(
+                                  context,
+                                  title: 'Change Passcode',
+                                  subtitle: 'Update your security passcode',
+                                  leading: Icon(
+                                    FontAwesomeIcons.key,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                  onTap: _changePasscode,
+                                ),
+                                
+                                const Divider(height: 1),
+                                
+                                // Remove Passcode
+                                _buildSettingTile(
+                                  context,
+                                  title: 'Remove Passcode',
+                                  subtitle: 'Disable passcode protection',
+                                  leading: Icon(
+                                    FontAwesomeIcons.trashCan,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                  onTap: _removePasscode,
+                                ),
+                              ],
+                            ],
                           ],
                         ),
 
@@ -1593,9 +1881,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       if (result['success'] == true) {
-        // Update the timeout duration but preserve the login time
-        final originalLoginTime = authProvider.sessionTimer.loginTime;
-        
         // Stop current timer
         await authProvider.sessionTimer.stopTimer();
         

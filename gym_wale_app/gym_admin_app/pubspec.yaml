@@ -67,6 +67,9 @@ dependencies:
   # Icons
   font_awesome_flutter: ^10.7.0
   
+  # Fonts
+  google_fonts: ^6.1.0
+  
   # Maps & Location
   google_maps_flutter: ^2.5.3
   google_maps_flutter_web: ^0.5.4+3

@@ -546,7 +546,6 @@ class _QRCodeTemplateScreenState extends State<QRCodeTemplateScreen>
                       fontWeight: FontWeight.bold,
                       color: navyBlue,
                       letterSpacing: 1.5,
-                      fontFamily: 'Roboto',
                     ),
                   ),
                   TextSpan(
@@ -556,7 +555,6 @@ class _QRCodeTemplateScreenState extends State<QRCodeTemplateScreen>
                       fontWeight: FontWeight.bold,
                       color: orange,
                       letterSpacing: 1.5,
-                      fontFamily: 'Roboto',
                     ),
                   ),
                 ],

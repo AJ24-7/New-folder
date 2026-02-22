@@ -112,6 +112,11 @@ const gymSchema = new mongoose.Schema({
   // Membership Settings
   allowMembershipFreezing: { type: Boolean, default: true },
 
+  // Passcode Security Settings
+  passcodeEnabled: { type: Boolean, default: false },
+  passcodeType: { type: String, enum: ['none', 'app', 'payments'], default: 'none' },
+  passcodeHash: { type: String }, // Hashed passcode stored securely
+
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date },
   approvedAt: {

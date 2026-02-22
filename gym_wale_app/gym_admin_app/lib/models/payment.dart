@@ -143,15 +143,15 @@ class PaymentStats {
 
   factory PaymentStats.fromJson(Map<String, dynamic> json) {
     return PaymentStats(
-      amountReceived: (json['amountReceived'] ?? 0).toDouble(),
-      amountPaid: (json['amountPaid'] ?? 0).toDouble(),
-      pendingPayments: (json['pendingPayments'] ?? 0).toDouble(),
-      duePayments: (json['duePayments'] ?? 0).toDouble(),
-      profitLoss: (json['profitLoss'] ?? 0).toDouble(),
-      receivedChange: (json['receivedChange'] ?? 0).toDouble(),
-      paidChange: (json['paidChange'] ?? 0).toDouble(),
-      dueChange: (json['dueChange'] ?? 0).toDouble(),
-      profitChange: (json['profitChange'] ?? 0).toDouble(),
+      amountReceived: (json['received'] ?? json['amountReceived'] ?? 0).toDouble(),
+      amountPaid: (json['paid'] ?? json['amountPaid'] ?? 0).toDouble(),
+      pendingPayments: (json['pending'] ?? json['pendingPayments'] ?? 0).toDouble(),
+      duePayments: (json['due'] ?? json['duePayments'] ?? 0).toDouble(),
+      profitLoss: (json['profit'] ?? json['profitLoss'] ?? 0).toDouble(),
+      receivedChange: (json['receivedGrowth'] ?? json['receivedChange'] ?? 0).toDouble(),
+      paidChange: (json['paidGrowth'] ?? json['paidChange'] ?? 0).toDouble(),
+      dueChange: (json['dueGrowth'] ?? json['dueChange'] ?? 0).toDouble(),
+      profitChange: (json['profitGrowth'] ?? json['profitChange'] ?? 0).toDouble(),
       totalReceived: json['totalReceived'] ?? 0,
       totalPaid: json['totalPaid'] ?? 0,
       totalPending: json['totalPending'] ?? 0,
@@ -175,14 +175,39 @@ class PaymentChartData {
   });
 
   factory PaymentChartData.fromJson(Map<String, dynamic> json) {
-    return PaymentChartData(
-      received: List<double>.from(
+    // Backend returns { labels: [...], datasets: [{label, data}, ...] }
+    List<double> receivedList = [];
+    List<double> paidList = [];
+    
+    if (json['datasets'] != null && json['datasets'] is List) {
+      final datasets = json['datasets'] as List;
+      for (var dataset in datasets) {
+        final label = dataset['label'] ?? '';
+        final data = dataset['data'] ?? [];
+        if (label.toLowerCase().contains('received')) {
+          receivedList = List<double>.from(
+            (data as List).map((e) => (e ?? 0).toDouble()),
+          );
+        } else if (label.toLowerCase().contains('paid')) {
+          paidList = List<double>.from(
+            (data as List).map((e) => (e ?? 0).toDouble()),
+          );
+        }
+      }
+    } else if (json['received'] != null && json['paid'] != null) {
+      // Fallback for direct format
+      receivedList = List<double>.from(
         (json['received'] ?? []).map((e) => (e ?? 0).toDouble()),
-      ),
-      paid: List<double>.from(
+      );
+      paidList = List<double>.from(
         (json['paid'] ?? []).map((e) => (e ?? 0).toDouble()),
-      ),
-      labels: List<String>.from(json['labels'] ?? []),
+      );
+    }
+    
+    return PaymentChartData(
+      received: receivedList,
+      paid: paidList,
+      labels: List<String>.from((json['labels'] ?? []).map((e) => e.toString())),
       period: json['period'] ?? '',
     );
   }

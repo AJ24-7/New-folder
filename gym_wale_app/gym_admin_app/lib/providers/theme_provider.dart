@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ThemeProvider extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
@@ -38,6 +39,7 @@ class ThemeProvider extends ChangeNotifier {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      textTheme: GoogleFonts.interTextTheme(),
       colorScheme: ColorScheme.light(
         primary: const Color(0xFF2563EB), // Blue
         secondary: const Color(0xFF7C3AED), // Purple
@@ -93,6 +95,7 @@ class ThemeProvider extends ChangeNotifier {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
       colorScheme: ColorScheme.dark(
         primary: const Color(0xFF3B82F6), // Lighter blue for dark mode
         secondary: const Color(0xFF8B5CF6), // Lighter purple

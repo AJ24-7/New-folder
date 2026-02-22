@@ -49,6 +49,9 @@ router.get('/settings', gymadminAuth, gymSettingsController.getGymSettings);
 // Update gym settings for the logged-in gym admin
 router.put('/settings', gymadminAuth, gymSettingsController.updateGymSettings);
 
+// Verify passcode for the logged-in gym admin
+router.post('/settings/verify-passcode', gymadminAuth, gymSettingsController.verifyPasscode);
+
 // Get gym settings by gym ID (public endpoint for user app)
 router.get('/:gymId/settings', gymSettingsController.getGymSettingsById);
 

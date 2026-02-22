@@ -49,11 +49,23 @@ class GymSettingsService {
   /// Update gym settings
   Future<Map<String, dynamic>> updateGymSettings({
     bool? allowMembershipFreezing,
+    bool? passcodeEnabled,
+    String? passcodeType,
+    String? passcode,
   }) async {
     try {
       final data = <String, dynamic>{};
       if (allowMembershipFreezing != null) {
         data['allowMembershipFreezing'] = allowMembershipFreezing;
+      }
+      if (passcodeEnabled != null) {
+        data['passcodeEnabled'] = passcodeEnabled;
+      }
+      if (passcodeType != null) {
+        data['passcodeType'] = passcodeType;
+      }
+      if (passcode != null) {
+        data['passcode'] = passcode;
       }
 
       final response = await _dio.put('/api/gyms/settings', data: data);
@@ -69,6 +81,27 @@ class GymSettingsService {
       }
     } catch (e) {
       throw Exception('Error updating gym settings: $e');
+    }
+  }
+
+  /// Verify passcode
+  Future<Map<String, dynamic>> verifyPasscode(String passcode) async {
+    try {
+      final response = await _dio.post(
+        '/api/gyms/settings/verify-passcode',
+        data: {'passcode': passcode},
+      );
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': response.data['success'] ?? true,
+          'valid': response.data['valid'] ?? false,
+        };
+      } else {
+        throw Exception('Failed to verify passcode');
+      }
+    } catch (e) {
+      throw Exception('Error verifying passcode: $e');
     }
   }
 }

@@ -40,11 +40,16 @@ class PaymentService {
       final response = await _dio.get('/api/payments/stats');
       
       if (response.statusCode == 200) {
-        return PaymentStats.fromJson(response.data);
+        // Backend returns {success: true, data: {...}}
+        final data = response.data['data'] ?? response.data;
+        return PaymentStats.fromJson(data);
       } else {
         throw Exception('Failed to load payment statistics: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Payment statistics endpoint not found. Please check your connection.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -58,17 +63,22 @@ class PaymentService {
       final response = await _dio.get(
         '/api/payments/chart-data',
         queryParameters: {
-          'month': month,
+          'month': month - 1, // Backend expects 0-indexed month
           'year': year,
         },
       );
       
       if (response.statusCode == 200) {
-        return PaymentChartData.fromJson(response.data);
+        // Backend returns {success: true, data: {...}}
+        final data = response.data['data'] ?? response.data;
+        return PaymentChartData.fromJson(data);
       } else {
         throw Exception('Failed to load chart data: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Chart data endpoint not found. Please check your connection.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -93,12 +103,18 @@ class PaymentService {
       );
       
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['payments'] ?? response.data;
-        return data.map((json) => Payment.fromJson(json)).toList();
+        final data = response.data['data'] ?? response.data;
+        if (data is List) {
+          return data.map((json) => Payment.fromJson(json)).toList();
+        }
+        return [];
       } else {
         throw Exception('Failed to load recent payments: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Recent payments endpoint not found. Please check your connection.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -116,28 +132,43 @@ class PaymentService {
       );
       
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['payments'] ?? response.data;
-        return data.map((json) => Payment.fromJson(json)).toList();
+        final data = response.data['data'] ?? response.data;
+        if (data is List) {
+          return data.map((json) => Payment.fromJson(json)).toList();
+        }
+        return [];
       } else {
         throw Exception('Failed to load recurring payments: ${response.statusMessage}');
       }
-    } on DioException catch (e) {
-      throw Exception('Network error: ${e.message}');
+    } on DioException catch (e) {      if (e.response?.statusCode == 404) {
+        throw Exception('Recurring payments endpoint not found. Please check your connection.');
+      }      throw Exception('Network error: ${e.message}');
     }
   }
 
-  /// Get pending payments
+  /// Get pending payments (uses recurring endpoint with pending filter)
   Future<List<Payment>> getPendingPayments() async {
     try {
-      final response = await _dio.get('/api/payments/pending');
+      final response = await _dio.get(
+        '/api/payments/recurring',
+        queryParameters: {
+          'filter': 'pending',
+        },
+      );
       
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['payments'] ?? response.data;
-        return data.map((json) => Payment.fromJson(json)).toList();
+        final data = response.data['data'] ?? response.data;
+        if (data is List) {
+          return data.map((json) => Payment.fromJson(json)).toList();
+        }
+        return [];
       } else {
         throw Exception('Failed to load pending payments: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Pending payments endpoint not found. Please contact support.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -148,12 +179,18 @@ class PaymentService {
       final response = await _dio.get('/api/payments/reminders');
       
       if (response.statusCode == 200) {
-        final List<dynamic> data = response.data['reminders'] ?? response.data;
-        return data.map((json) => Payment.fromJson(json)).toList();
+        final data = response.data['data'] ?? response.data;
+        if (data is List) {
+          return data.map((json) => Payment.fromJson(json)).toList();
+        }
+        return [];
       } else {
         throw Exception('Failed to load payment reminders: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Payment reminders endpoint not found. Please check your connection.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -202,6 +239,12 @@ class PaymentService {
         throw Exception('Failed to add payment: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Add payment endpoint not found. Please check your connection.');
+      }
+      if (e.response?.statusCode == 400) {
+        throw Exception('Invalid payment data. Please check all fields.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -251,6 +294,12 @@ class PaymentService {
         throw Exception('Failed to update payment: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Payment not found. The payment may have been deleted or the ID is invalid.');
+      }
+      if (e.response?.statusCode == 400) {
+        throw Exception('Invalid payment data. Please check all fields.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -274,6 +323,9 @@ class PaymentService {
         throw Exception('Failed to mark payment as paid: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Payment not found. The payment may have been deleted or the ID is invalid.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -287,6 +339,9 @@ class PaymentService {
         throw Exception('Failed to delete payment: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Payment not found. The payment may have been already deleted.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -303,6 +358,9 @@ class PaymentService {
         throw Exception('Failed to load pending validations: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Pending validations endpoint not found. Please check your connection.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -318,6 +376,9 @@ class PaymentService {
         throw Exception('Failed to confirm cash validation: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Cash validation not found or already processed.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }
@@ -334,6 +395,9 @@ class PaymentService {
         throw Exception('Failed to reject cash validation: ${response.statusMessage}');
       }
     } on DioException catch (e) {
+      if (e.response?.statusCode == 404) {
+        throw Exception('Cash validation not found or already processed.');
+      }
       throw Exception('Network error: ${e.message}');
     }
   }

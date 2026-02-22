@@ -6,7 +6,15 @@ import 'package:gym_admin_app/l10n/app_localizations.dart';
 import '../../config/app_theme.dart';
 import '../../models/payment.dart';
 import '../../services/payment_service.dart';
+import '../../services/passcode_service.dart';
 import '../../widgets/sidebar_menu.dart';
+import '../../widgets/stat_card.dart';
+import '../../widgets/passcode_dialog.dart';
+import '../dashboard/dashboard_screen.dart';
+import '../members/members_screen.dart';
+import '../attendance/attendance_screen.dart';
+import '../equipment/equipment_screen.dart';
+import '../support/support_screen.dart';
 
 /// Payment Management Screen for Gym Admin App
 /// Features: Payment stats, chart, recent payments, pending payments, recurring payments
@@ -19,6 +27,7 @@ class PaymentsScreen extends StatefulWidget {
 
 class _PaymentsScreenState extends State<PaymentsScreen> {
   final PaymentService _paymentService = PaymentService();
+  final PasscodeService _passcodeService = PasscodeService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
   
@@ -31,7 +40,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
-  int _selectedIndex = 2; // Payments tab index
+  int _selectedIndex = 4; // Payments tab index
   
   // Chart filters
   int _selectedMonth = DateTime.now().month;
@@ -39,11 +48,75 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   
   // Recurring payments filter
   String _recurringFilter = 'all'; // 'all', 'monthly-recurring', 'pending', 'overdue', 'completed'
+  
+  // Passcode verification
+  bool _checkingPasscode = true;
 
   @override
   void initState() {
     super.initState();
-    _loadPaymentData();
+    _checkPasscodeAndLoad();
+  }
+
+  Future<void> _checkPasscodeAndLoad() async {
+    try {
+      final settings = await _passcodeService.getPasscodeSettings();
+      final passcodeEnabled = settings['passcodeEnabled'] ?? false;
+      final passcodeType = settings['passcodeType'] ?? 'none';
+      
+      // Check if passcode is required for payments
+      if (passcodeEnabled && passcodeType == 'payments') {
+        setState(() => _checkingPasscode = true);
+        
+        // Show passcode dialog
+        if (mounted) {
+          final passcode = await PasscodeDialog.show(
+            context,
+            title: 'Payments Access',
+            subtitle: 'Enter passcode to access payments',
+            isSetup: false,
+            dismissible: false,
+          );
+
+          if (passcode != null) {
+            // Verify the passcode
+            final isValid = await _passcodeService.verifyPasscode(passcode);
+            
+            if (isValid) {
+              setState(() => _checkingPasscode = false);
+              _loadPaymentData();
+            } else {
+              // Invalid passcode, navigate back
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Invalid passcode')),
+                );
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                );
+              }
+            }
+          } else {
+            // Passcode dialog dismissed, navigate back
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const DashboardScreen()),
+              );
+            }
+          }
+        }
+      } else {
+        // No passcode required, load data directly
+        setState(() => _checkingPasscode = false);
+        _loadPaymentData();
+      }
+    } catch (e) {
+      // If error checking passcode settings, allow access
+      setState(() => _checkingPasscode = false);
+      _loadPaymentData();
+    }
   }
 
   Future<void> _loadPaymentData() async {
@@ -103,10 +176,20 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     // Navigate to different screens based on index
     switch (index) {
       case 0: // Dashboard
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const DashboardScreen(),
+          ),
+        );
         break;
       case 1: // Members
-        Navigator.pushReplacementNamed(context, '/members');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MembersScreen(),
+          ),
+        );
         break;
       case 2: // Trainers
         ScaffoldMessenger.of(context).showSnackBar(
@@ -114,13 +197,23 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         );
         break;
       case 3: // Attendance
-        Navigator.pushReplacementNamed(context, '/attendance');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AttendanceScreen(),
+          ),
+        );
         break;
       case 4: // Payments
         // Already on payments screen, do nothing
         break;
       case 5: // Equipment
-        Navigator.pushReplacementNamed(context, '/equipment');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EquipmentScreen(),
+          ),
+        );
         break;
       case 6: // Offers
         ScaffoldMessenger.of(context).showSnackBar(
@@ -128,10 +221,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         );
         break;
       case 7: // Support & Reviews
-        Navigator.pushReplacementNamed(context, '/support', arguments: {'gymId': ''});
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SupportScreen(gymId: ''),
+          ),
+        );
         break;
       case 8: // Settings
-        Navigator.pushReplacementNamed(context, '/settings');
+        Navigator.pushNamed(context, '/settings');
         break;
     }
   }
@@ -140,44 +238,67 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
 
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
       body: Row(
         children: [
-          // Sidebar
-          SidebarMenu(
-            selectedIndex: _selectedIndex,
-            onItemSelected: _onMenuItemSelected,
-          ),
+          // Sidebar - only show on desktop
+          if (isDesktop)
+            SidebarMenu(
+              selectedIndex: _selectedIndex,
+              onItemSelected: _onMenuItemSelected,
+            ),
           
           // Main Content
           Expanded(
             child: Column(
               children: [
                 // App Bar
-                _buildAppBar(context, l10n),
+                _buildAppBar(context, l10n, isDesktop),
                 
                 // Content
                 Expanded(
-                  child: _isLoading
+                  child: _checkingPasscode
                       ? _buildLoadingState()
-                      : _hasError
-                          ? _buildErrorState()
-                          : _buildPaymentContent(context, l10n, isDark),
+                      : _isLoading
+                          ? _buildLoadingState()
+                          : _hasError
+                              ? _buildErrorState()
+                              : _buildPaymentContent(context, l10n, isDark),
                 ),
               ],
             ),
           ),
         ],
       ),
+      // Drawer - only show on mobile/tablet
+      drawer: !isDesktop
+          ? Drawer(
+              child: SidebarMenu(
+                selectedIndex: _selectedIndex,
+                onItemSelected: (index) {
+                  Navigator.pop(context);
+                  _onMenuItemSelected(index);
+                },
+              ),
+            )
+          : null,
     );
   }
 
-  Widget _buildAppBar(BuildContext context, AppLocalizations l10n) {
+  Widget _buildAppBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
+    final topPadding = MediaQuery.of(context).padding.top;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: EdgeInsets.only(
+        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
+        bottom: 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
+      ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         boxShadow: [
@@ -190,33 +311,43 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.menu),
-            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
-          ),
-          const SizedBox(width: 16),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+          if (!isDesktop)
+            IconButton(
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            ),
+          if (!isDesktop) const SizedBox(width: 4),
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const FaIcon(
+                    FontAwesomeIcons.creditCard,
+                    color: AppTheme.primaryColor,
+                    size: 18,
+                  ),
                 ),
-                child: const FaIcon(
-                  FontAwesomeIcons.creditCard,
-                  color: AppTheme.primaryColor,
-                  size: 20,
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    l10n.payments,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isDesktop ? null : 16,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                l10n.payments,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           const Spacer(),
           ElevatedButton.icon(
@@ -226,7 +357,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.primaryColor,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: isDesktop ? 20 : 12,
+                vertical: isDesktop ? 12 : 8,
+              ),
             ),
           ),
         ],
@@ -272,47 +406,67 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildPaymentContent(BuildContext context, AppLocalizations l10n, bool isDark) {
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
+    final isMobile = size.width <= 600;
+    
     return RefreshIndicator(
       onRefresh: _refreshData,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 12 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Payment Statistics Cards
             _buildStatsGrid(l10n),
-            const SizedBox(height: 24),
+            SizedBox(height: isMobile ? 16 : 24),
             
             // Payment Chart
             _buildPaymentChart(l10n, isDark),
-            const SizedBox(height: 24),
+            SizedBox(height: isMobile ? 16 : 24),
             
-            // Payment Content Grid
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Dues Section
-                Expanded(
-                  flex: 2,
-                  child: _buildRecurringPaymentsSection(l10n, isDark),
-                ),
-                const SizedBox(width: 16),
-                
-                // Right Column
-                Expanded(
-                  child: Column(
-                    children: [
-                      // Pending Payments Section
-                      _buildPendingPaymentsSection(l10n, isDark),
-                      const SizedBox(height: 16),
-                      
-                      // Recent Payments Section
-                      _buildRecentPaymentsSection(l10n, isDark),
-                    ],
+            // Payment Content Grid - Stack on mobile, side-by-side on desktop
+            if (isDesktop)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Dues Section
+                  Expanded(
+                    flex: 2,
+                    child: _buildRecurringPaymentsSection(l10n, isDark),
                   ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 16),
+                  
+                  // Right Column
+                  Expanded(
+                    child: Column(
+                      children: [
+                        // Pending Payments Section
+                        _buildPendingPaymentsSection(l10n, isDark),
+                        const SizedBox(height: 16),
+                        
+                        // Recent Payments Section
+                        _buildRecentPaymentsSection(l10n, isDark),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Column(
+                children: [
+                  // Dues Section
+                  _buildRecurringPaymentsSection(l10n, isDark),
+                  SizedBox(height: isMobile ? 12 : 16),
+                  
+                  // Pending Payments Section
+                  _buildPendingPaymentsSection(l10n, isDark),
+                  SizedBox(height: isMobile ? 12 : 16),
+                  
+                  // Recent Payments Section
+                  _buildRecentPaymentsSection(l10n, isDark),
+                ],
+              ),
           ],
         ),
       ),
@@ -322,140 +476,46 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget _buildStatsGrid(AppLocalizations l10n) {
     if (_stats == null) return const SizedBox.shrink();
 
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
+    final isMobile = size.width <= 600;
+
     return GridView.count(
-      crossAxisCount: 5,
-      mainAxisSpacing: 16,
-      crossAxisSpacing: 16,
+      crossAxisCount: isDesktop ? 3 : 2,
+      mainAxisSpacing: isMobile ? 8 : 16,
+      crossAxisSpacing: isMobile ? 8 : 16,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.8,
+      childAspectRatio: isDesktop ? 1.8 : (isMobile ? 1.6 : 1.5),
       children: [
-        _buildStatCard(
-          title: l10n.amountReceived,
-          value: _currencyFormat.format(_stats!.amountReceived),
-          icon: FontAwesomeIcons.arrowDown,
-          color: AppTheme.successColor,
-          change: _stats!.receivedChange,
-          isPositive: _stats!.receivedChange >= 0,
-          onTap: () => _showReceivedPaymentsDetails(),
-        ),
-        _buildStatCard(
-          title: l10n.amountPaid,
-          value: _currencyFormat.format(_stats!.amountPaid),
-          icon: FontAwesomeIcons.arrowUp,
-          color: AppTheme.errorColor,
-          change: _stats!.paidChange,
-          isPositive: false,
-          onTap: () => _showPaidPaymentsDetails(),
-        ),
-        _buildStatCard(
-          title: l10n.pendingPayments,
-          value: _currencyFormat.format(_stats!.pendingPayments),
-          icon: FontAwesomeIcons.clock,
-          color: AppTheme.warningColor,
-          onTap: () => _showPendingPaymentsDetails(),
-        ),
-        _buildStatCard(
-          title: l10n.duePayments,
-          value: _currencyFormat.format(_stats!.duePayments),
-          icon: FontAwesomeIcons.calendarXmark,
-          color: Colors.orange,
-          change: _stats!.dueChange,
-          isPositive: false,
-          onTap: () => _showDuePaymentsDetails(),
-        ),
-        _buildStatCard(
-          title: l10n.profitLoss,
-          value: _currencyFormat.format(_stats!.profitLoss),
-          icon: FontAwesomeIcons.chartLine,
-          color: _stats!.profitLoss >= 0 ? AppTheme.successColor : AppTheme.errorColor,
-          change: _stats!.profitChange,
-          isPositive: _stats!.profitChange >= 0,
-          onTap: () => _showProfitLossDetails(),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    double? change,
-    bool isPositive = true,
-    VoidCallback? onTap,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondaryColor,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: FaIcon(
-                      icon,
-                      size: 16,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (change != null) ...[
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    FaIcon(
-                      isPositive ? FontAwesomeIcons.arrowUp : FontAwesomeIcons.arrowDown,
-                      size: 10,
-                      color: isPositive ? AppTheme.successColor : AppTheme.errorColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${change.abs().toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: isPositive ? AppTheme.successColor : AppTheme.errorColor,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
+        GestureDetector(
+          onTap: () => _showAmountReceivedDetails(),
+          child: StatCard(
+            title: l10n.amountReceived,
+            value: _currencyFormat.format(_stats!.amountReceived),
+            icon: Icons.arrow_downward,
+            color: AppTheme.successColor,
+            trend: _stats!.receivedChange,
           ),
         ),
-      ),
+        GestureDetector(
+          onTap: () => _showAmountPaidDetails(),
+          child: StatCard(
+            title: l10n.amountPaid,
+            value: _currencyFormat.format(_stats!.amountPaid),
+            icon: Icons.arrow_upward,
+            color: AppTheme.errorColor,
+            trend: _stats!.paidChange,
+          ),
+        ),
+        StatCard(
+          title: l10n.profitLoss,
+          value: _currencyFormat.format(_stats!.profitLoss),
+          icon: Icons.trending_up,
+          color: _stats!.profitLoss >= 0 ? AppTheme.successColor : AppTheme.errorColor,
+          trend: _stats!.profitChange,
+        ),
+      ],
     );
   }
 
@@ -665,6 +725,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildRecurringPaymentsSection(AppLocalizations l10n, bool isDark) {
+    final displayCount = _recurringPayments.length > 10 ? 10 : _recurringPayments.length;
+    final hasMore = _recurringPayments.length > 10;
+    
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -699,6 +762,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             // Filter Buttons
             Wrap(
               spacing: 8,
+              runSpacing: 8,
               children: [
                 _buildFilterChip('All', 'all'),
                 _buildFilterChip('Monthly Recurring', 'monthly-recurring'),
@@ -735,11 +799,25 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: _recurringPayments.length,
+                itemCount: displayCount,
                 itemBuilder: (context, index) {
                   final payment = _recurringPayments[index];
                   return _buildPaymentCard(payment, isDark);
                 },
+              ),
+            if (hasMore)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Center(
+                  child: TextButton.icon(
+                    onPressed: () {
+                      // TODO: Show all recurring payments in a dialog or new screen
+                      _showAllRecurringPayments();
+                    },
+                    icon: const Icon(Icons.arrow_forward),
+                    label: Text('View All ${_recurringPayments.length} Dues'),
+                  ),
+                ),
               ),
           ],
         ),
@@ -766,6 +844,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       0,
       (sum, payment) => sum + payment.amount,
     );
+
+    final displayCount = _pendingPayments.length > 5 ? 5 : _pendingPayments.length;
+    final hasMore = _pendingPayments.length > 5;
 
     return Card(
       elevation: 2,
@@ -842,14 +923,31 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 ),
               )
             else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _pendingPayments.length,
-                itemBuilder: (context, index) {
-                  final payment = _pendingPayments[index];
-                  return _buildPaymentCard(payment, isDark, showMarkPaid: true);
-                },
+              Column(
+                children: [
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: displayCount,
+                    itemBuilder: (context, index) {
+                      final payment = _pendingPayments[index];
+                      return _buildPaymentCard(payment, isDark, showMarkPaid: true);
+                    },
+                  ),
+                  if (hasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            _showAllPendingPayments();
+                          },
+                          icon: const Icon(Icons.arrow_forward),
+                          label: Text('View All ${_pendingPayments.length} Pending'),
+                        ),
+                      ),
+                    ),
+                ],
               ),
           ],
         ),
@@ -858,6 +956,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildRecentPaymentsSection(AppLocalizations l10n, bool isDark) {
+    final displayCount = _recentPayments.length > 5 ? 5 : _recentPayments.length;
+    final hasMore = _recentPayments.length > 5;
+    
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -912,14 +1013,31 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 ),
               )
             else
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _recentPayments.length,
-                itemBuilder: (context, index) {
-                  final payment = _recentPayments[index];
-                  return _buildPaymentCard(payment, isDark);
-                },
+              Column(
+                children: [
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: displayCount,
+                    itemBuilder: (context, index) {
+                      final payment = _recentPayments[index];
+                      return _buildPaymentCard(payment, isDark);
+                    },
+                  ),
+                  if (hasMore)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Center(
+                        child: TextButton.icon(
+                          onPressed: () {
+                            _showAllRecentPayments();
+                          },
+                          icon: const Icon(Icons.arrow_forward),
+                          label: Text('View All ${_recentPayments.length} Payments'),
+                        ),
+                      ),
+                    ),
+                ],
               ),
           ],
         ),
@@ -1110,25 +1228,667 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     }
   }
 
-  // Placeholder methods for detail modals
-  void _showReceivedPaymentsDetails() {
-    // TODO: Implement received payments details modal
+  void _showAmountReceivedDetails() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 600,
+          constraints: const BoxConstraints(maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.successColor.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const FaIcon(
+                        FontAwesomeIcons.arrowDown,
+                        color: AppTheme.successColor,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Amount Received',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(_stats?.amountReceived ?? 0),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.successColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const FaIcon(FontAwesomeIcons.xmark, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stats Summary
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDetailStatCard(
+                              'Total Received',
+                              _stats?.totalReceived.toString() ?? '0',
+                              FontAwesomeIcons.receipt,
+                              AppTheme.successColor,
+                              'transactions',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildDetailStatCard(
+                              'Pending',
+                              _currencyFormat.format(_stats?.pendingPayments ?? 0),
+                              FontAwesomeIcons.clock,
+                              AppTheme.warningColor,
+                              '${_stats?.totalPending ?? 0} pending',
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Pending Payments Section
+                      if (_pendingPayments.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const FaIcon(
+                              FontAwesomeIcons.clock,
+                              size: 16,
+                              color: AppTheme.warningColor,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Pending Payments',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_pendingPayments.length} items',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _pendingPayments.length > 5 ? 5 : _pendingPayments.length,
+                          itemBuilder: (context, index) {
+                            final payment = _pendingPayments[index];
+                            return _buildPaymentCard(payment, isDark, showMarkPaid: true);
+                          },
+                        ),
+                        if (_pendingPayments.length > 5)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Center(
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showAllPendingPayments();
+                                },
+                                icon: const FaIcon(FontAwesomeIcons.arrowRight, size: 14),
+                                label: Text('View All ${_pendingPayments.length} Pending'),
+                              ),
+                            ),
+                          ),
+                      ] else ...[
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                const FaIcon(
+                                  FontAwesomeIcons.circleCheck,
+                                  size: 48,
+                                  color: AppTheme.successColor,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No pending payments!',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: AppTheme.successColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'All payments are up to date',
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _showPaidPaymentsDetails() {
-    // TODO: Implement paid payments details modal
+  void _showAmountPaidDetails() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Filter paid/expense payments
+    final expensePayments = _recentPayments.where((p) => p.type == 'paid').toList();
+    
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 600,
+          constraints: const BoxConstraints(maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const FaIcon(
+                        FontAwesomeIcons.arrowUp,
+                        color: AppTheme.errorColor,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Amount Paid',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(_stats?.amountPaid ?? 0),
+                            style: const TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.errorColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const FaIcon(FontAwesomeIcons.xmark, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+              
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Stats Summary
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDetailStatCard(
+                              'Total Paid',
+                              _stats?.totalPaid.toString() ?? '0',
+                              FontAwesomeIcons.receipt,
+                              AppTheme.errorColor,
+                              'bills/expenses',
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildDetailStatCard(
+                              'Due Payments',
+                              _currencyFormat.format(_stats?.duePayments ?? 0),
+                              FontAwesomeIcons.calendarXmark,
+                              Colors.orange,
+                              '${_stats?.totalDue ?? 0} due',
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 24),
+                      
+                      // Bills & Expenses Section
+                      if (expensePayments.isNotEmpty) ...[
+                        Row(
+                          children: [
+                            const FaIcon(
+                              FontAwesomeIcons.fileInvoiceDollar,
+                              size: 16,
+                              color: AppTheme.errorColor,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Recent Bills & Expenses',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${expensePayments.length} items',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: expensePayments.length > 5 ? 5 : expensePayments.length,
+                          itemBuilder: (context, index) {
+                            final payment = expensePayments[index];
+                            return _buildPaymentCard(payment, isDark);
+                          },
+                        ),
+                      ],
+                      
+                      // Due Payments Section
+                      if (_recurringPayments.isNotEmpty) ...[
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            const FaIcon(
+                              FontAwesomeIcons.calendarXmark,
+                              size: 16,
+                              color: Colors.orange,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'Due Payments',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Spacer(),
+                            Text(
+                              '${_recurringPayments.length} items',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _recurringPayments.length > 3 ? 3 : _recurringPayments.length,
+                          itemBuilder: (context, index) {
+                            final payment = _recurringPayments[index];
+                            return _buildPaymentCard(payment, isDark);
+                          },
+                        ),
+                        if (_recurringPayments.length > 3)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Center(
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _showAllRecurringPayments();
+                                },
+                                icon: const FaIcon(FontAwesomeIcons.arrowRight, size: 14),
+                                label: Text('View All ${_recurringPayments.length} Dues'),
+                              ),
+                            ),
+                          ),
+                      ],
+                      
+                      // Empty state
+                      if (expensePayments.isEmpty && _recurringPayments.isEmpty) ...[
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(32),
+                            child: Column(
+                              children: [
+                                const FaIcon(
+                                  FontAwesomeIcons.moneyBillWave,
+                                  size: 48,
+                                  color: Colors.grey,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No bills or expenses found',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
-  void _showPendingPaymentsDetails() {
-    // TODO: Implement pending payments details modal
+  Widget _buildDetailStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    String subtitle,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FaIcon(icon, color: color, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: color,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 10,
+              color: color.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
-  void _showDuePaymentsDetails() {
-    // TODO: Implement due payments details modal
+  void _showAllRecurringPayments() {
+    showDialog(
+      context: context,
+      builder: (context) => _AllPaymentsDialog(
+        title: 'All Dues',
+        payments: _recurringPayments,
+        isDark: Theme.of(context).brightness == Brightness.dark,
+      ),
+    );
   }
 
-  void _showProfitLossDetails() {
-    // TODO: Implement profit/loss details modal
+  void _showAllPendingPayments() {
+    showDialog(
+      context: context,
+      builder: (context) => _AllPaymentsDialog(
+        title: 'All Pending Payments',
+        payments: _pendingPayments,
+        isDark: Theme.of(context).brightness == Brightness.dark,
+        showMarkPaid: true,
+        onMarkPaid: _markPaymentAsPaid,
+      ),
+    );
+  }
+
+  void _showAllRecentPayments() {
+    showDialog(
+      context: context,
+      builder: (context) => _AllPaymentsDialog(
+        title: 'All Recent Payments',
+        payments: _recentPayments,
+        isDark: Theme.of(context).brightness == Brightness.dark,
+      ),
+    );
+  }
+}
+
+// All Payments Dialog
+class _AllPaymentsDialog extends StatelessWidget {
+  final String title;
+  final List<Payment> payments;
+  final bool isDark;
+  final bool showMarkPaid;
+  final Function(String)? onMarkPaid;
+
+  const _AllPaymentsDialog({
+    required this.title,
+    required this.payments,
+    required this.isDark,
+    this.showMarkPaid = false,
+    this.onMarkPaid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
+    
+    return AlertDialog(
+      title: Row(
+        children: [
+          const FaIcon(FontAwesomeIcons.list, size: 20),
+          const SizedBox(width: 12),
+          Text(title),
+        ],
+      ),
+      content: SizedBox(
+        width: 600,
+        height: 500,
+        child: ListView.builder(
+          itemCount: payments.length,
+          itemBuilder: (context, index) {
+            final payment = payments[index];
+            final isReceived = payment.type == 'received';
+            final color = isReceived ? AppTheme.successColor : AppTheme.errorColor;
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 12),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isDark 
+                    ? Colors.grey.shade800.withValues(alpha: 0.3) 
+                    : Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Center(
+                      child: FaIcon(
+                        isReceived ? FontAwesomeIcons.arrowDown : FontAwesomeIcons.arrowUp,
+                        size: 16,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          payment.memberName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          payment.description ?? payment.planName ?? 'Payment',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondaryColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${isReceived ? '+' : '-'}${currencyFormat.format(payment.amount)}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: color,
+                        ),
+                      ),
+                      if (showMarkPaid && payment.isPending && onMarkPaid != null) ...[
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          height: 28,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              onMarkPaid!(payment.id!);
+                              Navigator.pop(context);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.successColor,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              minimumSize: const Size(0, 28),
+                            ),
+                            child: const Text('Mark Paid', style: TextStyle(fontSize: 10)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
+        ),
+      ],
+    );
   }
 }
 
@@ -1241,7 +2001,7 @@ class _AddPaymentDialogState extends State<_AddPaymentDialog> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _selectedType,
+                  initialValue: _selectedType,
                   decoration: InputDecoration(
                     labelText: l10n.paymentType,
                     prefixIcon: const Icon(FontAwesomeIcons.rightLeft),
@@ -1258,7 +2018,7 @@ class _AddPaymentDialogState extends State<_AddPaymentDialog> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _selectedMethod,
+                  initialValue: _selectedMethod,
                   decoration: InputDecoration(
                     labelText: l10n.paymentMethod,
                     prefixIcon: const Icon(FontAwesomeIcons.creditCard),

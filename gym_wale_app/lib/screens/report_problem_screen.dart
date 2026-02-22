@@ -5,7 +5,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 import '../services/api_service.dart';
 import '../config/app_theme.dart';
-import '../l10n/app_localizations.dart';
 
 class ReportProblemScreen extends StatefulWidget {
   final String gymId;

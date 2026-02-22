@@ -1057,7 +1057,7 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                   border: Border(top: BorderSide(color: Theme.of(context).colorScheme.outlineVariant)),
                 ),
                 child: DropdownButtonFormField<String>(
-                  value: status,
+                  initialValue: status,
                   isExpanded: true,
                   decoration: const InputDecoration(
                     labelText: 'Update Status',
