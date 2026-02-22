@@ -26,7 +26,10 @@ exports.getGymSettings = async (req, res) => {
     res.json({
       success: true,
       settings: {
-        allowMembershipFreezing: gym.allowMembershipFreezing ?? true
+        allowMembershipFreezing: gym.allowMembershipFreezing ?? true,
+        passcodeEnabled: gym.passcodeEnabled ?? false,
+        passcodeType: gym.passcodeType ?? 'none',
+        hasPasscode: gym.passcodeHash ? true : false
       }
     });
   } catch (error) {

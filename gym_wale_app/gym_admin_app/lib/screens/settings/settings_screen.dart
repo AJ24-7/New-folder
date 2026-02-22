@@ -162,6 +162,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) Navigator.pop(context); // Close loading
 
       if (mounted && response['success'] == true) {
+        // Update local state immediately
+        setState(() {
+          _hasPasscode = true;
+          _passcodeEnabled = true;
+          _passcodeType = 'app';
+        });
+        // Also reload from server to ensure consistency
         await _loadGymSettings();
         _showSnackBar(context, 'Passcode set successfully');
       } else {
@@ -262,6 +269,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (mounted) Navigator.pop(context); // Close loading
 
       if (mounted && response['success'] == true) {
+        // Update local state immediately
+        setState(() {
+          _hasPasscode = false;
+          _passcodeEnabled = false;
+          _passcodeType = 'none';
+        });
+        // Also reload from server to ensure consistency
         await _loadGymSettings();
         _showSnackBar(context, 'Passcode removed successfully');
       } else {
@@ -283,7 +297,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _passcodeType = type;
         });
+        // Also reload from server to ensure consistency
+        await _loadGymSettings();
         _showSnackBar(context, 'Passcode type updated');
+      } else {
+        if (mounted) {
+          _showSnackBar(context, response['message'] ?? 'Failed to update passcode type');
+        }
       }
     } catch (e) {
       _showSnackBar(context, 'Failed to update passcode type: $e');

@@ -112,6 +112,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool _checkingPasscode = false;
   bool _passcodeRequired = false;
   bool _passcodeVerified = false;
+  bool _hasCheckedPasscode = false; // Track if we've already checked passcode settings
   final PasscodeService _passcodeService = PasscodeService();
 
   @override
@@ -133,7 +134,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _checkPasscodeSettings() async {
-    setState(() => _checkingPasscode = true);
+    if (_hasCheckedPasscode) return; // Prevent multiple checks
+    
+    setState(() {
+      _checkingPasscode = true;
+      _hasCheckedPasscode = true;
+    });
     
     try {
       final settings = await _passcodeService.getPasscodeSettings();
@@ -141,14 +147,19 @@ class _AuthWrapperState extends State<AuthWrapper> {
       final passcodeType = settings['passcodeType'] ?? 'none';
       
       if (mounted) {
+        final requiresPasscode = passcodeEnabled && passcodeType == 'app';
+        
         setState(() {
-          _passcodeRequired = passcodeEnabled && passcodeType == 'app';
+          _passcodeRequired = requiresPasscode;
           _checkingPasscode = false;
         });
 
         // If passcode is required, show passcode dialog
-        if (_passcodeRequired) {
-          _showPasscodeDialog();
+        if (requiresPasscode && !_passcodeVerified) {
+          await _showPasscodeDialog();
+        } else if (!requiresPasscode) {
+          // No passcode required, mark as verified
+          setState(() => _passcodeVerified = true);
         }
       }
     } catch (e) {
@@ -156,12 +167,15 @@ class _AuthWrapperState extends State<AuthWrapper> {
         setState(() {
           _passcodeRequired = false;
           _checkingPasscode = false;
+          _passcodeVerified = true; // Allow access on error
         });
       }
     }
   }
 
   Future<void> _showPasscodeDialog() async {
+    if (!mounted) return;
+    
     final passcode = await PasscodeDialog.show(
       context,
       title: 'Enter Passcode',
@@ -170,26 +184,44 @@ class _AuthWrapperState extends State<AuthWrapper> {
       dismissible: false,
     );
 
+    if (!mounted) return;
+
     if (passcode != null) {
       // Verify the passcode
       final isValid = await _passcodeService.verifyPasscode(passcode);
       
       if (isValid) {
-        setState(() => _passcodeVerified = true);
+        if (mounted) {
+          setState(() => _passcodeVerified = true);
+        }
       } else {
         // If verification failed, show error and log out
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Invalid passcode')),
           );
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          authProvider.logout();
         }
-        final authProvider = Provider.of<AuthProvider>(context, listen: false);
-        authProvider.logout();
       }
     } else {
       // If dialog was dismissed, log out
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      authProvider.logout();
+      if (mounted) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        authProvider.logout();
+      }
+    }
+  }
+
+  void _resetPasscodeCheck() {
+    // Reset passcode check when logging out
+    if (mounted) {
+      setState(() {
+        _hasCheckedPasscode = false;
+        _passcodeVerified = false;
+        _passcodeRequired = false;
+        _checkingPasscode = false;
+      });
     }
   }
 
@@ -210,10 +242,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isLoggedIn) {
-          // Check passcode settings when user logs in
-          if (!_checkingPasscode && !_passcodeVerified && _passcodeRequired == false) {
+          // Check passcode settings only once when user logs in
+          if (!_hasCheckedPasscode && !_checkingPasscode) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _checkPasscodeSettings();
+              if (mounted && !_hasCheckedPasscode) {
+                _checkPasscodeSettings();
+              }
             });
           }
 
@@ -240,12 +274,9 @@ class _AuthWrapperState extends State<AuthWrapper> {
           return const DashboardScreen();
         } else {
           // Reset passcode state when logged out
-          if (_passcodeVerified) {
+          if (_hasCheckedPasscode || _passcodeVerified) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              setState(() {
-                _passcodeVerified = false;
-                _passcodeRequired = false;
-              });
+              _resetPasscodeCheck();
             });
           }
           return const LoginScreen();

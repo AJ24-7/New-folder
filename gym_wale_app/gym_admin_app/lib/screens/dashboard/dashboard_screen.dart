@@ -89,19 +89,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() {
-      _isLoading = true;
-      _hasError = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
+    }
     
     try {
       // Load dashboard stats (critical - if this fails, show error)
       final stats = await _apiService.getDashboardStats();
       
-      setState(() {
-        _stats = stats;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _stats = stats;
+          _isLoading = false;
+        });
+      }
       
       // Load gym photos independently (non-critical - failures won't break the page)
       _loadGymPhotos();
@@ -133,57 +137,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // _attendanceData = await _apiService.getAttendanceChartData(_selectedMonth, _selectedYear);
       
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _hasError = true;
-        _errorMessage = e.toString();
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+          _errorMessage = e.toString();
+        });
+      }
     }
   }
 
   Future<void> _loadGymPhotos() async {
     try {
       final photos = await _gymService.getGymPhotos();
-      setState(() {
-        _gymPhotos = photos;
-      });
+      if (mounted) {
+        setState(() {
+          _gymPhotos = photos;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading gym photos: $e');
       // Keep empty list, don't break the page
-      setState(() {
-        _gymPhotos = [];
-      });
+      if (mounted) {
+        setState(() {
+          _gymPhotos = [];
+        });
+      }
     }
   }
 
   Future<void> _loadMembershipPlans() async {
     try {
       final plan = await _gymService.getMembershipPlans();
-      setState(() {
-        _membershipPlan = plan;
-      });
+      if (mounted) {
+        setState(() {
+          _membershipPlan = plan;
+        });
+      }
     } on DioException catch (e) {
       if (e.response?.statusCode == 401) {
         _handleTokenExpiration();
       }
       debugPrint('Error loading membership plan: $e');
-      setState(() {
-        _membershipPlan = null;
-      });
+      if (mounted) {
+        setState(() {
+          _membershipPlan = null;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading membership plan: $e');
-      setState(() {
-        _membershipPlan = null;
-      });
+      if (mounted) {
+        setState(() {
+          _membershipPlan = null;
+        });
+      }
     }
   }
 
   Future<void> _loadGymLogo() async {
     try {
       final profile = await _gymService.getGymProfile();
-      setState(() {
-        _gymLogoUrl = profile['logoUrl'];
-      });
+      if (mounted) {
+        setState(() {
+          _gymLogoUrl = profile['logoUrl'];
+        });
+      }
     } catch (e) {
       debugPrint('Error loading gym logo: $e');
       // Logo can be null, don't break the page
@@ -193,28 +211,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _loadRecentActivities() async {
     try {
       final activities = await _apiService.getRecentActivities();
-      setState(() {
-        _recentActivities = activities;
-      });
+      if (mounted) {
+        setState(() {
+          _recentActivities = activities;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading recent activities: $e');
-      setState(() {
-        _recentActivities = [];
-      });
+      if (mounted) {
+        setState(() {
+          _recentActivities = [];
+        });
+      }
     }
   }
 
   Future<void> _loadGymActivities() async {
     try {
       final activities = await _gymService.getGymActivities();
-      setState(() {
-        _gymActivities = activities;
-      });
+      if (mounted) {
+        setState(() {
+          _gymActivities = activities;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading gym activities: $e');
-      setState(() {
-        _gymActivities = [];
-      });
+      if (mounted) {
+        setState(() {
+          _gymActivities = [];
+        });
+      }
     }
   }
 
@@ -228,15 +254,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
       
       if (result != null && result['bookings'] != null) {
-        setState(() {
-          _trialBookings = result['bookings'] as List<TrialBooking>;
-        });
+        if (mounted) {
+          setState(() {
+            _trialBookings = result['bookings'] as List<TrialBooking>;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error loading trial bookings: $e');
-      setState(() {
-        _trialBookings = [];
-      });
+      if (mounted) {
+        setState(() {
+          _trialBookings = [];
+        });
+      }
     }
   }
 
@@ -245,14 +275,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final equipment = await _equipmentService.getAllEquipment();
       // Only show equipment with photos
       final equipmentWithPhotos = equipment.where((e) => e.photos.isNotEmpty).toList();
-      setState(() {
-        _equipmentGallery = equipmentWithPhotos;
-      });
+      if (mounted) {
+        setState(() {
+          _equipmentGallery = equipmentWithPhotos;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading equipment gallery: $e');
-      setState(() {
-        _equipmentGallery = [];
-      });
+      if (mounted) {
+        setState(() {
+          _equipmentGallery = [];
+        });
+      }
     }
   }
 
