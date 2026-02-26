@@ -12,7 +12,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get appTitle => 'जिम-वाले एडमिन';
 
   @override
-  String get dashboard => 'डैशबोर्ड';
+  String get dashboard => 'होम';
 
   @override
   String get members => 'सदस्य';
@@ -56,7 +56,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get logout => 'लॉगआउट';
 
   @override
-  String get dashboardOverview => 'डैशबोर्ड अवलोकन';
+  String get dashboardOverview => 'होम अवलोकन';
 
   @override
   String get totalMembers => 'कुल सदस्य';

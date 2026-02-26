@@ -12,7 +12,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appTitle => 'Gym-Wale Admin';
 
   @override
-  String get dashboard => 'Dashboard';
+  String get dashboard => 'Home';
 
   @override
   String get members => 'Members';
@@ -56,7 +56,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get logout => 'Logout';
 
   @override
-  String get dashboardOverview => 'Dashboard Overview';
+  String get dashboardOverview => 'Home Overview';
 
   @override
   String get totalMembers => 'Total Members';

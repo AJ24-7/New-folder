@@ -2,6 +2,7 @@ const Attendance = require('../models/Attendance');
 const Gym = require('../models/gym');
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
+const Notification = require('../models/Notification');
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -197,10 +198,37 @@ exports.autoMarkEntry = async (req, res) => {
 
             await existingAttendance.save();
 
+            // Send notification for updated entry
+            try {
+                const notification = new Notification({
+                    title: '✅ Attendance Updated',
+                    message: `Your attendance has been updated at ${existingAttendance.checkInTime}. Welcome back!`,
+                    recipient: memberId,
+                    recipientType: 'Member',
+                    type: 'attendance',
+                    metadata: {
+                        attendanceId: existingAttendance._id,
+                        gymId: gymId,
+                        checkInTime: existingAttendance.checkInTime,
+                        authenticationMethod: 'geofence'
+                    },
+                    read: false,
+                    createdAt: new Date()
+                });
+                await notification.save();
+                console.log(`📲 Attendance update notification sent to member ${memberId}`);
+            } catch (notifError) {
+                console.error('Failed to send attendance update notification:', notifError);
+            }
+
             return res.status(200).json({
                 success: true,
                 message: 'Attendance entry recorded successfully',
-                attendance: existingAttendance
+                attendance: existingAttendance,
+                notification: {
+                    title: '✅ Attendance Updated',
+                    message: 'Your attendance has been recorded. Welcome back!'
+                }
             });
         }
 
@@ -239,11 +267,40 @@ exports.autoMarkEntry = async (req, res) => {
             await activeMembership.save();
         }
 
+        // Send notification to member about attendance mark
+        try {
+            const notification = new Notification({
+                title: '✅ Attendance Marked',
+                message: `Welcome to ${gym.name || 'the gym'}! Your attendance has been automatically recorded at ${currentTime}.`,
+                recipient: memberId,
+                recipientType: 'Member',
+                type: 'attendance',
+                metadata: {
+                    attendanceId: newAttendance._id,
+                    gymId: gymId,
+                    checkInTime: currentTime,
+                    authenticationMethod: 'geofence',
+                    sessionsRemaining: activeMembership.sessionsRemaining
+                },
+                read: false,
+                createdAt: new Date()
+            });
+            await notification.save();
+            console.log(`📲 Attendance entry notification sent to member ${memberId}`);
+        } catch (notifError) {
+            console.error('Failed to send attendance entry notification:', notifError);
+            // Don't fail the attendance marking if notification fails
+        }
+
         return res.status(201).json({
             success: true,
             message: 'Attendance marked successfully via geofence',
             attendance: newAttendance,
-            sessionsRemaining: activeMembership.sessionsRemaining
+            sessionsRemaining: activeMembership.sessionsRemaining,
+            notification: {
+                title: '✅ Attendance Marked',
+                message: `Welcome! Your attendance has been automatically recorded.`
+            }
         });
 
     } catch (error) {
@@ -323,11 +380,42 @@ exports.autoMarkExit = async (req, res) => {
 
         await attendance.save();
 
+        // Send notification to member about exit
+        try {
+            const gym = await Gym.findById(gymId);
+            const gymName = gym ? gym.name : 'the gym';
+            
+            const notification = new Notification({
+                title: '👋 Gym Exit Recorded',
+                message: `You checked out from ${gymName} at ${attendance.checkOutTime}. Workout duration: ${durationInMinutes} minutes. Great session!`,
+                recipient: memberId,
+                recipientType: 'Member',
+                type: 'attendance',
+                metadata: {
+                    attendanceId: attendance._id,
+                    gymId: gymId,
+                    checkOutTime: attendance.checkOutTime,
+                    durationInMinutes: durationInMinutes,
+                    authenticationMethod: 'geofence'
+                },
+                read: false,
+                createdAt: new Date()
+            });
+            await notification.save();
+            console.log(`📲 Attendance exit notification sent to member ${memberId}`);
+        } catch (notifError) {
+            console.error('Failed to send attendance exit notification:', notifError);
+        }
+
         return res.status(200).json({
             success: true,
             message: 'Gym exit recorded successfully',
             attendance: attendance,
-            durationInMinutes
+            durationInMinutes,
+            notification: {
+                title: '👋 Gym Exit Recorded',
+                message: `Workout duration: ${durationInMinutes} minutes. Great session!`
+            }
         });
 
     } catch (error) {

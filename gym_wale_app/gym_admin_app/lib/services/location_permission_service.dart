@@ -1,21 +1,17 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart' as ph;
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import '../models/geofence_config.dart';
+import 'location_permission_service_web.dart' if (dart.library.io) 'location_permission_service_stub.dart';
 
 /// Location Permission Service
-/// Handles all location permission requests and checks
+/// Handles all location permission requests and checks across platforms
 class LocationPermissionService {
   /// Check current location permission status
   static Future<LocationPermissionStatus> checkPermissionStatus() async {
-    // Web platform doesn't support geolocator plugin
     if (kIsWeb) {
-      return LocationPermissionStatus(
-        isGranted: false,
-        isPermanentlyDenied: false,
-        isServiceEnabled: false,
-        message: 'Geofencing is not supported on web platform. Please use a mobile device.',
-      );
+      return await LocationPermissionServiceWeb.checkPermissionStatus();
     }
 
     bool serviceEnabled;
@@ -64,14 +60,8 @@ class LocationPermissionService {
 
   /// Request location permission
   static Future<LocationPermissionStatus> requestPermission() async {
-    // Web platform doesn't support geolocator plugin
     if (kIsWeb) {
-      return LocationPermissionStatus(
-        isGranted: false,
-        isPermanentlyDenied: false,
-        isServiceEnabled: false,
-        message: 'Geofencing is not supported on web platform. Please use a mobile device.',
-      );
+      return await LocationPermissionServiceWeb.requestPermission();
     }
 
     bool serviceEnabled;
@@ -119,11 +109,42 @@ class LocationPermissionService {
 
   /// Open app settings
   static Future<void> openAppSettings() async {
-    await ph.openAppSettings();
+    if (kIsWeb) {
+      await LocationPermissionServiceWeb.openAppSettings();
+    } else {
+      await ph.openAppSettings();
+    }
   }
 
-  /// Get current location
-  static Future<Position?> getCurrentLocation() async {
+  /// Get current location (returns LatLng for cross-platform compatibility)
+  static Future<LatLng?> getCurrentLocation() async {
+    if (kIsWeb) {
+      final webPosition = await LocationPermissionServiceWeb.getCurrentLocation();
+      if (webPosition != null) {
+        return LatLng(webPosition.latitude, webPosition.longitude);
+      }
+      return null;
+    }
+
+    final status = await checkPermissionStatus();
+    
+    if (!status.canUseLocation) {
+      return null;
+    }
+
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+      return LatLng(position.latitude, position.longitude);
+    } catch (e) {
+      debugPrint('Error getting current location: $e');
+      return null;
+    }
+  }
+  
+  /// Get current position (mobile platforms only)
+  static Future<Position?> getCurrentPositionMobile() async {
     if (kIsWeb) {
       return null;
     }
@@ -139,7 +160,7 @@ class LocationPermissionService {
         desiredAccuracy: LocationAccuracy.high,
       );
     } catch (e) {
-      print('Error getting current location: $e');
+      debugPrint('Error getting current location: $e');
       return null;
     }
   }
@@ -156,7 +177,7 @@ class LocationPermissionService {
       );
       return position.isMocked;
     } catch (e) {
-      print('Error checking mock location: $e');
+      debugPrint('Error checking mock location: $e');
       return false;
     }
   }
@@ -173,7 +194,7 @@ class LocationPermissionService {
       );
       return position.accuracy;
     } catch (e) {
-      print('Error getting location accuracy: $e');
+      debugPrint('Error getting location accuracy: $e');
       return null;
     }
   }

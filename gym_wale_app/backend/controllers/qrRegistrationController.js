@@ -1,6 +1,8 @@
 const QRCode = require('../models/QRCode');
 const Member = require('../models/Member');
 const Gym = require('../models/gym');
+const Payment = require('../models/Payment');
+const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
 
 // Import cash validation functions
@@ -712,6 +714,57 @@ const registerNewMember = async (req, res) => {
     });
     
     await newMember.save();
+    
+    // Create payment record for non-cash payments (online, UPI, etc.)
+    if (payment.method !== 'Cash') {
+      try {
+        const paymentRecord = new Payment({
+          gymId,
+          type: 'received',
+          category: 'membership',
+          amount: payment.amount,
+          description: `QR Registration - ${membershipPlan.months} month membership for ${name}`,
+          memberName: name,
+          memberId: newMember._id,
+          paymentMethod: payment.method.toLowerCase(),
+          status: 'completed',
+          registrationSource: 'qr_registration',
+          planSelected: `${membershipPlan.months} Month${membershipPlan.months > 1 ? 's' : ''}`,
+          monthlyPlan: `${membershipPlan.months} Month${membershipPlan.months > 1 ? 's' : ''}`,
+          paidDate: new Date(),
+          createdBy: gymId
+        });
+        
+        await paymentRecord.save();
+        console.log('✅ Payment record created for QR registration');
+        
+        // Create notification for gym admin
+        const notification = new Notification({
+          user: gymId,
+          title: '💰 New QR Registration Payment',
+          message: `₹${payment.amount.toLocaleString('en-IN')} received from ${name} via QR code registration`,
+          type: 'payment',
+          priority: 'normal',
+          read: false,
+          isRead: false,
+          metadata: {
+            paymentId: paymentRecord._id,
+            amount: payment.amount,
+            paymentMethod: payment.method,
+            registrationSource: 'qr_registration',
+            memberName: name,
+            memberId: newMember._id,
+            category: 'membership'
+          }
+        });
+        
+        await notification.save();
+        console.log('✅ Notification created for QR registration');
+      } catch (paymentError) {
+        console.error('❌ Error creating payment record:', paymentError);
+        // Don't fail registration if payment record creation fails
+      }
+    }
     
     // Create cash validation request if payment is cash
     if (payment.method === 'Cash') {

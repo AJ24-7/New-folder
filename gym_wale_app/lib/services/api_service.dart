@@ -1194,6 +1194,174 @@ class ApiService {
     return [];
   }
 
+  /// Get offers for a specific gym
+  static Future<List<dynamic>> getGymOffers(String gymId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/offers/gym/$gymId/active'),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data;
+        } else if (data['offers'] != null) {
+          return data['offers'];
+        }
+      }
+    } catch (e) {
+      print('Get gym offers error: $e');
+    }
+    return [];
+  }
+
+  /// Get offers from favorite gyms
+  static Future<List<dynamic>> getFavoriteGymsOffers() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/offers/favorites'),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data;
+        } else if (data['offers'] != null) {
+          return data['offers'];
+        }
+      }
+    } catch (e) {
+      print('Get favorite gyms offers error: $e');
+    }
+    return [];
+  }
+
+  /// Get nearby gym offers
+  static Future<List<dynamic>> getNearbyOffers(double lat, double lng, {double radiusKm = 5}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/offers/nearby?lat=$lat&lng=$lng&radius=$radiusKm'),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data;
+        } else if (data['offers'] != null) {
+          return data['offers'];
+        }
+      }
+    } catch (e) {
+      print('Get nearby offers error: $e');
+    }
+    return [];
+  }
+
+  /// Claim an offer
+  static Future<Map<String, dynamic>> claimOffer(String offerId, String gymId) async {
+    try {
+      // Get user ID from shared preferences
+      final prefs = await SharedPreferences.getInstance();
+      final userId = prefs.getString('user_id');
+
+      if (userId == null) {
+        return {
+          'success': false,
+          'message': 'User not logged in',
+        };
+      }
+
+      final response = await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/offers/$offerId/claim'),
+        headers: _headers,
+        body: jsonEncode({
+          'userId': userId,
+          'gymId': gymId,
+        }),
+      ).timeout(ApiConfig.timeout);
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': data['success'] ?? true,
+          'couponCode': data['couponCode'],
+          'message': data['message'] ?? 'Offer claimed successfully',
+          'coupon': data['coupon'],
+          'claimId': data['claimId'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to claim offer',
+        };
+      }
+    } catch (e) {
+      print('Claim offer error: $e');
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Get user's claimed coupons
+  static Future<List<dynamic>> getMyCoupons() async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/coupons/my-coupons'),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) {
+          return data;
+        } else if (data['coupons'] != null) {
+          return data['coupons'];
+        }
+      }
+    } catch (e) {
+      print('Get my coupons error: $e');
+    }
+    return [];
+  }
+
+  /// Validate a coupon code
+  static Future<Map<String, dynamic>> validateCouponBasic(String couponCode, String gymId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('${ApiConfig.baseUrl}/coupons/validate/$couponCode?gymId=$gymId'),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'valid': data['valid'] ?? true,
+          'coupon': data['coupon'],
+          'discountDetails': data['discountDetails'],
+          'message': data['message'] ?? 'Coupon is valid',
+        };
+      } else {
+        return {
+          'valid': false,
+          'message': data['message'] ?? 'Invalid coupon',
+        };
+      }
+    } catch (e) {
+      print('Validate coupon error: $e');
+      return {
+        'valid': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
+    }
+  }
+
   // ========== Settings & Preferences APIs ==========
 
   /// Get user preferences (notification and privacy settings)
@@ -2440,6 +2608,38 @@ class ApiService {
       }
     } catch (e) {
       print('Verify geofence error: $e');
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
+    }
+  }
+
+  /// Get gym's attendance settings (public endpoint for members)
+  static Future<Map<String, dynamic>> getGymAttendanceSettings(String gymId) async {
+    try {
+      final url = Uri.parse('${ApiConfig.baseUrl}/gym/$gymId/attendance-settings');
+      
+      final response = await http.get(
+        url,
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      final data = jsonDecode(response.body);
+      
+      if (response.statusCode == 200 && data['success'] == true) {
+        return {
+          'success': true,
+          'settings': data['settings'],
+        };
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed to fetch attendance settings',
+        };
+      }
+    } catch (e) {
+      print('Get gym attendance settings error: $e');
       return {
         'success': false,
         'message': 'Connection error: ${e.toString()}',

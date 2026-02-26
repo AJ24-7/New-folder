@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -11,6 +12,7 @@ import '../models/membership_plan.dart';
 import '../models/review.dart';
 import '../models/activity.dart';
 import '../models/user_membership.dart';
+import '../models/gym_offer.dart';
 import '../config/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/review_dialog.dart';
@@ -37,6 +39,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   List<GymPhoto> _photos = [];
   List<GymEquipment> _equipment = [];
   List<Activity> _activities = [];
+  List<GymOffer> _offers = [];
   bool _isLoading = true;
   bool _isFavorite = false;
   int _selectedTab = 0;
@@ -84,6 +87,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       final gymDataRaw = await ApiService.getGymDetailsRaw(widget.gymId);
       final membershipPlan = await ApiService.getGymMembershipPlan(widget.gymId);
       final reviews = await ApiService.getGymReviews(widget.gymId);
+      
+      // Load gym offers
+      final offersData = await ApiService.getGymOffers(widget.gymId);
       
       // Check favorite status
       final isFav = await ApiService.checkFavorite(widget.gymId);
@@ -147,6 +153,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           _photos = photos;
           _equipment = equipment;
           _activities = activities;
+          _offers = offersData.map((json) => GymOffer.fromJson(json)).toList();
           _isFavorite = isFav;
           _isLoading = false;
         });
@@ -514,7 +521,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                             _buildTab('Photos', Icons.photo_library_outlined, 1),
                             _buildTab('Equipment', Icons.fitness_center, 2),
                             _buildTab('Plans', Icons.card_membership, 3),
-                            _buildTab('Reviews', Icons.rate_review_outlined, 4),
+                            _buildTab('Offers', Icons.local_offer, 4),
+                            _buildTab('Reviews', Icons.rate_review_outlined, 5),
                           ],
                         ),
                       ),
@@ -660,6 +668,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       case 3:
         return _buildMembershipsTab();
       case 4:
+        return _buildOffersTab();
+      case 5:
         return _buildReviewsTab();
       default:
         return const SizedBox();
@@ -1024,6 +1034,446 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       // Reload reviews
       _loadGymDetails();
     }
+  }
+
+  Widget _buildOffersTab() {
+    if (_offers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.local_offer_outlined, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text(
+              'No active offers',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Check back later for exclusive deals!',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey[500],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Active Offers (${_offers.length})',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 16),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _offers.length,
+          itemBuilder: (context, index) {
+            return _buildOfferCard(_offers[index]);
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildOfferCard(GymOffer offer) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      elevation: 2,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.primaryColor.withOpacity(0.05),
+              AppTheme.accentColor.withOpacity(0.05),
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withOpacity(0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      offer.discountText,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (offer.highlightOffer)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.orange,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.star, color: Colors.white, size: 16),
+                          SizedBox(width: 4),
+                          Text(
+                            'HOT',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                offer.title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                offer.description,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey[700],
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 16,
+                runSpacing: 12,
+                children: [
+                  _buildOfferInfo(
+                    icon: offer.categoryIcon,
+                    label: offer.categoryDisplay,
+                    color: AppTheme.primaryColor,
+                  ),
+                  _buildOfferInfo(
+                    icon: Icons.timer,
+                    label: offer.remainingDays,
+                    color: offer.isExpired ? Colors.red : Colors.green,
+                  ),
+                  if (offer.minAmount > 0)
+                    _buildOfferInfo(
+                      icon: Icons.money,
+                      label: 'Min: ₹${offer.minAmount.toStringAsFixed(0)}',
+                      color: Colors.orange,
+                    ),
+                  if (offer.maxUses != null)
+                    _buildOfferInfo(
+                      icon: Icons.people,
+                      label: '${offer.usageCount}/${offer.maxUses} used',
+                      color: Colors.blue,
+                    ),
+                ],
+              ),
+              if (offer.features.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: offer.features.map((feature) {
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle, size: 14, color: Colors.green),
+                          const SizedBox(width: 4),
+                          Text(
+                            feature,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _claimOffer(offer),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    backgroundColor: AppTheme.primaryColor,
+                  ),
+                  icon: const Icon(Icons.card_giftcard, size: 24),
+                  label: Text(
+                    offer.isClaimed == true ? 'CLAIMED' : 'CLAIM OFFER',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+              if (offer.couponCode != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey[300]!, width: 2),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.confirmation_number, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Code: ${offer.couponCode}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          fontFamily: 'monospace',
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.copy, size: 20),
+                        onPressed: () => _copyCouponCode(offer.couponCode!),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOfferInfo({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _claimOffer(GymOffer offer) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    
+    if (!authProvider.isAuthenticated) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+      return;
+    }
+
+    if (offer.isClaimed == true) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You have already claimed this offer')),
+      );
+      return;
+    }
+
+    if (!offer.isValid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('This offer is no longer valid')),
+      );
+      return;
+    }
+
+    // Show loading
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final result = await ApiService.claimOffer(offer.id, widget.gymId);
+      Navigator.pop(context); // Remove loading dialog
+
+      if (result['success'] == true) {
+        // Update offer as claimed
+        setState(() {
+          final index = _offers.indexWhere((o) => o.id == offer.id);
+          if (index != -1) {
+            _offers[index] = offer.copyWith(
+              isClaimed: true,
+              claimId: result['claimId'],
+            );
+          }
+        });
+
+        // Show success dialog
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 32),
+                SizedBox(width: 12),
+                Text('Offer Claimed!'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Congratulations! You have successfully claimed this offer.'),
+                if (result['couponCode'] != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.green, width: 2),
+                    ),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Your Coupon Code:',
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              result['couponCode'],
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                                letterSpacing: 2,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.copy),
+                              onPressed: () => _copyCouponCode(result['couponCode']),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                Text(
+                  'You can use this coupon when purchasing a membership.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Close'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  setState(() => _selectedTab = 3); // Switch to Plans tab
+                },
+                child: const Text('View Plans'),
+              ),
+            ],
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result['message'] ?? 'Failed to claim offer')),
+        );
+      }
+    } catch (e) {
+      Navigator.pop(context); // Remove loading dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${e.toString()}')),
+      );
+    }
+  }
+
+  void _copyCouponCode(String code) {
+    Clipboard.setData(ClipboardData(text: code));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Coupon code "$code" copied to clipboard'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Widget _buildReviewsTab() {

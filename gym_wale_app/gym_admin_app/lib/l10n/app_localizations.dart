@@ -107,7 +107,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashboard.
   ///
   /// In en, this message translates to:
-  /// **'Dashboard'**
+  /// **'Home'**
   String get dashboard;
 
   /// No description provided for @members.
@@ -191,7 +191,7 @@ abstract class AppLocalizations {
   /// No description provided for @dashboardOverview.
   ///
   /// In en, this message translates to:
-  /// **'Dashboard Overview'**
+  /// **'Home Overview'**
   String get dashboardOverview;
 
   /// No description provided for @totalMembers.

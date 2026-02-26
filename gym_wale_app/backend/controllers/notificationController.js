@@ -8,6 +8,7 @@ const Gym = require('../models/gym');
 const Member = require('../models/Member');
 const Trainer = require('../models/trainerModel');
 const Admin = require('../models/admin');
+const fcmService = require('../services/fcmService');
 
 class NotificationController {
     // ========== ADMIN NOTIFICATIONS ==========
@@ -459,6 +460,37 @@ class NotificationController {
 
             console.log(`✅ Notification sent: ${successCount} succeeded, ${failureCount} failed out of ${members.length} members`);
 
+            // FCM: Push real-time notification to user devices
+            if (successCount > 0) {
+                try {
+                    const userIdsForFCM = notifications.map(n => n.userId).filter(Boolean);
+                    const usersWithTokens = await User.find({
+                        _id: { $in: userIdsForFCM },
+                        'fcmToken.token': { $ne: null, $exists: true },
+                    }).select('fcmToken').lean();
+
+                    const fcmTokens = usersWithTokens.map(u => u.fcmToken?.token).filter(Boolean);
+                    if (fcmTokens.length > 0) {
+                        const fcmResult = await fcmService.sendToMultipleDevices(fcmTokens, { title, body: message }, {
+                            type,
+                            priority,
+                            gymId: gymId?.toString(),
+                            source: 'gym-admin',
+                        });
+                        // Clean up stale tokens
+                        if (fcmResult?.invalidTokens?.length) {
+                            await User.updateMany(
+                                { 'fcmToken.token': { $in: fcmResult.invalidTokens } },
+                                { $set: { 'fcmToken.token': null } }
+                            );
+                        }
+                        console.log(`📲 FCM pushed to ${fcmTokens.length} devices (${fcmResult?.successCount || 0} succeeded)`);
+                    }
+                } catch (fcmErr) {
+                    console.error('⚠️ FCM push failed (non-blocking):', fcmErr.message);
+                }
+            }
+
             res.json(response);
 
         } catch (error) {
@@ -526,7 +558,26 @@ class NotificationController {
 
             await notification.save();
 
-            // TODO: Send real-time notification via WebSocket/FCM for faster communication
+            // FCM: Push notification to super admin devices if they have tokens
+            try {
+                const freshAdmin = await Admin.findById(superAdmin._id).select('fcmTokens').lean();
+                const adminTokens = (freshAdmin?.fcmTokens || []).map(t => t.token).filter(Boolean);
+                if (adminTokens.length > 0) {
+                    await fcmService.sendToMultipleDevices(adminTokens, {
+                        title: notification.title,
+                        body: message,
+                    }, {
+                        type,
+                        priority,
+                        source: 'gym-admin',
+                        gymId: gymId?.toString(),
+                        notificationId: notification._id.toString(),
+                    });
+                    console.log(`📲 FCM pushed to super admin (${adminTokens.length} device(s))`);
+                }
+            } catch (fcmErr) {
+                console.error('⚠️ FCM to super admin failed (non-blocking):', fcmErr.message);
+            }
 
             res.json({
                 success: true,
@@ -601,6 +652,31 @@ class NotificationController {
 
             if (notifications.length > 0) {
                 await Notification.insertMany(notifications);
+
+                // FCM: Push renewal reminder to user devices
+                try {
+                    const userIdsRenewal = notifications.map(n => n.userId).filter(Boolean);
+                    const usersWithTokensR = await User.find({
+                        _id: { $in: userIdsRenewal },
+                        'fcmToken.token': { $ne: null, $exists: true },
+                    }).select('fcmToken').lean();
+                    const renewalFCMTokens = usersWithTokensR.map(u => u.fcmToken?.token).filter(Boolean);
+                    if (renewalFCMTokens.length > 0) {
+                        const renewalFCMResult = await fcmService.sendToMultipleDevices(renewalFCMTokens, {
+                            title: 'Membership Renewal Reminder',
+                            body: notifications[0].message,
+                        }, { type: 'membership-renewal', gymId: gymId?.toString() });
+                        if (renewalFCMResult?.invalidTokens?.length) {
+                            await User.updateMany(
+                                { 'fcmToken.token': { $in: renewalFCMResult.invalidTokens } },
+                                { $set: { 'fcmToken.token': null } }
+                            );
+                        }
+                        console.log(`📲 Renewal FCM pushed to ${renewalFCMTokens.length} devices`);
+                    }
+                } catch (fcmErr) {
+                    console.error('⚠️ Renewal FCM push failed (non-blocking):', fcmErr.message);
+                }
             }
 
             res.json({
@@ -669,6 +745,32 @@ class NotificationController {
 
             if (notifications.length > 0) {
                 await Notification.insertMany(notifications);
+
+                // FCM: Push holiday notice to user devices
+                try {
+                    const usersWithTokensH = await User.find({
+                        _id: { $in: userIds },
+                        'fcmToken.token': { $ne: null, $exists: true },
+                    }).select('fcmToken').lean();
+                    const holidayFCMTokens = usersWithTokensH.map(u => u.fcmToken?.token).filter(Boolean);
+                    if (holidayFCMTokens.length > 0) {
+                        const holidayFCMResult = await fcmService.sendToMultipleDevices(holidayFCMTokens, { title, body: message }, {
+                            type: 'holiday-notice',
+                            gymId: gymId?.toString(),
+                            holidayDate: holidayDate || '',
+                            resumeDate: resumeDate || '',
+                        });
+                        if (holidayFCMResult?.invalidTokens?.length) {
+                            await User.updateMany(
+                                { 'fcmToken.token': { $in: holidayFCMResult.invalidTokens } },
+                                { $set: { 'fcmToken.token': null } }
+                            );
+                        }
+                        console.log(`📲 Holiday notice FCM pushed to ${holidayFCMTokens.length} devices`);
+                    }
+                } catch (fcmErr) {
+                    console.error('⚠️ Holiday notice FCM push failed (non-blocking):', fcmErr.message);
+                }
             }
 
             res.json({

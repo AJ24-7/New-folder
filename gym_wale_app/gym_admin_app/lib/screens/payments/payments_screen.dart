@@ -14,6 +14,7 @@ import '../dashboard/dashboard_screen.dart';
 import '../members/members_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../equipment/equipment_screen.dart';
+import '../offers/offers_screen.dart';
 import '../support/support_screen.dart';
 
 /// Payment Management Screen for Gym Admin App
@@ -55,71 +56,89 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   @override
   void initState() {
     super.initState();
-    _checkPasscodeAndLoad();
+    // Delay passcode check until after first frame to avoid assertion errors
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPasscodeAndLoad();
+    });
   }
 
   Future<void> _checkPasscodeAndLoad() async {
     try {
       final settings = await _passcodeService.getPasscodeSettings();
-      final passcodeEnabled = settings['passcodeEnabled'] ?? false;
-      final passcodeType = settings['passcodeType'] ?? 'none';
+      final passcodeEnabled = settings['enabled'] ?? false;
+      final passcodeType = settings['type'] ?? 'none';
+      final hasPasscode = settings['hasPasscode'] ?? false;
       
       // Check if passcode is required for payments
-      if (passcodeEnabled && passcodeType == 'payments') {
-        setState(() => _checkingPasscode = true);
-        
-        // Show passcode dialog
+      if (passcodeEnabled && passcodeType == 'payments' && hasPasscode) {
+        // Only show dialog if passcode is actually set
         if (mounted) {
+          setState(() => _checkingPasscode = true);
+          
           final passcode = await PasscodeDialog.show(
             context,
             title: 'Payments Access',
             subtitle: 'Enter passcode to access payments',
             isSetup: false,
-            dismissible: false,
+            dismissible: true,
+            onVerify: (enteredPasscode) async {
+              // Verify the passcode
+              return await _passcodeService.verifyPasscode(enteredPasscode);
+            },
           );
 
-          if (passcode != null) {
-            // Verify the passcode
-            final isValid = await _passcodeService.verifyPasscode(passcode);
-            
-            if (isValid) {
-              setState(() => _checkingPasscode = false);
-              _loadPaymentData();
-            } else {
-              // Invalid passcode, navigate back
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Invalid passcode')),
-                );
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                );
-              }
-            }
+          if (passcode != null && mounted) {
+            // Passcode verified successfully - prepare for data loading
+            setState(() {
+              _checkingPasscode = false;
+            });
+            // Use microtask to ensure UI updates before loading data
+            Future.microtask(() => _loadPaymentData());
           } else {
-            // Passcode dialog dismissed, navigate back
+            // Passcode dialog cancelled, navigate back to previous screen
             if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const DashboardScreen()),
-              );
+              Navigator.pop(context);
             }
           }
         }
+      } else if (passcodeEnabled && passcodeType == 'payments' && !hasPasscode) {
+        // Passcode is enabled but not set yet - show error and navigate back
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please set up a passcode in Settings first'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          Navigator.pop(context);
+        }
       } else {
         // No passcode required, load data directly
-        setState(() => _checkingPasscode = false);
-        _loadPaymentData();
+        if (mounted) {
+          setState(() {
+            _checkingPasscode = false;
+          });
+          // Use microtask to ensure UI updates before loading data
+          Future.microtask(() => _loadPaymentData());
+        }
       }
     } catch (e) {
+      print('Error checking passcode: $e');
       // If error checking passcode settings, allow access
-      setState(() => _checkingPasscode = false);
-      _loadPaymentData();
+      if (mounted) {
+        setState(() {
+          _checkingPasscode = false;
+        });
+        // Use microtask to ensure UI updates before loading data
+        Future.microtask(() => _loadPaymentData());
+      }
     }
   }
 
   Future<void> _loadPaymentData() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
       _hasError = false;
@@ -137,6 +156,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         filter: _recurringFilter,
       );
 
+      if (!mounted) return;
+      
       setState(() {
         _stats = stats;
         _chartData = chartData;
@@ -146,6 +167,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+      
       setState(() {
         _hasError = true;
         _errorMessage = e.toString();
@@ -175,7 +198,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     
     // Navigate to different screens based on index
     switch (index) {
-      case 0: // Dashboard
+      case 0: // Home
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -216,8 +239,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         );
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support & Reviews
@@ -229,7 +256,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         );
         break;
       case 8: // Settings
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
     }
   }
@@ -292,10 +319,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   Widget _buildAppBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final isTablet = size.width > 600 && size.width <= 900;
+    
     return Container(
       padding: EdgeInsets.only(
-        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
-        bottom: 16,
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
         left: isDesktop ? 24 : 12,
         right: isDesktop ? 24 : 12,
       ),
@@ -318,30 +349,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 4),
-          Flexible(
+          Expanded(
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const FaIcon(
-                    FontAwesomeIcons.creditCard,
-                    color: AppTheme.primaryColor,
-                    size: 18,
-                  ),
+                FaIcon(
+                  FontAwesomeIcons.creditCard,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
                 Flexible(
                   child: Text(
                     l10n.payments,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
-                      fontSize: isDesktop ? null : 16,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -349,20 +371,37 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               ],
             ),
           ),
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: _showAddPaymentDialog,
-            icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
-            label: Text(l10n.addPayment),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              padding: EdgeInsets.symmetric(
-                horizontal: isDesktop ? 20 : 12,
-                vertical: isDesktop ? 12 : 8,
+          const SizedBox(width: 8),
+          // Responsive add payment button
+          if (isDesktop)
+            ElevatedButton.icon(
+              onPressed: _showAddPaymentDialog,
+              icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
+              label: Text(l10n.addPayment),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
               ),
+            )
+          else if (!isMobile)
+            // Tablet: Icon button
+            IconButton(
+              onPressed: _showAddPaymentDialog,
+              icon: const FaIcon(FontAwesomeIcons.plus, size: 20),
+              tooltip: l10n.addPayment,
+              color: Colors.white,
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.all(12),
+              ),
+            )
+          else
+            // Mobile: Small FAB
+            FloatingActionButton.small(
+              onPressed: _showAddPaymentDialog,
+              backgroundColor: AppTheme.primaryColor,
+              child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 20),
             ),
-          ),
         ],
       ),
     );
@@ -550,58 +589,68 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     ),
                   ],
                 ),
-                Row(
-                  children: [
-                    // Month Dropdown
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
+                Flexible(
+                  child: Row(
+                    children: [
+                      // Month Dropdown
+                      Flexible(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<int>(
+                            value: _selectedMonth,
+                            underline: const SizedBox.shrink(),
+                            isExpanded: true,
+                            items: List.generate(12, (index) => index + 1)
+                                .map((month) => DropdownMenuItem(
+                                      value: month,
+                                      child: Text(DateFormat.MMMM().format(DateTime(2000, month))),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedMonth = value);
+                                _loadChartData();
+                              }
+                            },
+                          ),
+                        ),
                       ),
-                      child: DropdownButton<int>(
-                        value: _selectedMonth,
-                        underline: const SizedBox.shrink(),
-                        items: List.generate(12, (index) => index + 1)
-                            .map((month) => DropdownMenuItem(
-                                  value: month,
-                                  child: Text(DateFormat.MMMM().format(DateTime(2000, month))),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedMonth = value);
-                            _loadChartData();
-                          }
-                        },
+                      const SizedBox(width: 12),
+                      // Year Dropdown
+                      Flexible(
+                        flex: 1,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButton<int>(
+                            value: _selectedYear,
+                            underline: const SizedBox.shrink(),
+                            isExpanded: true,
+                            items: List.generate(5, (index) => DateTime.now().year - 2 + index)
+                                .map((year) => DropdownMenuItem(
+                                      value: year,
+                                      child: Text(year.toString()),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() => _selectedYear = value);
+                                _loadChartData();
+                              }
+                            },
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    // Year Dropdown
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade300),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: DropdownButton<int>(
-                        value: _selectedYear,
-                        underline: const SizedBox.shrink(),
-                        items: List.generate(5, (index) => DateTime.now().year - 2 + index)
-                            .map((year) => DropdownMenuItem(
-                                  value: year,
-                                  child: Text(year.toString()),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _selectedYear = value);
-                            _loadChartData();
-                          }
-                        },
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1127,26 +1176,32 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       color: AppTheme.textSecondaryColor,
                     ),
                     const SizedBox(width: 4),
-                    Text(
-                      DateFormat('dd MMM yyyy').format(payment.createdAt),
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: AppTheme.textSecondaryColor,
+                    Flexible(
+                      child: Text(
+                        DateFormat('dd MMM yyyy').format(payment.createdAt),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppTheme.textSecondaryColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 12),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        payment.status.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          color: statusColor,
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          payment.status.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: statusColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ),
@@ -1156,35 +1211,42 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             ),
           ),
           
+          const SizedBox(width: 8),
+          
           // Amount
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '${isReceived ? '+' : '-'}${_currencyFormat.format(payment.amount)}',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  color: color,
-                ),
-              ),
-              if (showMarkPaid && payment.isPending) ...[
-                const SizedBox(height: 4),
-                SizedBox(
-                  height: 28,
-                  child: ElevatedButton(
-                    onPressed: () => _markPaymentAsPaid(payment.id!),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.successColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      minimumSize: const Size(0, 28),
-                    ),
-                    child: const Text('Mark Paid', style: TextStyle(fontSize: 10)),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${isReceived ? '+' : '-'}${_currencyFormat.format(payment.amount)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: color,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.right,
                 ),
+                if (showMarkPaid && payment.isPending) ...[
+                  const SizedBox(height: 4),
+                  SizedBox(
+                    height: 28,
+                    child: ElevatedButton(
+                      onPressed: () => _markPaymentAsPaid(payment.id!),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.successColor,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        minimumSize: const Size(0, 28),
+                      ),
+                      child: const Text('Mark Paid', style: TextStyle(fontSize: 10)),
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ],
       ),
@@ -1197,6 +1259,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         month: _selectedMonth,
         year: _selectedYear,
       );
+      if (!mounted) return;
       setState(() => _chartData = chartData);
     } catch (e) {
       debugPrint('Error loading chart data: $e');
@@ -1208,6 +1271,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       final payments = await _paymentService.getRecurringPayments(
         filter: _recurringFilter,
       );
+      if (!mounted) return;
       setState(() => _recurringPayments = payments);
     } catch (e) {
       debugPrint('Error loading recurring payments: $e');
@@ -1218,10 +1282,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     try {
       await _paymentService.markPaymentAsPaid(paymentId: paymentId);
       _refreshData();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Payment marked as paid')),
       );
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}')),
       );
@@ -1844,37 +1910,43 @@ class _AllPaymentsDialog extends StatelessWidget {
                       ],
                     ),
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${isReceived ? '+' : '-'}${currencyFormat.format(payment.amount)}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: color,
-                        ),
-                      ),
-                      if (showMarkPaid && payment.isPending && onMarkPaid != null) ...[
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          height: 28,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              onMarkPaid!(payment.id!);
-                              Navigator.pop(context);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.successColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              minimumSize: const Size(0, 28),
-                            ),
-                            child: const Text('Mark Paid', style: TextStyle(fontSize: 10)),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${isReceived ? '+' : '-'}${currencyFormat.format(payment.amount)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                            color: color,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.right,
                         ),
+                        if (showMarkPaid && payment.isPending && onMarkPaid != null) ...[
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            height: 28,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                onMarkPaid!(payment.id!);
+                                Navigator.pop(context);
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.successColor,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 8),
+                                minimumSize: const Size(0, 28),
+                              ),
+                              child: const Text('Mark Paid', style: TextStyle(fontSize: 10)),
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),

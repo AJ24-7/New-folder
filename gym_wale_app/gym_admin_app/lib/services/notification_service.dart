@@ -18,6 +18,63 @@ class NotificationService {
     };
   }
 
+  /// Register FCM token with backend
+  Future<bool> registerFCMToken(String fcmToken) async {
+    try {
+      final headers = await _getHeaders();
+      final body = json.encode({
+        'fcmToken': fcmToken,
+        'platform': 'admin_app',
+      });
+
+      print('📤 Registering FCM token with backend...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/admin/fcm-token'),
+        headers: headers,
+        body: body,
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ FCM token registered successfully');
+        return true;
+      } else {
+        print('❌ Failed to register FCM token: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error registering FCM token: $e');
+      return false;
+    }
+  }
+
+  /// Unregister FCM token from backend
+  Future<bool> unregisterFCMToken() async {
+    try {
+      final headers = await _getHeaders();
+      final fcmToken = _storage.getFCMToken();
+      
+      if (fcmToken == null) return true;
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/admin/fcm-token'),
+        headers: headers,
+        body: json.encode({'fcmToken': fcmToken}),
+      );
+
+      if (response.statusCode == 200) {
+        print('✅ FCM token unregistered successfully');
+        await _storage.deleteFCMToken();
+        return true;
+      } else {
+        print('❌ Failed to unregister FCM token: ${response.statusCode}');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error unregistering FCM token: $e');
+      return false;
+    }
+  }
+
   /// Get all notifications with filters and pagination
   /// Uses unified endpoint /notifications/all (same as Support Tab)
   Future<Map<String, dynamic>> getNotifications({

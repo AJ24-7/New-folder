@@ -14,6 +14,7 @@ import '../../config/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/locale_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/gym_service.dart';
 import '../../services/equipment_service.dart';
@@ -27,13 +28,14 @@ import '../../utils/icon_mapper.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../attendance/attendance_screen.dart';
+import '../offers/offers_screen.dart';
 import '../qr_code/qr_code_template_screen.dart';
 import '../../widgets/stat_card.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/notification_bell.dart';
 import '../../widgets/notification_quick_actions.dart';
 
-/// Comprehensive Dashboard Screen for Gym Admin App
+/// Comprehensive Home Dashboard Screen for Gym Admin App
 /// Features: Stats cards, quick actions, membership plans, new members,
 /// trial bookings, attendance charts, gym photos, activities, equipment gallery
 class DashboardScreen extends StatefulWidget {
@@ -86,6 +88,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    _initializeFCM();
+  }
+
+  /// Initialize Firebase Cloud Messaging
+  Future<void> _initializeFCM() async {
+    try {
+      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      await notificationProvider.initializeFCM();
+      debugPrint('✅ [Dashboard] FCM initialized');
+    } catch (e) {
+      debugPrint('❌ [Dashboard] Error initializing FCM: $e');
+    }
   }
 
   Future<void> _loadDashboardData() async {
@@ -341,8 +355,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        // Navigate to Offers screen with proper screen replacement
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support & Reviews
@@ -357,7 +376,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
         break;
       case 8: // Settings
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
     }
   }
@@ -372,9 +391,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final localeProvider = Provider.of<LocaleProvider>(context);
     final admin = authProvider.currentAdmin;
     final l10n = AppLocalizations.of(context)!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
       body: Row(
         children: [
           // Sidebar
@@ -432,10 +453,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     LocaleProvider localeProvider,
   ) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    
     return Container(
       padding: EdgeInsets.only(
-        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
-        bottom: 16,
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
         left: isDesktop ? 24 : 12,
         right: isDesktop ? 24 : 12,
       ),
@@ -458,19 +482,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 4),
-          Flexible(
+          Expanded(
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                const FaIcon(FontAwesomeIcons.gaugeHigh, color: AppTheme.primaryColor, size: 18),
-                const SizedBox(width: 8),
+                FaIcon(
+                  FontAwesomeIcons.gaugeHigh,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
+                ),
+                const SizedBox(width: 12),
                 Flexible(
                   child: Text(
-                    l10n.dashboardOverview,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    l10n.dashboardOverview, // "Home Overview"
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
-                      fontSize: isDesktop ? null : 16,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -478,7 +504,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           // Notification Bell
           const NotificationBell(),
           SizedBox(width: isDesktop ? 16 : 8),

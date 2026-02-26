@@ -11,6 +11,7 @@ const sendEmail = require('../utils/sendEmail');
 const gymController = require('../controllers/gymController');
 const membershipPlanController = require('../controllers/membershipPlanController');
 const gymSettingsController = require('../controllers/gymSettingsController');
+const attendanceSettingsController = require('../controllers/attendanceSettingsController');
 const { getGymInfo } = require('../controllers/qrRegistrationController');
 
 // Import middleware
@@ -54,6 +55,9 @@ router.post('/settings/verify-passcode', gymadminAuth, gymSettingsController.ver
 
 // Get gym settings by gym ID (public endpoint for user app)
 router.get('/:gymId/settings', gymSettingsController.getGymSettingsById);
+
+// Get gym attendance settings (public endpoint for user app)
+router.get('/:gymId/attendance-settings', attendanceSettingsController.getAttendanceSettingsForMember);
 
 // --- QR Code Registration API ---
 // Get gym info for QR code registration (public endpoint)

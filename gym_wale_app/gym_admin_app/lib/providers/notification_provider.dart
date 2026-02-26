@@ -1,16 +1,24 @@
 // lib/providers/notification_provider.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../models/notification.dart';
 import '../services/notification_service.dart';
+import '../services/firebase_messaging_service.dart';
 
 class NotificationProvider with ChangeNotifier {
   final NotificationService _notificationService = NotificationService();
+  final FirebaseMessagingService _fcmService = FirebaseMessagingService();
 
   List<GymNotification> _notifications = [];
   int _unreadCount = 0;
   bool _isLoading = false;
   String? _error;
   NotificationStats _stats = NotificationStats.empty();
+  
+  bool _fcmInitialized = false;
+  StreamSubscription<RemoteMessage>? _messageSubscription;
+  StreamSubscription<String>? _tokenSubscription;
 
   // Filters
   String _typeFilter = 'all';
@@ -27,6 +35,7 @@ class NotificationProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   NotificationStats get stats => _stats;
+  bool get fcmInitialized => _fcmInitialized;
   
   String get typeFilter => _typeFilter;
   String get priorityFilter => _priorityFilter;
@@ -44,6 +53,82 @@ class NotificationProvider with ChangeNotifier {
   List<GymNotification> get recentNotifications {
     final yesterday = DateTime.now().subtract(const Duration(days: 1));
     return _notifications.where((n) => n.createdAt.isAfter(yesterday)).toList();
+  }
+
+  /// Initialize Firebase Cloud Messaging
+  Future<void> initializeFCM() async {
+    if (_fcmInitialized) {
+      debugPrint('🔔 [NotifProvider] FCM already initialized');
+      return;
+    }
+
+    try {
+      debugPrint('🔔 [NotifProvider] Initializing FCM...');
+      
+      // Initialize Firebase Messaging Service
+      await _fcmService.initialize();
+      
+      // Get FCM token and register with backend
+      final fcmToken = _fcmService.fcmToken;
+      if (fcmToken != null) {
+        await _notificationService.registerFCMToken(fcmToken);
+      }
+      
+      // Listen to incoming messages
+      _messageSubscription = _fcmService.onMessage.listen((RemoteMessage message) {
+        debugPrint('🔔 [NotifProvider] New message received');
+        _handleIncomingMessage(message);
+      });
+      
+      // Listen to token refresh
+      _tokenSubscription = _fcmService.onTokenRefresh.listen((String newToken) {
+        debugPrint('🔔 [NotifProvider] Token refreshed');
+        _notificationService.registerFCMToken(newToken);
+      });
+      
+      _fcmInitialized = true;
+      debugPrint('✅ [NotifProvider] FCM initialized successfully');
+      notifyListeners();
+    } catch (e) {
+      debugPrint('❌ [NotifProvider] Error initializing FCM: $e');
+      _error = 'Failed to initialize notifications: $e';
+      notifyListeners();
+    }
+  }
+
+  /// Handle incoming FCM message
+  void _handleIncomingMessage(RemoteMessage message) {
+    debugPrint('🔔 [NotifProvider] Handling incoming message: ${message.data}');
+    
+    // Refresh notifications to get the latest from server
+    loadNotifications(refresh: true);
+    loadUnreadCount();
+    
+    // You can also add the notification directly if it matches the expected format
+    // This would provide instant UI update without waiting for server fetch
+  }
+
+  /// Unregister FCM token (call on logout)
+  Future<void> unregisterFCM() async {
+    try {
+      await _notificationService.unregisterFCMToken();
+      await _messageSubscription?.cancel();
+      await _tokenSubscription?.cancel();
+      _fcmInitialized = false;
+      debugPrint('✅ [NotifProvider] FCM unregistered');
+    } catch (e) {
+      debugPrint('❌ [NotifProvider] Error unregistering FCM: $e');
+    }
+  }
+
+  /// Check if notifications are enabled
+  Future<bool> areNotificationsEnabled() async {
+    return await _fcmService.areNotificationsEnabled();
+  }
+
+  /// Request notification permissions
+  Future<bool> requestNotificationPermissions() async {
+    return await _fcmService.requestPermissions();
   }
 
   /// Load notifications with current filters
@@ -318,5 +403,13 @@ class NotificationProvider with ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _messageSubscription?.cancel();
+    _tokenSubscription?.cancel();
+    _fcmService.dispose();
+    super.dispose();
   }
 }

@@ -1,7 +1,75 @@
 const Payment = require('../models/Payment');
 const Member = require('../models/Member');
+const Notification = require('../models/Notification');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+
+// Helper function to create payment notification
+const createPaymentNotification = async (gymId, paymentData, type = 'received') => {
+  try {
+    let title = '';
+    let message = '';
+    let notificationType = 'payment';
+    let priority = 'normal';
+
+    if (type === 'received') {
+      title = '💰 Payment Received';
+      message = `₹${paymentData.amount.toLocaleString('en-IN')} received from ${paymentData.memberName || 'Member'}`;
+      if (paymentData.registrationSource) {
+        const sourceMap = {
+          'offline': 'Offline Registration',
+          'online_membership': 'Online Membership',
+          'qr_registration': 'QR Code Registration',
+          'cash_validation': 'Cash Validation',
+          'manual': 'Manual Entry',
+          'app': 'Mobile App'
+        };
+        message += ` via ${sourceMap[paymentData.registrationSource] || paymentData.registrationSource}`;
+      }
+      if (paymentData.planSelected) {
+        message += ` - ${paymentData.planSelected}`;
+      }
+    } else if (type === 'paid') {
+      title = '💸 Payment Made';
+      message = `₹${paymentData.amount.toLocaleString('en-IN')} paid for ${paymentData.description}`;
+    } else if (type === 'pending') {
+      title = '⏳ Payment Pending';
+      message = `₹${paymentData.amount.toLocaleString('en-IN')} pending from ${paymentData.memberName || 'Member'}`;
+      priority = 'high';
+    } else if (type === 'due') {
+      title = '⚠️ Payment Due';
+      message = `₹${paymentData.amount.toLocaleString('en-IN')} due - ${paymentData.description}`;
+      priority = 'high';
+    }
+
+    const notification = new Notification({
+      user: gymId,
+      title,
+      message,
+      type: notificationType,
+      priority,
+      read: false,
+      isRead: false,
+      metadata: {
+        paymentId: paymentData._id,
+        amount: paymentData.amount,
+        paymentMethod: paymentData.paymentMethod,
+        registrationSource: paymentData.registrationSource,
+        memberName: paymentData.memberName,
+        memberId: paymentData.memberId,
+        category: paymentData.category
+      }
+    });
+
+    await notification.save();
+    console.log('✅ Payment notification created:', title);
+    return notification;
+  } catch (error) {
+    console.error('❌ Error creating payment notification:', error);
+    // Don't throw error to prevent payment creation failure
+    return null;
+  }
+};
 
 // Cash payment validation model (can be moved to separate file)
 const CashValidation = mongoose.model('CashValidation', new mongoose.Schema({
@@ -250,20 +318,28 @@ const approveCashValidation = async (req, res) => {
     
     // Create payment record
     const payment = new Payment({
-      memberId: member ? member._id : validation.memberId,
-      amount: validation.amount,
-      type: 'received',
-      method: 'cash',
-      status: 'completed',
-      planName: validation.planName,
-      duration: validation.duration,
-      validationCode: validation.validationCode,
-      createdAt: new Date(),
       gymId: gymId,
-      memberName: validation.memberData?.memberName || 'Cash Payment'
+      memberId: member ? member._id : validation.memberId,
+      memberName: validation.memberData?.memberName || 'Cash Payment',
+      type: 'received',
+      category: 'membership',
+      amount: validation.amount,
+      description: `Cash validation payment - ${validation.planName}`,
+      paymentMethod: 'cash',
+      status: 'completed',
+      registrationSource: 'cash_validation',
+      planSelected: validation.planName,
+      monthlyPlan: `${validation.duration} Month${validation.duration > 1 ? 's' : ''}`,
+      transactionId: validation.validationCode,
+      paidDate: new Date(),
+      createdBy: adminId
     });
     
     await payment.save();
+    console.log('✅ Payment record created for cash validation');
+    
+    // Create notification for gym admin
+    await createPaymentNotification(gymId, payment, 'received');
     
     // Send welcome email if member was created
     if (member && validation.memberData) {
@@ -795,6 +871,9 @@ const addPayment = async (req, res) => {
 
     await payment.save();
 
+    // Create notification for this payment
+    await createPaymentNotification(gymId, payment, type);
+
     // Update member payment status if this is a membership payment
     if (category === 'membership' && memberId) {
       try {
@@ -927,6 +1006,9 @@ const markPaymentAsPaid = async (req, res) => {
 
       await nextPayment.save();
     }
+
+    // Create notification for payment completion
+    await createPaymentNotification(gymId, payment, newType);
 
     res.json({
       success: true,

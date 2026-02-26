@@ -15,6 +15,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
+import '../offers/offers_screen.dart';
 
 class MembersScreen extends StatefulWidget {
   const MembersScreen({super.key});
@@ -263,7 +264,7 @@ class _MembersScreenState extends State<MembersScreen> {
     // Navigate to different screens based on index
     // Using pushReplacementNamed to properly replace current screen
     switch (index) {
-      case 0: // Dashboard
+      case 0: // Home
         Navigator.pushReplacementNamed(context, '/dashboard');
         break;
       case 1: // Members
@@ -289,8 +290,12 @@ class _MembersScreenState extends State<MembersScreen> {
         );
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support & Reviews
@@ -305,7 +310,7 @@ class _MembersScreenState extends State<MembersScreen> {
         );
         break;
       case 8: // Settings
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
     }
   }
@@ -315,9 +320,11 @@ class _MembersScreenState extends State<MembersScreen> {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 900;
     final l10n = AppLocalizations.of(context)!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
       body: Row(
         children: [
           if (isDesktop)
@@ -355,6 +362,10 @@ class _MembersScreenState extends State<MembersScreen> {
 
   Widget _buildTopBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final isTablet = size.width > 600 && size.width <= 900;
+    
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -381,17 +392,30 @@ class _MembersScreenState extends State<MembersScreen> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          const Row(
-            children: [
-              FaIcon(FontAwesomeIcons.users, color: AppTheme.primaryColor),
-              SizedBox(width: 12),
-              Text(
-                'All Members',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-              ),
-            ],
+          Expanded(
+            child: Row(
+              children: [
+                FaIcon(
+                  FontAwesomeIcons.users,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    'All Members',
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
+          // Responsive action buttons
           if (isDesktop) ...[
             ElevatedButton.icon(
               onPressed: _showAddMemberDialog,
@@ -404,6 +428,71 @@ class _MembersScreenState extends State<MembersScreen> {
               icon: const FaIcon(FontAwesomeIcons.userMinus, size: 16),
               label: const Text('Remove Members'),
               style: OutlinedButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            ),
+          ] else if (isTablet) ...[
+            // Tablet: Show compact icon buttons
+            IconButton(
+              onPressed: _showAddMemberDialog,
+              icon: const FaIcon(FontAwesomeIcons.userPlus, size: 20),
+              tooltip: 'Add Member',
+              color: Colors.white,
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _showRemoveMembersMenu,
+              icon: const FaIcon(FontAwesomeIcons.userMinus, size: 20),
+              tooltip: 'Remove Members',
+              color: AppTheme.errorColor,
+              style: IconButton.styleFrom(
+                side: const BorderSide(color: AppTheme.errorColor),
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
+          ] else ...[
+            // Mobile: Show menu with actions
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              tooltip: 'More actions',
+              onSelected: (value) {
+                switch (value) {
+                  case 'add':
+                    _showAddMemberDialog();
+                    break;
+                  case 'remove':
+                    _showRemoveMembersMenu();
+                    break;
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'add',
+                  child: Row(
+                    children: [
+                      FaIcon(FontAwesomeIcons.userPlus, size: 18),
+                      SizedBox(width: 12),
+                      Text('Add Member'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'remove',
+                  child: Row(
+                    children: [
+                      FaIcon(
+                        FontAwesomeIcons.userMinus,
+                        size: 18,
+                        color: AppTheme.errorColor,
+                      ),
+                      SizedBox(width: 12),
+                      Text('Remove Members'),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ],

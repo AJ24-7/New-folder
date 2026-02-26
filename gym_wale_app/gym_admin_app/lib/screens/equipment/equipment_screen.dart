@@ -13,6 +13,7 @@ import '../../services/equipment_service.dart';
 import '../../widgets/stat_card.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../offers/offers_screen.dart';
 import '../members/members_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../support/support_screen.dart';
@@ -148,7 +149,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
     
     // Navigate to different screens based on index
     switch (index) {
-      case 0: // Dashboard
+      case 0: // Home
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -184,8 +185,12 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         // Already on equipment screen, do nothing
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support & Reviews
@@ -199,7 +204,7 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
         );
         break;
       case 8: // Settings
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
     }
   }
@@ -210,9 +215,11 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 1024;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
       body: Row(
         children: [
           // Sidebar
@@ -263,12 +270,16 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
 
   Widget _buildTopBar(BuildContext context, AppLocalizations l10n, bool isDesktop) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final isTablet = size.width > 600 && size.width <= 900;
+    
     return Container(
       padding: EdgeInsets.only(
-        top: isDesktop ? 12 : (topPadding > 0 ? topPadding + 8 : 12),
-        bottom: 12,
-        left: isDesktop ? 16 : 12,
-        right: isDesktop ? 16 : 12,
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -289,32 +300,58 @@ class _EquipmentScreenState extends State<EquipmentScreen> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 4),
-          const Icon(
-            Icons.fitness_center,
-            color: AppTheme.primaryColor,
-            size: 24,
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              l10n.equipment,
-              style: TextStyle(
-                fontSize: isDesktop ? 24 : 18,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.fitness_center,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    l10n.equipment,
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
+          const SizedBox(width: 8),
+          // Responsive add button
           if (isDesktop)
             ElevatedButton.icon(
               onPressed: () => _showAddEquipmentDialog(),
-              icon: const Icon(Icons.add),
+              icon: const Icon(Icons.add, size: 20),
               label: Text(l10n.addEquipment),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
                 foregroundColor: Colors.white,
               ),
+            )
+          else if (!isMobile)
+            // Tablet: Icon button with background
+            IconButton(
+              onPressed: () => _showAddEquipmentDialog(),
+              icon: const Icon(Icons.add, size: 24),
+              tooltip: l10n.addEquipment,
+              color: Colors.white,
+              style: IconButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.all(12),
+              ),
+            )
+          else
+            // Mobile: FAB-style icon button
+            FloatingActionButton.small(
+              onPressed: () => _showAddEquipmentDialog(),
+              backgroundColor: AppTheme.primaryColor,
+              child: const Icon(Icons.add, color: Colors.white),
             ),
         ],
       ),

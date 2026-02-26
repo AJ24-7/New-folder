@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/locale_provider.dart';
@@ -21,10 +23,23 @@ import 'screens/settings/gym_profile_screen.dart';
 import 'screens/support/support_screen.dart';
 import 'services/storage_service.dart';
 import 'services/passcode_service.dart';
+import 'services/firebase_messaging_service.dart';
 import 'widgets/passcode_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Firebase
+  try {
+    await Firebase.initializeApp();
+    debugPrint('✅ Firebase initialized successfully');
+    
+    // Set background message handler
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    debugPrint('✅ Background message handler registered');
+  } catch (e) {
+    debugPrint('❌ Error initializing Firebase: $e');
+  }
   
   // Initialize storage
   await StorageService().init();
@@ -143,11 +158,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     
     try {
       final settings = await _passcodeService.getPasscodeSettings();
-      final passcodeEnabled = settings['passcodeEnabled'] ?? false;
-      final passcodeType = settings['passcodeType'] ?? 'none';
+      final passcodeEnabled = settings['enabled'] ?? false;
+      final passcodeType = settings['type'] ?? 'none';
+      final hasPasscode = settings['hasPasscode'] ?? false;
       
       if (mounted) {
-        final requiresPasscode = passcodeEnabled && passcodeType == 'app';
+        final requiresPasscode = passcodeEnabled && passcodeType == 'app' && hasPasscode;
         
         setState(() {
           _passcodeRequired = requiresPasscode;
@@ -181,31 +197,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
       title: 'Enter Passcode',
       subtitle: 'Enter your passcode to continue',
       isSetup: false,
-      dismissible: false,
+      dismissible: true, // Show cancel button to allow logout
+      onVerify: (code) async {
+        return await _passcodeService.verifyPasscode(code);
+      },
     );
 
     if (!mounted) return;
 
     if (passcode != null) {
-      // Verify the passcode
-      final isValid = await _passcodeService.verifyPasscode(passcode);
-      
-      if (isValid) {
-        if (mounted) {
-          setState(() => _passcodeVerified = true);
-        }
-      } else {
-        // If verification failed, show error and log out
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Invalid passcode')),
-          );
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          authProvider.logout();
-        }
+      // Passcode verified successfully
+      if (mounted) {
+        setState(() => _passcodeVerified = true);
       }
     } else {
-      // If dialog was dismissed, log out
+      // If dialog was dismissed/cancelled, log out
       if (mounted) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
         authProvider.logout();

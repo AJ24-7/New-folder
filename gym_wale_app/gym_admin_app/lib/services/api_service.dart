@@ -181,7 +181,64 @@ class ApiService {
       }
       return [];
     } catch (e) {
+      print('Error fetching offers: $e');
       return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getOfferStats() async {
+    try {
+      final response = await _dio.get('${ApiConfig.offers}/stats');
+      if (response.statusCode == 200) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching offer stats: $e');
+      return null;
+    }
+  }
+
+  Future<bool> createOffer(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post(ApiConfig.offers, data: data);
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print('Error creating offer: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateOffer(String offerId, Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.put('${ApiConfig.offers}/$offerId', data: data);
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating offer: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteOffer(String offerId) async {
+    try {
+      final response = await _dio.delete('${ApiConfig.offers}/$offerId');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error deleting offer: $e');
+      return false;
+    }
+  }
+
+  Future<bool> toggleOfferStatus(String offerId, String action) async {
+    try {
+      final response = await _dio.patch(
+        '${ApiConfig.offers}/$offerId/toggle',
+        data: {'action': action},
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error toggling offer status: $e');
+      return false;
     }
   }
 
@@ -193,7 +250,38 @@ class ApiService {
       }
       return [];
     } catch (e) {
+      print('Error fetching coupons: $e');
       return [];
+    }
+  }
+
+  Future<bool> createCoupon(Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.post(ApiConfig.coupons, data: data);
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      print('Error creating coupon: $e');
+      return false;
+    }
+  }
+
+  Future<bool> updateCoupon(String couponId, Map<String, dynamic> data) async {
+    try {
+      final response = await _dio.put('${ApiConfig.coupons}/$couponId', data: data);
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error updating coupon: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteCoupon(String couponId) async {
+    try {
+      final response = await _dio.delete('${ApiConfig.coupons}/$couponId');
+      return response.statusCode == 200;
+    } catch (e) {
+      print('Error deleting coupon: $e');
+      return false;
     }
   }
 

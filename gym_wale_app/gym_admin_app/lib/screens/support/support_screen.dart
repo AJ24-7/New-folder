@@ -11,6 +11,7 @@ import '../../widgets/support/reviews_tab.dart';
 import '../../widgets/support/grievances_tab.dart';
 import '../../widgets/support/communications_tab.dart';
 import '../equipment/equipment_screen.dart';
+import '../offers/offers_screen.dart';
 
 class SupportScreen extends StatefulWidget {
   final String gymId;
@@ -150,7 +151,7 @@ class _SupportScreenState extends State<SupportScreen>
     // Navigate to different screens based on index
     // Using pushReplacementNamed to properly replace current screen
     switch (index) {
-      case 0: // Dashboard
+      case 0: // Home
         Navigator.pushReplacementNamed(context, '/dashboard');
         break;
       case 1: // Members
@@ -176,15 +177,19 @@ class _SupportScreenState extends State<SupportScreen>
         );
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support
         // Already on support screen, do nothing
         break;
       case 8: // Settings
-        Navigator.pushNamed(context, '/settings');
+        Navigator.pushReplacementNamed(context, '/settings');
         break;
     }
   }
@@ -236,12 +241,15 @@ class _SupportScreenState extends State<SupportScreen>
   Widget _buildTopBar(BuildContext context, bool isDesktop) {
     final l10n = AppLocalizations.of(context)!;
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    
     return Container(
       padding: EdgeInsets.only(
-        top: isDesktop ? 12 : (topPadding > 0 ? topPadding + 8 : 12),
-        bottom: 12,
-        left: isDesktop ? 16 : 12,
-        right: isDesktop ? 16 : 12,
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
+        left: isDesktop ? 24 : 12,
+        right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
@@ -262,28 +270,33 @@ class _SupportScreenState extends State<SupportScreen>
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 4),
-          const FaIcon(
-            FontAwesomeIcons.headset,
-            color: AppTheme.primaryColor,
-            size: 20,
-          ),
-          const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              l10n.support, // "Support & Reviews"
-              style: TextStyle(
-                fontSize: isDesktop ? 24 : 18,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                FaIcon(
+                  FontAwesomeIcons.headset,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    l10n.support, // "Support & Reviews"
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(width: 8),
           IconButton(
             icon: Icon(
               _autoRefreshEnabled ? Icons.sync : Icons.sync_disabled,
-              size: 20,
+              size: isMobile ? 20 : 24,
             ),
             onPressed: () {
               setState(() {
@@ -298,7 +311,7 @@ class _SupportScreenState extends State<SupportScreen>
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
+            icon: Icon(Icons.refresh, size: isMobile ? 20 : 24),
             onPressed: _loadAllData,
             tooltip: '${l10n.refresh} now',
             padding: EdgeInsets.zero,

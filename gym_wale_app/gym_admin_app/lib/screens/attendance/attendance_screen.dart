@@ -14,6 +14,7 @@ import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/stat_card.dart';
 import '../support/support_screen.dart';
+import '../offers/offers_screen.dart';
 import 'widgets/attendance_calendar.dart';
 import 'widgets/attendance_list_item.dart';
 import 'widgets/mark_attendance_dialog.dart';
@@ -102,7 +103,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (index == _selectedIndex) return;
     
     switch (index) {
-      case 0: // Dashboard
+      case 0: // Home
         Navigator.pushReplacementNamed(context, '/dashboard');
         break;
       case 1: // Members
@@ -123,8 +124,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         Navigator.pushReplacementNamed(context, '/equipment');
         break;
       case 6: // Offers
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7: // Support
@@ -149,9 +154,11 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final isDesktop = size.width > 900;
     final isTablet = size.width > 600 && size.width <= 900;
     final l10n = AppLocalizations.of(context)!;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       key: _scaffoldKey,
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
       body: Row(
         children: [
           if (isDesktop)
@@ -192,10 +199,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     bool isTablet,
   ) {
     final topPadding = MediaQuery.of(context).padding.top;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    
     return Container(
       padding: EdgeInsets.only(
-        top: isDesktop ? 16 : (topPadding > 0 ? topPadding + 8 : 12),
-        bottom: 16,
+        top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
+        bottom: isDesktop ? 24 : 16,
         left: isDesktop ? 24 : 12,
         right: isDesktop ? 24 : 12,
       ),
@@ -218,31 +228,36 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             ),
-          if (!isDesktop) const SizedBox(width: 4),
-          Icon(
-            FontAwesomeIcons.clipboardCheck,
-            color: AppTheme.primaryColor,
-            size: isDesktop ? 24 : 20,
-          ),
-          const SizedBox(width: 12),
-          Flexible(
-            child: Text(
-              'Attendance Management',
-              style: TextStyle(
-                fontSize: isDesktop ? 20 : 18,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
+          Expanded(
+            child: Row(
+              children: [
+                Icon(
+                  FontAwesomeIcons.clipboardCheck,
+                  color: AppTheme.primaryColor,
+                  size: isMobile ? 20 : 24,
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Text(
+                    'Attendance Management',
+                    style: TextStyle(
+                      fontSize: isMobile ? 18 : 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
-          const Spacer(),
-          // Settings button - now shown on all screen sizes
+          const SizedBox(width: 8),
+          // Settings button - responsive
           IconButton(
             icon: Badge(
               label: Text(_settings?.mode.toString().split('.').last.toUpperCase() ?? 'MANUAL'),
               backgroundColor: _getModeBadgeColor(),
               textColor: Colors.white,
-              child: Icon(Icons.settings, size: isDesktop ? 24 : 20),
+              child: Icon(Icons.settings, size: isMobile ? 20 : 24),
             ),
             onPressed: () {
               // Navigate to settings screen with attendance section

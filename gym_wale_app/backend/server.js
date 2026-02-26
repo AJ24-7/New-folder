@@ -4,6 +4,10 @@ const cors = require('cors');
 const path = require('path');
 require('dotenv').config();
 
+// Initialize Firebase Admin SDK (non-blocking — graceful if creds not set)
+const { initializeFirebase } = require('./config/firebase');
+initializeFirebase();
+
 const app = express();
 
 // Middleware - Enhanced CORS configuration
@@ -111,6 +115,11 @@ mongoose.connect(MONGODB_URI)
   
   // Initialize meal notification scheduler
   scheduleMealNotifications();
+  
+  // Initialize offer scheduler for auto-expiry
+  const { startOfferScheduler } = require('./services/offerScheduler');
+  startOfferScheduler();
+  console.log('✅ Offer Scheduler initialized for auto-expiry');
 })
 .catch(err => {
   console.error('❌ MongoDB Connection Error:', err.message);

@@ -1,7 +1,7 @@
 {
   "@@locale": "en",
   "appTitle": "Gym-Wale Admin",
-  "dashboard": "Dashboard",
+  "dashboard": "Home",
   "members": "Members",
   "activeMembers": "Active Members",
   "expiredMembers": "Expired Members",
@@ -23,7 +23,7 @@
   "settings": "Settings",
   "logout": "Logout",
   
-  "dashboardOverview": "Dashboard Overview",
+  "dashboardOverview": "Home Overview",
   "totalMembers": "Total Members",
   "activeMembers": "Active Members",
   "totalRevenue": "Total Revenue",

@@ -18,7 +18,9 @@ const {
   exportCoupons,
   getValidOffersByGym,
   validateCouponCode,
-  claimOffer
+  claimOffer,
+  trackCouponPayment,
+  getCouponUsageStats
 } = require('../controllers/offersController');
 
 // Middleware to verify admin authentication
@@ -248,5 +250,13 @@ router.get('/active', async (req, res) => {
     });
   }
 });
+
+// ==================== PAYMENT INTEGRATION ====================
+
+// Track coupon usage with payment (gym admin)
+router.post('/track-payment', gymadminAuth, trackCouponPayment);
+
+// Get coupon usage statistics (gym admin)
+router.get('/usage-stats', gymadminAuth, getCouponUsageStats);
 
 module.exports = router;

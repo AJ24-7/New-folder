@@ -105,9 +105,17 @@ const userSchema = new mongoose.Schema({
     default: 'local'
   },
   workoutSchedule: {
-  type: Object, // or Map, or Mixed
-  default: {}
-}
+    type: Object, // or Map, or Mixed
+    default: {}
+  },
+
+  // FCM token for user app push notifications
+  fcmToken: {
+    token: { type: String, default: null },
+    platform: { type: String, default: 'user_app' },
+    registeredAt: { type: Date, default: null },
+    lastUsed: { type: Date, default: null },
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);

@@ -89,10 +89,10 @@ class _GeofenceSetupScreenState extends State<GeofenceSetupScreen> {
   Future<void> _loadCurrentLocation() async {
     if (!_hasPermission) return;
 
-    final position = await LocationPermissionService.getCurrentLocation();
-    if (position != null) {
+    final location = await LocationPermissionService.getCurrentLocation();
+    if (location != null) {
       setState(() {
-        _currentLocation = LatLng(position.latitude, position.longitude);
+        _currentLocation = location;
       });
       _mapController?.animateCamera(
         CameraUpdate.newLatLngZoom(_currentLocation, 17),

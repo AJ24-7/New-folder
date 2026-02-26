@@ -197,3 +197,66 @@ exports.resetAttendanceSettings = async (req, res) => {
     });
   }
 };
+
+/**
+ * Get attendance settings for member (public endpoint)
+ * Only returns necessary info for member app
+ * GET /api/gym/:gymId/attendance-settings
+ */
+exports.getAttendanceSettingsForMember = async (req, res) => {
+  try {
+    const { gymId } = req.params;
+
+    if (!gymId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gym ID is required'
+      });
+    }
+
+    // Find gym to verify it exists
+    const gym = await Gym.findById(gymId);
+    if (!gym) {
+      return res.status(404).json({
+        success: false,
+        message: 'Gym not found'
+      });
+    }
+
+    // Get attendance settings
+    let settings = await AttendanceSettings.findOne({ gym: gymId });
+
+    if (!settings) {
+      // Return default settings
+      return res.json({
+        success: true,
+        settings: {
+          mode: 'manual',
+          geofenceEnabled: false,
+          requiresBackgroundLocation: false
+        }
+      });
+    }
+
+    // Return only necessary fields for member app
+    const memberSettings = {
+      mode: settings.mode,
+      geofenceEnabled: settings.geofenceSettings?.enabled || false,
+      requiresBackgroundLocation: settings.geofenceSettings?.enabled || false,
+      autoMarkEnabled: settings.autoMarkEnabled || false
+    };
+
+    res.json({
+      success: true,
+      settings: memberSettings
+    });
+
+  } catch (error) {
+    console.error('[GET ATTENDANCE SETTINGS FOR MEMBER ERROR]', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to fetch attendance settings',
+      error: error.message
+    });
+  }
+};

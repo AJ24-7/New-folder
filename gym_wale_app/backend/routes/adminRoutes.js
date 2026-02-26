@@ -5,12 +5,14 @@ const upload = require('../middleware/upload');
 const path = require('path');
 const fs = require('fs');
 const adminAuth = require('../middleware/adminAuth');
+const gymadminAuth = require('../middleware/gymadminAuth');
 const adminController = require('../controllers/adminController');
 const unifiedAdminAuth = require('../controllers/unifiedAdminAuth');
 const communicationController = require('../controllers/communicationController');
 const sendEmail = require('../utils/sendEmail');
 const Notification = require('../models/Notification'); // Import Notification model
-const Admin = require('../models/admin'); 
+const Admin = require('../models/admin');
+const Gym = require('../models/gym');
 
 // Authentication Routes (Public) - Using Unified Admin Auth Controller
 router.post('/auth/login', unifiedAdminAuth.createRateLimiter(), unifiedAdminAuth.login.bind(unifiedAdminAuth));
@@ -1076,6 +1078,80 @@ router.get('/export/full', adminAuth, async (req, res) => {
   } catch (error) {
     console.error('Error exporting full data:', error);
     res.status(500).json({ success: false, message: 'Error exporting full data' });
+  }
+});
+
+// ============================================================
+// GYM ADMIN FCM TOKEN ROUTES (used by gym_admin_app Flutter)
+// ============================================================
+
+/**
+ * POST /api/admin/fcm-token
+ * Register / refresh an FCM device token for the authenticated gym admin.
+ * Body: { token: string, platform: 'android'|'ios', deviceInfo?: string }
+ */
+router.post('/fcm-token', gymadminAuth, async (req, res) => {
+  try {
+    const gymId = req.admin?.id || req.admin?.gymId;
+    const { token, platform = 'android', deviceInfo = '' } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'FCM token is required' });
+    }
+
+    // Remove any existing entry for this token (avoid duplicates), then push fresh
+    await Gym.updateOne(
+      { _id: gymId },
+      { $pull: { fcmTokens: { token } } }
+    );
+
+    await Gym.updateOne(
+      { _id: gymId },
+      {
+        $push: {
+          fcmTokens: {
+            token,
+            platform,
+            deviceInfo,
+            registeredAt: new Date(),
+            lastUsed: new Date(),
+          },
+        },
+      }
+    );
+
+    console.log(`✅ FCM token registered for gym ${gymId} (${platform})`);
+    res.json({ success: true, message: 'FCM token registered successfully' });
+  } catch (error) {
+    console.error('Error registering FCM token:', error);
+    res.status(500).json({ success: false, message: 'Error registering FCM token', error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/admin/fcm-token
+ * Remove the FCM device token on logout / token refresh.
+ * Body: { token: string }  OR removes all tokens if no token supplied.
+ */
+router.delete('/fcm-token', gymadminAuth, async (req, res) => {
+  try {
+    const gymId = req.admin?.id || req.admin?.gymId;
+    const { token } = req.body;
+
+    if (token) {
+      // Remove specific token
+      await Gym.updateOne({ _id: gymId }, { $pull: { fcmTokens: { token } } });
+      console.log(`🗑️ FCM token removed for gym ${gymId}`);
+    } else {
+      // Remove all tokens for this gym (e.g. full logout)
+      await Gym.updateOne({ _id: gymId }, { $set: { fcmTokens: [] } });
+      console.log(`🗑️ All FCM tokens cleared for gym ${gymId}`);
+    }
+
+    res.json({ success: true, message: 'FCM token removed successfully' });
+  } catch (error) {
+    console.error('Error removing FCM token:', error);
+    res.status(500).json({ success: false, message: 'Error removing FCM token', error: error.message });
   }
 });
 

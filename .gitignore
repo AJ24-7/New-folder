@@ -7,6 +7,10 @@ node_modules/
 .env.local
 .env.*.local
 
+# Firebase service account credentials (contains private keys)
+**/firebase-service-account.json
+**/firebase-service-account*.json
+
 # Logs
 logs/
 *.log

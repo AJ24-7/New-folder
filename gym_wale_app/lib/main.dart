@@ -12,6 +12,7 @@ import 'providers/settings_provider.dart';
 import 'providers/workout_provider.dart';
 import 'providers/attendance_provider.dart';
 import 'services/geofencing_service.dart';
+import 'services/local_notification_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -91,6 +92,9 @@ class _SplashScreenState extends State<SplashScreen> {
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
     
     await authProvider.init();
+
+    // Initialize local notification service
+    await LocalNotificationService.instance.initialize();
 
     // Request permissions
     await _requestPermissions();

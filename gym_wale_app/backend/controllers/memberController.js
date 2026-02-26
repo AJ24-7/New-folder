@@ -1,9 +1,9 @@
 const Member = require('../models/Member');
 const Gym = require('../models/gym');
-const path = require('path');
-
-const sendEmail = require('../utils/sendEmail');
 const Payment = require('../models/Payment');
+const Notification = require('../models/Notification');
+const path = require('path');
+const sendEmail = require('../utils/sendEmail');
 
 // Renew membership for an existing member
 exports.renewMembership = async (req, res) => {
@@ -105,6 +105,9 @@ exports.renewMembership = async (req, res) => {
         description: `Membership Renewal - ${planSelected} ${monthlyPlan}`,
         paymentMethod: paymentMode.toLowerCase(),
         status: 'completed',
+        registrationSource: 'offline',
+        planSelected: planSelected,
+        monthlyPlan: monthlyPlan,
         paidDate: new Date(),
         notes: `Renewed until ${membershipValidUntil}`,
         createdBy: adminId
@@ -426,14 +429,19 @@ exports.addMember = async (req, res) => {
         type: 'received',
         category: 'membership',
         amount: req.body.paymentAmount || 0,
-        description: `Membership payment for ${req.body.memberName || 'Member'}`,
+        description: `Offline membership payment for ${req.body.memberName || 'Member'}`,
         memberName: req.body.memberName || '',
         memberId: member._id,
-        paymentMethod: req.body.paymentMode || 'cash',
+        paymentMethod: (req.body.paymentMode || 'cash').toLowerCase(),
         status: 'completed',
+        registrationSource: 'offline',
+        planSelected: req.body.planSelected || '',
+        monthlyPlan: req.body.monthlyPlan || '',
+        paidDate: new Date(),
         createdBy: (req.admin && req.admin.id) || gymId
       });
       await payment.save();
+      console.log('✅ Payment record created for offline member registration');
     } catch (paymentErr) {
       console.error('[MemberController] Error creating payment record:', paymentErr);
       // Do not block member creation if payment fails

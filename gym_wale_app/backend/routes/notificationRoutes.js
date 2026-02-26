@@ -899,4 +899,69 @@ router.post('/holiday-notice', gymadminAuth, notificationController.sendHolidayN
 // Supports query params: ?daysOld=10&dryRun=true
 router.delete('/cleanup-old', gymadminAuth, notificationController.cleanupOldNotifications);
 
+// ============ USER APP FCM TOKEN ROUTES ============
+// Used by the gym_wale_app (member-facing Flutter app) to register push tokens
+
+/**
+ * POST /api/notifications/user/fcm-token
+ * Register or update FCM token for the authenticated user (member app)
+ */
+router.post('/user/fcm-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const { fcmToken, platform = 'android' } = req.body;
+    if (!fcmToken) {
+      return res.status(400).json({ success: false, message: 'fcmToken is required' });
+    }
+
+    await User.updateOne(
+      { _id: userId },
+      {
+        $set: {
+          fcmToken: {
+            token: fcmToken,
+            platform,
+            registeredAt: new Date(),
+            lastUsed: new Date(),
+          },
+        },
+      }
+    );
+
+    console.log(`✅ FCM token registered for user ${userId} (${platform})`);
+    res.json({ success: true, message: 'FCM token registered successfully' });
+  } catch (error) {
+    console.error('❌ Error registering user FCM token:', error);
+    res.status(500).json({ success: false, message: 'Error registering FCM token', error: error.message });
+  }
+});
+
+/**
+ * DELETE /api/notifications/user/fcm-token
+ * Unregister FCM token on user logout
+ */
+router.delete('/user/fcm-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    await User.updateOne(
+      { _id: userId },
+      { $set: { 'fcmToken.token': null } }
+    );
+
+    console.log(`✅ FCM token removed for user ${userId}`);
+    res.json({ success: true, message: 'FCM token unregistered successfully' });
+  } catch (error) {
+    console.error('❌ Error removing user FCM token:', error);
+    res.status(500).json({ success: false, message: 'Error removing FCM token', error: error.message });
+  }
+});
+
 module.exports = router;

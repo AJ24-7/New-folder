@@ -16,8 +16,10 @@ import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/session_warning_dialog.dart';
 import '../../widgets/passcode_dialog.dart';
+import '../dashboard/dashboard_screen.dart';
 import '../members/members_screen.dart';
 import '../equipment/equipment_screen.dart';
+import '../offers/offers_screen.dart';
 import '../support/support_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../payments/payments_screen.dart';
@@ -190,18 +192,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle: 'Enter your current passcode',
       isSetup: false,
       dismissible: true,
+      onVerify: (passcode) async {
+        return await _passcodeService.verifyPasscode(passcode);
+      },
     );
 
     if (currentPasscode == null || !mounted) return;
-
-    // Verify with backend
-    final isValid = await _passcodeService.verifyPasscode(currentPasscode);
-    if (!isValid) {
-      if (mounted) {
-        _showSnackBar(context, 'Incorrect passcode');
-      }
-      return;
-    }
 
     // Now set new passcode
     if (mounted) {
@@ -217,18 +213,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       subtitle: 'Enter your passcode to remove it',
       isSetup: false,
       dismissible: true,
+      onVerify: (code) async {
+        return await _passcodeService.verifyPasscode(code);
+      },
     );
 
     if (passcode == null || !mounted) return;
-
-    // Verify with backend
-    final isValid = await _passcodeService.verifyPasscode(passcode);
-    if (!isValid) {
-      if (mounted) {
-        _showSnackBar(context, 'Incorrect passcode');
-      }
-      return;
-    }
 
     // Confirm removal
     final confirmed = await showDialog<bool>(
@@ -310,6 +300,521 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
   
+  Future<void> _showAdminInfoDialog(BuildContext context) async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final admin = authProvider.currentAdmin;
+
+    if (admin == null) {
+      _showSnackBar(context, 'Unable to load admin information');
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: Theme.of(dialogContext).colorScheme.primary,
+              child: Icon(
+                Icons.person,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text('Admin Information'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildInfoRow(
+                dialogContext,
+                Icons.person_outline,
+                'Name',
+                admin.name.isNotEmpty ? admin.name : 'N/A',
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                dialogContext,
+                Icons.email_outlined,
+                'Email',
+                admin.email.isNotEmpty ? admin.email : 'N/A',
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                dialogContext,
+                Icons.phone_outlined,
+                'Phone',
+                admin.phone ?? 'N/A',
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                dialogContext,
+                Icons.badge_outlined,
+                'Admin ID',
+                admin.id.isNotEmpty ? admin.id : 'N/A',
+              ),
+              const SizedBox(height: 16),
+              _buildInfoRow(
+                dialogContext,
+                Icons.verified_user_outlined,
+                'Role',
+                'Admin',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 20,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Theme.of(context).textTheme.bodyLarge?.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildComprehensiveSecuritySection(
+    BuildContext context,
+    AppLocalizations l10n,
+    AuthProvider authProvider,
+  ) {
+    return ChangeNotifierProvider<SessionTimerService>.value(
+      value: authProvider.sessionTimer,
+      child: Consumer<SessionTimerService>(
+        builder: (context, sessionTimer, child) {
+          final isActive = sessionTimer.isActive;
+          final remainingSeconds = sessionTimer.remainingSeconds;
+          final percentage = sessionTimer.remainingPercentage;
+          final loginTime = sessionTimer.loginTime;
+          
+          // Determine color based on remaining time
+          Color getTimerColor() {
+            if (remainingSeconds <= 300) {
+              return Colors.red;
+            } else if (remainingSeconds <= 600) {
+              return Colors.orange;
+            } else {
+              return Colors.green;
+            }
+          }
+
+          return Card(
+            elevation: 2,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.security, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 12),
+                      Text(
+                        l10n.securitySettings,
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Session Management Section
+                if (isActive) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Session Status Header
+                        Row(
+                          children: [
+                            Icon(Icons.timer_outlined, size: 20, color: Theme.of(context).colorScheme.primary),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Active Session',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).textTheme.bodyLarge?.color,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Status indicator
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: getTimerColor(),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${(remainingSeconds / 3600).floor()}h ${((remainingSeconds % 3600) / 60).floor()}m remaining',
+                              style: TextStyle(
+                                color: getTimerColor(),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Progress bar
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: percentage,
+                            minHeight: 6,
+                            backgroundColor: Colors.grey.withValues(alpha: 0.2),
+                            valueColor: AlwaysStoppedAnimation<Color>(getTimerColor()),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        
+                        // Login time
+                        if (loginTime != null)
+                          Row(
+                            children: [
+                              Icon(Icons.login, size: 16, color: Theme.of(context).textTheme.bodySmall?.color),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Logged in at ${DateFormat('MMM d, y h:mm a').format(loginTime)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
+                                ),
+                              ),
+                            ],
+                          ),
+                        
+                        // Warning message when time is low
+                        if (remainingSeconds <= 300) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    'Your session will expire soon. Save your work!',
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 16),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        Icon(Icons.timer_off, size: 18, color: Theme.of(context).textTheme.bodySmall?.color),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Session timer is inactive',
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // Session Timeout Settings
+                const Divider(height: 1),
+                _buildSettingTile(
+                  context,
+                  title: l10n.autoSessionTimeout,
+                  subtitle: l10n.autoSessionTimeoutDescription,
+                  leading: Icon(
+                    Icons.timer_outlined,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _getTimeoutDurationLabel(
+                          sessionTimer.timeoutDurationMinutes,
+                          l10n,
+                        ),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  onTap: () => _showSessionTimeoutDialog(context, authProvider),
+                ),
+
+                // Passcode Security Settings
+                const Divider(height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                  child: Row(
+                    children: [
+                      Icon(FontAwesomeIcons.lock, size: 18, color: Theme.of(context).colorScheme.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Passcode Protection',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                if (_isLoadingGymSettings)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else ...[
+                  if (!_hasPasscode) ...[
+                    // Setup passcode button when no passcode exists
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: ElevatedButton.icon(
+                        onPressed: _setupPasscode,
+                        icon: const Icon(FontAwesomeIcons.plus, size: 16),
+                        label: const Text('Setup Passcode'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 44),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    // Passcode status
+                    _buildSettingTile(
+                      context,
+                      title: 'Passcode Status',
+                      subtitle: _passcodeEnabled ? 'Enabled' : 'Disabled',
+                      leading: Icon(
+                        _passcodeEnabled ? Icons.lock : Icons.lock_open,
+                        color: _passcodeEnabled ? Colors.green : Colors.orange,
+                      ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: _passcodeEnabled ? Colors.green.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _passcodeEnabled ? Colors.green.withValues(alpha: 0.3) : Colors.orange.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Text(
+                          _passcodeEnabled ? 'Active' : 'Inactive',
+                          style: TextStyle(
+                            color: _passcodeEnabled ? Colors.green : Colors.orange,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                    
+                    // Passcode Type
+                    if (_passcodeEnabled)
+                      _buildSettingTile(
+                        context,
+                        title: 'Passcode Protection Type',
+                        subtitle: _passcodeType == 'app' ? 'App-Wide Protection' : _passcodeType == 'payments' ? 'Payments Only' : 'Not Set',
+                        leading: Icon(
+                          _passcodeType == 'app' ? FontAwesomeIcons.shield : FontAwesomeIcons.wallet,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                        onTap: () => _showPasscodeTypeDialog(context),
+                      ),
+                    if (_passcodeEnabled) const Divider(height: 1),
+                    
+                    // Change Passcode
+                    _buildSettingTile(
+                      context,
+                      title: 'Change Passcode',
+                      subtitle: 'Update your security passcode',
+                      leading: Icon(
+                        FontAwesomeIcons.key,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      onTap: _changePasscode,
+                    ),
+                    const Divider(height: 1),
+                    
+                    // Remove Passcode
+                    _buildSettingTile(
+                      context,
+                      title: 'Remove Passcode',
+                      subtitle: 'Disable passcode protection',
+                      leading: const Icon(
+                        FontAwesomeIcons.trashCan,
+                        color: AppTheme.errorColor,
+                      ),
+                      onTap: _removePasscode,
+                    ),
+                    const Divider(height: 1),
+                  ],
+                ],
+
+                // Password Management
+                _buildSettingTile(
+                  context,
+                  title: l10n.changePassword,
+                  subtitle: 'Update your account password',
+                  leading: Icon(
+                    Icons.lock_reset,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  onTap: () => _showChangePasswordDialog(context),
+                ),
+                const Divider(height: 1),
+                
+                // Admin Management
+                _buildSettingTile(
+                  context,
+                  title: l10n.adminManagement,
+                  subtitle: 'View admin profile information',
+                  leading: Icon(
+                    Icons.admin_panel_settings,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                  onTap: () => _showAdminInfoDialog(context),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showPasscodeTypeDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Select Passcode Protection Type'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<String>(
+              value: 'app',
+              groupValue: _passcodeType,
+              title: const Text('App-Wide Protection'),
+              subtitle: const Text('Require passcode when opening the app'),
+              activeColor: Theme.of(dialogContext).colorScheme.primary,
+              onChanged: (value) async {
+                if (value != null) {
+                  Navigator.of(dialogContext).pop();
+                  await _updatePasscodeType(value);
+                }
+              },
+            ),
+            RadioListTile<String>(
+              value: 'payments',
+              groupValue: _passcodeType,
+              title: const Text('Payments Only'),
+              subtitle: const Text('Require passcode only for payment actions'),
+              activeColor: Theme.of(dialogContext).colorScheme.primary,
+              onChanged: (value) async {
+                if (value != null) {
+                  Navigator.of(dialogContext).pop();
+                  await _updatePasscodeType(value);
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+  
   void _scrollToAttendanceSettings() {
     final context = _attendanceSettingsKey.currentContext;
     if (context != null) {
@@ -335,7 +840,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // Navigate to different screens based on index
     switch (index) {
       case 0:
-        Navigator.pop(context); // Go back to dashboard
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
         break;
       case 1:
         Navigator.pushReplacement(
@@ -370,9 +878,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
         break;
-      case 6:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Offers screen coming soon')),
+      case 6: // Offers
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const OffersScreen(),
+          ),
         );
         break;
       case 7:
@@ -480,11 +992,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                         const SizedBox(height: 32),
 
-                        // Session Management Section
-                        _buildSessionTimerCard(context, authProvider),
-
-                        const SizedBox(height: 24),
-
                         // Appearance Section
                         _buildSectionCard(
                           context,
@@ -575,37 +1082,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         const SizedBox(height: 24),
 
-                        // Security Section
-                        _buildSectionCard(
-                          context,
-                          title: l10n.securitySettings,
-                          icon: Icons.security,
-                          children: [
-                            _buildSettingTile(
-                              context,
-                              title: l10n.changePassword,
-                              subtitle: 'Update your account password',
-                              leading: Icon(
-                                Icons.lock_outline,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              onTap: () => _showChangePasswordDialog(context),
-                            ),
-                            const Divider(height: 1),
-                            _buildSettingTile(
-                              context,
-                              title: l10n.adminManagement,
-                              subtitle: 'Manage admin users and permissions',
-                              leading: Icon(
-                                Icons.admin_panel_settings_outlined,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                              onTap: () {
-                                // Navigate to admin management
-                              },
-                            ),
-                          ],
-                        ),
+                        // Comprehensive Security Section
+                        _buildComprehensiveSecuritySection(context, l10n, authProvider),
 
                         const SizedBox(height: 24),
 
@@ -687,124 +1165,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   },
                                 ),
                               ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // Passcode Security Section
-                        _buildSectionCard(
-                          context,
-                          title: 'Passcode Security',
-                          icon: FontAwesomeIcons.lock,
-                          children: [
-                            if (_isLoadingGymSettings)
-                              const Padding(
-                                padding: EdgeInsets.all(20),
-                                child: Center(child: CircularProgressIndicator()),
-                              )
-                            else ...[
-                              // Passcode Status
-                              _buildSettingTile(
-                                context,
-                                title: _hasPasscode ? 'Passcode Enabled' : 'No Passcode Set',
-                                subtitle: _hasPasscode
-                                    ? 'Your account is protected with a passcode'
-                                    : 'Set a passcode to secure your account',
-                                leading: Icon(
-                                  _hasPasscode
-                                      ? FontAwesomeIcons.shieldHalved
-                                      : FontAwesomeIcons.shield,
-                                  color: _hasPasscode
-                                      ? AppTheme.successColor
-                                      : Colors.grey,
-                                ),
-                                trailing: _hasPasscode
-                                    ? null
-                                    : ElevatedButton(
-                                        onPressed: _setupPasscode,
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppTheme.primaryColor,
-                                          foregroundColor: Colors.white,
-                                        ),
-                                        child: const Text('Setup'),
-                                      ),
-                              ),
-
-                              // Passcode Type Options (only if passcode is set)
-                              if (_hasPasscode) ...[
-                                const Divider(height: 1),
-                                Padding(
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Passcode Protection Type',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15,
-                                          color: Theme.of(context).colorScheme.primary,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      RadioListTile<String>(
-                                        title: const Text('Entire App'),
-                                        subtitle: const Text('Require passcode when opening app'),
-                                        value: 'app',
-                                        groupValue: _passcodeType,
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            _updatePasscodeType(value);
-                                          }
-                                        },
-                                        activeColor: Theme.of(context).colorScheme.primary,
-                                      ),
-                                      RadioListTile<String>(
-                                        title: const Text('Payments Tab Only'),
-                                        subtitle: const Text('Require passcode for payments tab'),
-                                        value: 'payments',
-                                        groupValue: _passcodeType,
-                                        onChanged: (value) {
-                                          if (value != null) {
-                                            _updatePasscodeType(value);
-                                          }
-                                        },
-                                        activeColor: Theme.of(context).colorScheme.primary,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                
-                                const Divider(height: 1),
-                                
-                                // Change Passcode
-                                _buildSettingTile(
-                                  context,
-                                  title: 'Change Passcode',
-                                  subtitle: 'Update your security passcode',
-                                  leading: Icon(
-                                    FontAwesomeIcons.key,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  onTap: _changePasscode,
-                                ),
-                                
-                                const Divider(height: 1),
-                                
-                                // Remove Passcode
-                                _buildSettingTile(
-                                  context,
-                                  title: 'Remove Passcode',
-                                  subtitle: 'Disable passcode protection',
-                                  leading: Icon(
-                                    FontAwesomeIcons.trashCan,
-                                    color: Theme.of(context).colorScheme.error,
-                                  ),
-                                  onTap: _removePasscode,
-                                ),
-                              ],
-                            ],
                           ],
                         ),
 
@@ -934,8 +1294,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: SidebarMenu(
                 selectedIndex: _selectedIndex,
                 onItemSelected: (index) {
-                  _onMenuItemSelected(index);
-                  Navigator.pop(context);
+                  Navigator.pop(context); // Close drawer first
+                  _onMenuItemSelected(index); // Then navigate
                 },
               ),
             )
@@ -1558,242 +1918,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(message),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
-  Widget _buildSessionTimerCard(
-    BuildContext context,
-    AuthProvider authProvider,
-  ) {
-    final l10n = AppLocalizations.of(context)!;
-    
-    return ChangeNotifierProvider<SessionTimerService>.value(
-      value: authProvider.sessionTimer,
-      child: Consumer<SessionTimerService>(
-        builder: (context, sessionTimer, child) {
-          final isActive = sessionTimer.isActive;
-          final remainingSeconds = sessionTimer.remainingSeconds;
-          final percentage = sessionTimer.remainingPercentage;
-          final loginTime = sessionTimer.loginTime;
-          
-          // Determine color based on remaining time
-          Color getTimerColor() {
-            if (remainingSeconds <= 300) {
-              // Less than 5 minutes - red
-              return Colors.red;
-            } else if (remainingSeconds <= 600) {
-              // Less than 10 minutes - orange
-              return Colors.orange;
-            } else {
-              // More than 10 minutes - green
-              return Colors.green;
-            }
-          }
-
-          return Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.timer_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        l10n.sessionManagement,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (isActive) ...[
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Status indicator
-                        Row(
-                          children: [
-                            Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color: getTimerColor(),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              l10n.sessionActive,
-                              style: TextStyle(
-                                color: getTimerColor(),
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Time remaining
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              l10n.timeRemaining,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w500,
-                                fontSize: 15,
-                              ),
-                            ),
-                            Text(
-                              sessionTimer.formattedTime,
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: getTimerColor(),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        
-                        // Progress bar
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: percentage,
-                            minHeight: 8,
-                            backgroundColor: Colors.grey.withValues(alpha: 0.2),
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              getTimerColor(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Login time
-                        if (loginTime != null)
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.login,
-                                size: 16,
-                                color: Theme.of(context)
-                                    .textTheme
-                                    .bodySmall
-                                    ?.color,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${l10n.loggedInSince}: ${DateFormat('hh:mm a').format(loginTime)}',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Theme.of(context)
-                                      .textTheme
-                                      .bodySmall
-                                      ?.color,
-                                ),
-                              ),
-                            ],
-                          ),
-                        
-                        // Warning message when time is low
-                        if (remainingSeconds <= 300) ...[
-                          const SizedBox(height: 12),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.red.withValues(alpha: 0.3),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: Colors.red,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(
-                                    l10n.sessionWillExpireSoon,
-                                    style: const TextStyle(
-                                      color: Colors.red,
-                                      fontWeight: FontWeight.w500,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                ] else ...[
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Session timer is inactive',
-                      style: TextStyle(
-                        color: Theme.of(context).textTheme.bodySmall?.color,
-                      ),
-                    ),
-                  ),
-                ],
-                // Session Timeout Settings
-                Divider(height: 1),
-                _buildSettingTile(
-                  context,
-                  title: l10n.autoSessionTimeout,
-                  subtitle: l10n.autoSessionTimeoutDescription,
-                  leading: Icon(
-                    Icons.timer_outlined,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        l10n.currentTimeoutSetting(
-                          _getTimeoutDurationLabel(
-                            sessionTimer.timeoutDurationMinutes,
-                            l10n,
-                          ),
-                        ),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Theme.of(context).colorScheme.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Icon(Icons.chevron_right),
-                    ],
-                  ),
-                  onTap: () => _showSessionTimeoutDialog(context, authProvider),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }

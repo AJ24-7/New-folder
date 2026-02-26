@@ -45,5 +45,23 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Location Permission Descriptions -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Gym Admin needs your location to set up geofencing for member attendance tracking. This ensures members can only check in when they are physically at the gym.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Gym Admin needs location access to monitor geofence boundaries for automatic attendance tracking, even when the app is in the background.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Gym Admin needs location access to monitor geofence boundaries for automatic attendance tracking.</string>
+	
+	<!-- Firebase Background Modes -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>remote-notification</string>
+	</array>
+	
+	<!-- Notification Settings -->
+	<key>FirebaseMessagingAutoInitEnabled</key>
+	<true/>
 </dict>
 </plist>

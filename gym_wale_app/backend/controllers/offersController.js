@@ -4,6 +4,8 @@ const Coupon = require('../models/Coupon');
 const CouponUsage = require('../models/CouponUsage');
 const Gym = require('../models/gym');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
+const Payment = require('../models/Payment');
 
 // Get all offers for a gym
 exports.getOffers = async (req, res) => {
@@ -915,6 +917,34 @@ exports.claimOffer = async (req, res) => {
       newCount: updatedOffer.usageCount
     });
 
+    // Create notification for gym admin about offer claim
+    try {
+      const notification = new Notification({
+        title: '🎉 Offer Claimed',
+        message: `A member has claimed your offer "${offer.title}". Total claims: ${updatedOffer.usageCount}`,
+        type: 'offer_claimed',
+        priority: 'normal',
+        icon: 'fa-gift',
+        color: '#10B981',
+        user: offer.gymId,
+        data: {
+          offerId: offer._id,
+          offerTitle: offer.title,
+          userName: userName,
+          userId: userId,
+          couponCode: couponCode,
+          usageCount: updatedOffer.usageCount,
+          maxUses: updatedOffer.maxUses
+        }
+      });
+      
+      await notification.save();
+      console.log('✅ Notification sent to gym admin');
+    } catch (notifError) {
+      console.error('⚠️ Failed to send notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     // Send success response
     res.json({
       success: true,
@@ -943,6 +973,196 @@ exports.claimOffer = async (req, res) => {
       success: false,
       message: 'Failed to claim offer',
       error: error.message 
+    });
+  }
+};
+
+// Track coupon usage with payment
+exports.trackCouponPayment = async (req, res) => {
+  try {
+    const { couponId, paymentId, originalAmount, finalAmount, discountAmount } = req.body;
+
+    if (!couponId || !paymentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon ID and Payment ID are required'
+      });
+    }
+
+    // Find the coupon
+    const coupon = await Coupon.findById(couponId);
+    if (!coupon) {
+      return res.status(404).json({
+        success: false,
+        message: 'Coupon not found'
+      });
+    }
+
+    // Find the payment
+    const payment = await Payment.findById(paymentId);
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Payment not found'
+      });
+    }
+
+    // Create coupon usage record
+    const couponUsage = new CouponUsage({
+      couponId: couponId,
+      userId: payment.memberId || payment.createdBy,
+      gymId: payment.gymId,
+      originalAmount: originalAmount,
+      discountAmount: discountAmount,
+      finalAmount: finalAmount,
+      transactionId: payment.transactionId,
+      paymentId: paymentId,
+      usageType: payment.category || 'membership',
+      usageDescription: `Payment for ${payment.description}`,
+      status: 'completed',
+      completedAt: new Date()
+    });
+
+    await couponUsage.save();
+
+    // Update coupon usage count
+    await Coupon.findByIdAndUpdate(
+      couponId,
+      { $inc: { usageCount: 1 } }
+    );
+
+    // Update offer revenue if linked to an offer
+    if (coupon.offerId) {
+      await Offer.findByIdAndUpdate(
+        coupon.offerId,
+        { $inc: { revenue: finalAmount } }
+      );
+    }
+
+    // Create notification for gym admin
+    try {
+      const notification = new Notification({
+        title: '💰 Coupon Used in Payment',
+        message: `A member used coupon "${coupon.code}" and saved ₹${discountAmount.toFixed(2)}. Payment completed: ₹${finalAmount.toFixed(2)}`,
+        type: 'coupon_payment',
+        priority: 'normal',
+        icon: 'fa-money-bill-wave',
+        color: '#10B981',
+        user: payment.gymId,
+        data: {
+          couponId: coupon._id,
+          couponCode: coupon.code,
+          paymentId: payment._id,
+          originalAmount: originalAmount,
+          discountAmount: discountAmount,
+          finalAmount: finalAmount,
+          category: payment.category
+        }
+      });
+      
+      await notification.save();
+    } catch (notifError) {
+      console.error('⚠️ Failed to send notification:', notifError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Coupon usage tracked successfully',
+      couponUsage: couponUsage
+    });
+
+  } catch (error) {
+    console.error('❌ Error tracking coupon payment:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to track coupon payment',
+      error: error.message
+    });
+  }
+};
+
+// Get coupon usage statistics for gym admin
+exports.getCouponUsageStats = async (req, res) => {
+  try {
+    const { gymId } = req.query;
+
+    if (!gymId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gym ID is required'
+      });
+    }
+
+    // Get total usage statistics
+    const stats = await CouponUsage.aggregate([
+      { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
+      {
+        $group: {
+          _id: null,
+          totalUsage: { $sum: 1 },
+          totalDiscount: { $sum: '$discountAmount' },
+          totalRevenue: { $sum: '$finalAmount' },
+          totalOriginal: { $sum: '$originalAmount' }
+        }
+      }
+    ]);
+
+    // Get usage by coupon
+    const byCoupon = await CouponUsage.aggregate([
+      { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
+      {
+        $group: {
+          _id: '$couponId',
+          count: { $sum: 1 },
+          totalDiscount: { $sum: '$discountAmount' },
+          totalRevenue: { $sum: '$finalAmount' }
+        }
+      },
+      {
+        $lookup: {
+          from: 'coupons',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'coupon'
+        }
+      },
+      { $unwind: '$coupon' },
+      {
+        $project: {
+          couponCode: '$coupon.code',
+          couponTitle: '$coupon.title',
+          count: 1,
+          totalDiscount: 1,
+          totalRevenue: 1
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Get recent usage
+    const recentUsage = await CouponUsage.find({ 
+      gymId: gymId, 
+      status: 'completed' 
+    })
+      .populate('couponId', 'code title')
+      .populate('userId', 'firstName lastName')
+      .sort({ completedAt: -1 })
+      .limit(10);
+
+    res.json({
+      success: true,
+      stats: stats[0] || { totalUsage: 0, totalDiscount: 0, totalRevenue: 0, totalOriginal: 0 },
+      topCoupons: byCoupon,
+      recentUsage: recentUsage
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching coupon usage stats:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch coupon usage statistics',
+      error: error.message
     });
   }
 };

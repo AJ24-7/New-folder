@@ -89,3 +89,7 @@ lib/generated_plugin_registrant.dart
 # API Keys (Never commit!)
 **/api_keys.dart
 **/secrets.dart
+
+# Firebase service account credentials (contains private keys)
+**/firebase-service-account.json
+**/firebase-service-account*.json

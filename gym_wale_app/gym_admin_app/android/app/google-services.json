@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "12577918948",
+    "project_id": "gym-wale-fedfb",
+    "storage_bucket": "gym-wale-fedfb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:12577918948:android:3a81c2dee23efcbfa801f1",
+        "android_client_info": {
+          "package_name": "com.gymwale.gym_admin_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyANL8pSHrqDowQ83cIg8nbdMTpaMLgQQcw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

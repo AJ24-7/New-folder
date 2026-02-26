@@ -24,6 +24,7 @@ class StorageService {
   static const String _gymIdKey = 'gym_id';
   static const String _sessionLoginTimeKey = 'session_login_time';
   static const String _sessionTimeoutDurationKey = 'session_timeout_duration';
+  static const String _fcmTokenKey = 'fcm_token';
 
   // Token methods
   Future<void> saveToken(String token) async {
@@ -93,6 +94,19 @@ class StorageService {
 
   Future<void> deleteGymId() async {
     await _prefs.remove(_gymIdKey);
+  }
+
+  // FCM Token methods
+  Future<void> saveFCMToken(String token) async {
+    await _prefs.setString(_fcmTokenKey, token);
+  }
+
+  String? getFCMToken() {
+    return _prefs.getString(_fcmTokenKey);
+  }
+
+  Future<void> deleteFCMToken() async {
+    await _prefs.remove(_fcmTokenKey);
   }
 
   // Clear all data

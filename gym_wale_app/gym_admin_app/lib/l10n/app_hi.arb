@@ -1,7 +1,7 @@
 {
   "@@locale": "hi",
   "appTitle": "जिम-वाले एडमिन",
-  "dashboard": "डैशबोर्ड",
+  "dashboard": "होम",
   "members": "सदस्य",
   "activeMembers": "सक्रिय सदस्य",
   "expiredMembers": "समाप्त सदस्य",
@@ -23,7 +23,7 @@
   "settings": "सेटिंग्स",
   "logout": "लॉगआउट",
   
-  "dashboardOverview": "डैशबोर्ड अवलोकन",
+  "dashboardOverview": "होम अवलोकन",
   "totalMembers": "कुल सदस्य",
   "activeMembers": "सक्रिय सदस्य",
   "totalRevenue": "कुल राजस्व",

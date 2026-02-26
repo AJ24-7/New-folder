@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
+import '../services/geofencing_service.dart';
 import '../models/gym.dart';
 import '../models/trainer.dart';
 import '../models/banner_offer.dart';
@@ -16,6 +17,7 @@ import '../widgets/gym_card.dart';
 import '../widgets/activity_widgets.dart';
 import '../widgets/offer_carousel.dart';
 import '../widgets/trainer_spotlight.dart';
+import '../widgets/background_location_warning_dialog.dart';
 import '../l10n/app_localizations.dart';
 import 'gym_list_screen.dart';
 import 'gym_detail_screen.dart';
@@ -54,6 +56,88 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadNotifications();
     _loadTrainers();
     _loadOffers();
+    _checkGeofenceSettings();
+  }
+
+  /// Check if gym uses geofence attendance and warn about background location
+  Future<void> _checkGeofenceSettings() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.user;
+      
+      if (user == null) {
+        return; // User not logged in
+      }
+
+      // Get user's active memberships
+      final activeMemberships = await ApiService.getActiveMemberships();
+      
+      if (activeMemberships.isEmpty) {
+        return; // No active memberships
+      }
+
+      // Check each active membership for geofencing
+      final prefs = await SharedPreferences.getInstance();
+      final geofencingService = Provider.of<GeofencingService>(context, listen: false);
+      final now = DateTime.now().millisecondsSinceEpoch;
+      
+      for (final membership in activeMemberships) {
+        final gymId = membership['gymId']?.toString();
+        final gymName = membership['gymName']?.toString() ?? 
+                        membership['gym']?['name']?.toString() ?? 
+                        'Your gym';
+        
+        if (gymId == null) continue;
+        
+        // Check if we've already shown this warning for this gym
+        final lastWarningShown = prefs.getInt('geofence_warning_shown_$gymId');
+        
+        // Show warning once per week per gym
+        if (lastWarningShown != null && (now - lastWarningShown) < 7 * 24 * 60 * 60 * 1000) {
+          continue; // Already shown recently for this gym
+        }
+
+        // Fetch gym's attendance settings
+        final response = await ApiService.getGymAttendanceSettings(gymId);
+        
+        if (response['success'] == true) {
+          final settings = response['settings'];
+          final geofenceEnabled = settings['geofenceEnabled'] == true;
+          
+          if (!geofenceEnabled) {
+            continue; // Geofence not enabled for this gym
+          }
+
+          // Check if we need to show warning
+          final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
+            geofencingService: geofencingService,
+            geofenceEnabled: geofenceEnabled,
+          );
+
+          if (shouldShow && mounted) {
+            // Wait a bit for the screen to fully load
+            await Future.delayed(const Duration(seconds: 1));
+            
+            if (mounted) {
+              await BackgroundLocationWarningDialog.show(
+                context: context,
+                gymName: gymName,
+                geofencingService: geofencingService,
+              );
+              
+              // Mark as shown for this gym
+              await prefs.setInt('geofence_warning_shown_$gymId', now);
+            }
+            
+            // Only show warning for one gym at a time
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      print('[HOME] Error checking geofence settings: $e');
+      // Silently fail - don't disrupt user experience
+    }
   }
 
   /// Load user preferences

@@ -48,8 +48,10 @@ dependencies:
   image_picker: ^1.0.7
   path: ^1.9.0
   
-  # Notifications
-  flutter_local_notifications: ^16.3.2
+  # Firebase & Push Notifications
+  firebase_core: ^3.8.1
+  firebase_messaging: ^15.1.5
+  flutter_local_notifications: ^18.0.1
   
   # Responsive Design
   responsive_framework: ^1.1.1
@@ -82,6 +84,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
@@ -111,3 +114,21 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# App Icon Configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  web:
+    generate: true
+  windows:
+    generate: true
+  macos:
+    generate: true
+  linux:
+    generate: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  # Optional: Remove background if you have a transparent logo
+  # remove_alpha_ios: true

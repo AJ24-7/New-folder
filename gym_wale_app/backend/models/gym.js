@@ -67,6 +67,15 @@ const gymSchema = new mongoose.Schema({
     description: { type: String, default: '' }
   }],
 
+  // FCM tokens for gym admin push notifications (one per device/session)
+  fcmTokens: [{
+    token: { type: String, required: true },
+    platform: { type: String, default: 'admin_app' },
+    deviceInfo: { type: String, default: '' },
+    registeredAt: { type: Date, default: Date.now },
+    lastUsed: { type: Date, default: Date.now },
+  }],
+
   membershipPlan: {
     name: { type: String, default: 'Standard' },
     icon: { type: String, default: 'fa-star' },

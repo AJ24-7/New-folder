@@ -78,6 +78,19 @@ const paymentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  registrationSource: {
+    type: String,
+    enum: ['offline', 'online_membership', 'qr_registration', 'cash_validation', 'manual', 'app'],
+    default: 'manual'
+  },
+  planSelected: {
+    type: String,
+    default: null
+  },
+  monthlyPlan: {
+    type: String,
+    default: null
   }
 }, {
   timestamps: true

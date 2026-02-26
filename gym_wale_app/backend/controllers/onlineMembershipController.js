@@ -173,11 +173,14 @@ exports.registerOnlineMember = async (req, res) => {
         memberId: member._id,
         paymentMethod: 'online',
         status: 'completed',
-        externalPaymentId: paymentId,
+        transactionId: paymentId,
+        registrationSource: 'online_membership',
+        planSelected: planSelected,
+        monthlyPlan: monthlyPlan,
         createdBy: gymId // Use gym ID as created by for online payments
       });
       await payment.save();
-      console.log('✅ Payment record created');
+      console.log('✅ Payment record created with online_membership source');
     } catch (paymentErr) {
       console.error('❌ Error creating payment record:', paymentErr);
     }
