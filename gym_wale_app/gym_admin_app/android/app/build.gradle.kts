@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,6 +7,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
     // Add the Google services Gradle plugin
     id("com.google.gms.google-services")
+}
+
+// Load local.properties for secret keys
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
 }
 
 android {
@@ -31,6 +40,9 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Inject Google Maps API key from local.properties into the manifest
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
+            localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
     }
 
     buildTypes {

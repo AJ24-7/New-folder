@@ -93,3 +93,13 @@ lib/generated_plugin_registrant.dart
 # Firebase service account credentials (contains private keys)
 **/firebase-service-account.json
 **/firebase-service-account*.json
+
+# Firebase / Google Services config — contain API keys
+**/google-services.json
+**/GoogleService-Info.plist
+
+# iOS local secrets — contain API keys
+**/Secrets.xcconfig
+
+# Web local secrets — contain API keys
+**/web/env.js

@@ -12,8 +12,9 @@ import Firebase
     // Initialize Firebase
     FirebaseApp.configure()
     
-    // Provide Google Maps API Key
-    GMSServices.provideAPIKey("AIzaSyBRgUT9P9ehZTpjEZ3HHS6tPjFjhZeVeOQ")
+    // Provide Google Maps API Key (read from Info.plist — set via Secrets.xcconfig)
+    let mapsApiKey = Bundle.main.object(forInfoDictionaryKey: "GMSApiKey") as? String ?? ""
+    GMSServices.provideAPIKey(mapsApiKey)
     
     GeneratedPluginRegistrant.register(with: self)
     

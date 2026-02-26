@@ -27,6 +27,12 @@ Flutter/flutter_export_environment.sh
 ServiceDefinitions.json
 Runner/GeneratedPluginRegistrant.*
 
+# Firebase / Google Services — contains API keys
+Runner/GoogleService-Info.plist
+
+# Local secrets — contains API keys
+Flutter/Secrets.xcconfig
+
 # Exceptions to above rules.
 !default.mode1v3
 !default.mode2v3
