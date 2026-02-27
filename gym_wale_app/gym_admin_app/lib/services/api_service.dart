@@ -175,7 +175,11 @@ class ApiService {
   // Offers & Coupons
   Future<List<dynamic>> getAllOffers() async {
     try {
-      final response = await _dio.get(ApiConfig.offers);
+      final gymId = await _storage.getGymId();
+      final response = await _dio.get(
+        ApiConfig.offers,
+        queryParameters: gymId != null ? {'gymId': gymId} : null,
+      );
       if (response.statusCode == 200) {
         return response.data['offers'] ?? response.data ?? [];
       }
@@ -188,7 +192,11 @@ class ApiService {
 
   Future<Map<String, dynamic>?> getOfferStats() async {
     try {
-      final response = await _dio.get('${ApiConfig.offers}/stats');
+      final gymId = await _storage.getGymId();
+      final response = await _dio.get(
+        '${ApiConfig.offers}/stats',
+        queryParameters: gymId != null ? {'gymId': gymId} : null,
+      );
       if (response.statusCode == 200) {
         return response.data;
       }

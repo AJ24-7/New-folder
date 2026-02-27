@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:carousel_slider/carousel_slider.dart' as cs;
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
@@ -47,6 +48,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   bool _hasActiveMembership = false;
   late PageController _imagePageController;
   int _currentImageIndex = 0;
+  int _currentOfferIndex = 0;
 
   @override
   void initState() {
@@ -504,6 +506,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     ),
                     const SizedBox(height: 8),
 
+                    // Offers Carousel - shown when offers are available
+                    if (_offers.isNotEmpty) _buildOffersCarousel(),
+
                     // Enhanced Tabs with animations - Mobile optimized
                     Container(
                       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -521,8 +526,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                             _buildTab('Photos', Icons.photo_library_outlined, 1),
                             _buildTab('Equipment', Icons.fitness_center, 2),
                             _buildTab('Plans', Icons.card_membership, 3),
-                            _buildTab('Offers', Icons.local_offer, 4),
-                            _buildTab('Reviews', Icons.rate_review_outlined, 5),
+                            _buildTab('Reviews', Icons.rate_review_outlined, 4),
                           ],
                         ),
                       ),
@@ -668,8 +672,6 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       case 3:
         return _buildMembershipsTab();
       case 4:
-        return _buildOffersTab();
-      case 5:
         return _buildReviewsTab();
       default:
         return const SizedBox();
@@ -1034,6 +1036,393 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       // Reload reviews
       _loadGymDetails();
     }
+  }
+
+  // ── Offer Carousel ──────────────────────────────────────────────────────────
+
+  /// Template-aware gradient colours keyed by GymOffer.templateId
+  static Map<String, List<Color>> _templateGradients = {
+    'modern_gradient':   [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFD946EF)],
+    'bold_accent':       [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+    'minimal_elegant':   [Color(0xFF1E293B), Color(0xFF334155)],
+    'vibrant_neon':      [Color(0xFF00B4D8), Color(0xFF7B2FBE)],
+    'premium_gold':      [Color(0xFFD4A017), Color(0xFFFF8C00)],
+    'fresh_spring':      [Color(0xFF10B981), Color(0xFF34D399)],
+    'sunset_vibes':      [Color(0xFFFF6B6B), Color(0xFFFFD700)],
+    'ocean_blue':        [Color(0xFF1E40AF), Color(0xFF60A5FA)],
+    'monochrome_classic':[Color(0xFF111827), Color(0xFF374151)],
+    'fire_energy':       [Color(0xFFEF4444), Color(0xFFF97316)],
+  };
+
+  List<Color> _resolveGradient(GymOffer offer) {
+    if (offer.templateId != null && _templateGradients.containsKey(offer.templateId)) {
+      return _templateGradients[offer.templateId!]!;
+    }
+    // Fallback based on offer type
+    switch (offer.type) {
+      case 'percentage': return [Color(0xFF6366F1), Color(0xFF8B5CF6)];
+      case 'fixed':      return [Color(0xFF10B981), Color(0xFF34D399)];
+      case 'bogo':       return [Color(0xFFFF6B6B), Color(0xFFFF8E53)];
+      case 'free_trial': return [Color(0xFF1E40AF), Color(0xFF60A5FA)];
+      default:           return [Color(0xFFD4A017), Color(0xFFFF8C00)];
+    }
+  }
+
+  Widget _buildOffersCarousel() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [AppTheme.primaryColor, AppTheme.accentColor],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.local_offer, color: Colors.white, size: 16),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Special Offers',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_offers.length}',
+                    style: TextStyle(
+                      color: AppTheme.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Carousel
+          cs.CarouselSlider.builder(
+            itemCount: _offers.length,
+            options: cs.CarouselOptions(
+              height: _offers.first.features.isNotEmpty ? 230 : 200,
+              viewportFraction: 0.88,
+              enlargeCenterPage: true,
+              enlargeFactor: 0.18,
+              autoPlay: _offers.length > 1,
+              autoPlayInterval: const Duration(seconds: 4),
+              autoPlayAnimationDuration: const Duration(milliseconds: 700),
+              autoPlayCurve: Curves.easeInOutCubic,
+              onPageChanged: (index, _) =>
+                  setState(() => _currentOfferIndex = index),
+            ),
+            itemBuilder: (context, index, _) =>
+                _buildOfferCarouselCard(_offers[index]),
+          ),
+
+          // Dot indicators
+          if (_offers.length > 1)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(
+                  _offers.length,
+                  (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 300),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: _currentOfferIndex == i ? 20 : 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: _currentOfferIndex == i
+                          ? AppTheme.primaryColor
+                          : AppTheme.primaryColor.withOpacity(0.25),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOfferCarouselCard(GymOffer offer) {
+    final gradients = _resolveGradient(offer);
+    final isDark = gradients.first.computeLuminance() < 0.4;
+    final fg = isDark ? Colors.white : Colors.black87;
+    final fgMuted = isDark ? Colors.white70 : Colors.black54;
+    final dateStr =
+        '${offer.startDate.day}/${offer.startDate.month} – ${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: gradients,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: gradients.first.withOpacity(0.4),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          children: [
+            // Decorative background circle
+            Positioned(
+              right: -30,
+              top: -30,
+              child: Container(
+                width: 130,
+                height: 130,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.08),
+                ),
+              ),
+            ),
+            Positioned(
+              left: -20,
+              bottom: -20,
+              child: Container(
+                width: 90,
+                height: 90,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withOpacity(0.06),
+                ),
+              ),
+            ),
+
+            // Content
+            Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Top row: discount badge + HOT tag
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.22),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.4), width: 1),
+                        ),
+                        child: Text(
+                          offer.discountText,
+                          style: TextStyle(
+                            color: fg,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 17,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      if (offer.highlightOffer)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.shade600,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.local_fire_department,
+                                  color: Colors.white, size: 14),
+                              SizedBox(width: 3),
+                              Text('HOT',
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      if (offer.couponCode != null && !offer.highlightOffer)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.5),
+                                width: 1,
+                                style: BorderStyle.solid),
+                          ),
+                          child: Text(
+                            offer.couponCode!,
+                            style: TextStyle(
+                              color: fg,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Title
+                  Text(
+                    offer.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fg,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Description
+                  Text(
+                    offer.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: fgMuted,
+                      fontSize: 12.5,
+                      height: 1.35,
+                    ),
+                  ),
+
+                  // Features (if any)
+                  if (offer.features.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: offer.features
+                          .take(3)
+                          .map((f) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(f,
+                                    style: TextStyle(
+                                        color: fg,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w500)),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+
+                  const Spacer(),
+
+                  // Bottom meta row
+                  Row(
+                    children: [
+                      Icon(offer.categoryIcon, color: fg, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        offer.categoryDisplay,
+                        style: TextStyle(
+                            color: fg, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(width: 14),
+                      Icon(Icons.calendar_today, color: fgMuted, size: 12),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          dateStr,
+                          style: TextStyle(color: fgMuted, fontSize: 11),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: offer.isExpired
+                              ? Colors.red.withOpacity(0.28)
+                              : Colors.greenAccent.withOpacity(0.25),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          offer.remainingDays,
+                          style: TextStyle(
+                            color: offer.isExpired
+                                ? Colors.redAccent.shade100
+                                : Colors.lightGreenAccent,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // Usage & min-amount
+                  if (offer.maxUses != null || offer.minAmount > 0) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        if (offer.maxUses != null) ...[
+                          Icon(Icons.group, color: fgMuted, size: 12),
+                          const SizedBox(width: 3),
+                          Text(
+                            offer.usageStatus,
+                            style: TextStyle(color: fgMuted, fontSize: 10.5),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        if (offer.minAmount > 0) ...[
+                          Icon(Icons.currency_rupee, color: fgMuted, size: 12),
+                          Text(
+                            'Min ₹${offer.minAmount.toInt()}',
+                            style: TextStyle(color: fgMuted, fontSize: 10.5),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildOffersTab() {

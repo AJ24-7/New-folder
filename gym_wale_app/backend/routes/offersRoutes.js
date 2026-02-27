@@ -31,29 +31,23 @@ const gymadminAuth = require('../middleware/gymadminAuth');
 // ==================== OFFER ROUTES ====================
 
 // NOTE: Switched to gymadminAuth to support gym admin tokens issued by /api/gyms/login
-// Get all offers for a gym (gym admin)
-router.get('/offers', gymadminAuth, getOffers);
+// Get all offers for a gym (gym admin) - mounted at /api/offers
+router.get('/', gymadminAuth, getOffers);
 
-// Get offer statistics (gym admin)
-router.get('/offers/stats', gymadminAuth, getOfferStats);
-
-// Backward-compatible alias for stats to resolve frontend calls to /api/offers/stats
+// Get offer statistics (gym admin) - /api/offers/stats
 router.get('/stats', gymadminAuth, getOfferStats);
 
-// Create new offer (gym admin)
-router.post('/offers', gymadminAuth, createOffer);
+// Create new offer (gym admin) - /api/offers
+router.post('/', gymadminAuth, createOffer);
 
-// Update offer (gym admin)
-router.put('/offers/:id', gymadminAuth, updateOffer);
+// Update offer (gym admin) - /api/offers/:id
+router.put('/:id', gymadminAuth, updateOffer);
 
-// Delete offer (gym admin)
-router.delete('/offers/:id', gymadminAuth, deleteOffer);
+// Delete offer (gym admin) - /api/offers/:id
+router.delete('/:id', gymadminAuth, deleteOffer);
 
-// Pause/Resume offer (gym admin)
-router.patch('/offers/:id/toggle', gymadminAuth, toggleOfferStatus);
-
-// Get valid offers for public display (no auth required)
-router.get('/offers/valid/:gymId', getValidOffers);
+// Pause/Resume offer (gym admin) - /api/offers/:id/toggle
+router.patch('/:id/toggle', gymadminAuth, toggleOfferStatus);
 
 // ==================== COUPON ROUTES ====================
 

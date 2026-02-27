@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/gym_offer.dart';
 import '../../services/api_service.dart';
 import '../../services/storage_service.dart';
 import '../../config/app_theme.dart';
-import '../../providers/auth_provider.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/stat_card.dart';
 import '../../widgets/offer_carousel_templates.dart';

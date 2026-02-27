@@ -252,6 +252,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         break;
       case 'grievance':
       case 'complaint':
+      case 'member-problem-report':
         iconData = Icons.report_problem;
         iconColor = Colors.deepOrange;
         break;

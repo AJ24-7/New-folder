@@ -46,3 +46,15 @@ app.*.map.json
 
 # Web secrets — contains API keys
 web/env.js
+
+# Firebase options — generated file containing API keys, never commit!
+lib/firebase_options.dart
+**/firebase_options.dart
+
+# Firebase / Google Services config — contain API keys
+**/google-services.json
+**/GoogleService-Info.plist
+
+# Firebase service account credentials (contains private keys)
+**/firebase-service-account.json
+**/firebase-service-account*.json

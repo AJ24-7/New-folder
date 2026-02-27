@@ -10,7 +10,8 @@ const Payment = require('../models/Payment');
 // Get all offers for a gym
 exports.getOffers = async (req, res) => {
   try {
-    const { gymId } = req.query;
+    // Allow gymId from query OR from the authenticated gym token
+    const gymId = req.query.gymId || req.gym?.id || req.admin?.id;
     const { status, category, page = 1, limit = 10 } = req.query;
     
     if (!gymId) {
@@ -52,7 +53,7 @@ exports.getOffers = async (req, res) => {
 // Get offer statistics
 exports.getOfferStats = async (req, res) => {
   try {
-    const { gymId } = req.query;
+    const gymId = req.query.gymId || req.gym?.id || req.admin?.id;
     
     if (!gymId) {
       return res.status(400).json({ message: 'Gym ID is required' });
@@ -101,8 +102,9 @@ exports.createOffer = async (req, res) => {
       couponCode
     } = req.body;
 
-    // Validate required fields
-    if (!title || !description || !type || !value || !startDate || !endDate || !gymId) {
+    // Validate required fields – gymId can come from body OR auth token
+    const effectiveGymId = gymId || req.gym?.id || req.admin?.id;
+    if (!title || !description || !type || !value || !startDate || !endDate || !effectiveGymId) {
       return res.status(400).json({ 
         message: 'Missing required fields: title, description, type, value, startDate, endDate, gymId' 
       });
@@ -114,7 +116,7 @@ exports.createOffer = async (req, res) => {
     }
 
     // Check if gym exists
-    const gym = await Gym.findById(gymId);
+    const gym = await Gym.findById(effectiveGymId);
     if (!gym) {
       return res.status(404).json({ message: 'Gym not found' });
     }
@@ -130,7 +132,7 @@ exports.createOffer = async (req, res) => {
       endDate: new Date(endDate),
       maxUses: maxUses ? parseInt(maxUses) : null,
       minAmount: minAmount ? parseFloat(minAmount) : 0,
-      gymId,
+      gymId: effectiveGymId,
       templateId,
       features: features || [],
       createdBy: req.user?.id || req.admin?.id

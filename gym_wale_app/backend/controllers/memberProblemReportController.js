@@ -3,6 +3,8 @@ const MemberProblemReport = require('../models/MemberProblemReport');
 const Member = require('../models/Member');
 const Gym = require('../models/gym');
 const Notification = require('../models/Notification');
+const gymNotificationService = require('../services/gymNotificationService');
+const fcmService = require('../services/fcmService');
 
 // Submit a problem report from active gym member
 exports.submitMemberProblemReport = async (req, res) => {
@@ -62,36 +64,68 @@ exports.submitMemberProblemReport = async (req, res) => {
 
     console.log('✅ Problem report created:', problemReport.reportId);
 
-    // Create notification for gym admin (matching membership freeze pattern)
+    // Create notification for gym admin + send FCM push
     try {
+      const notifPriority = priority || 'normal';
+      const notifTitle = `⚠️ New Problem Report: ${category}`;
+      const notifMessage = `${activeMember.memberName} (${activeMember.membershipId}) reported: ${subject}`;
+      const notifMetadata = {
+        reportId: problemReport.reportId,
+        memberId: activeMember._id.toString(),
+        membershipId: activeMember.membershipId,
+        memberName: activeMember.memberName,
+        category,
+        subject,
+        hasImages: images.length > 0,
+        imageCount: images.length,
+        source: 'member-problem-report'
+      };
+
+      // 1. Save to Notification model (used by notificationRoutes /all endpoint)
       const notification = new Notification({
-        title: `New Member Problem Report: ${category}`,
-        message: `${activeMember.memberName} (${activeMember.membershipId}) reported: ${subject}`,
-        type: 'member-problem-report',
-        priority: priority || 'normal',
+        title: notifTitle,
+        message: notifMessage,
+        type: 'grievance',          // matches icon case in gym admin app
+        priority: notifPriority,
         icon: 'fa-exclamation-triangle',
-        color: '#ff9800',
+        color: '#ff5722',
         user: gymId,
-        metadata: {
-          reportId: problemReport.reportId,
-          memberId: activeMember._id.toString(),
-          membershipId: activeMember.membershipId,
-          memberName: activeMember.memberName,
-          category,
-          subject,
-          hasImages: images.length > 0,
-          imageCount: images.length,
-          source: 'member-problem-report'
-        },
+        metadata: notifMetadata,
         actionType: 'navigate',
         actionData: '/support'
       });
-
       await notification.save();
-      console.log('✅ Gym notification created for problem report:', notification._id);
+      console.log('✅ Gym Notification doc saved:', notification._id);
+
+      // 2. Send FCM push notification to gym admin app
+      const adminFcmTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
+      if (adminFcmTokens.length > 0) {
+        const fcmResult = await fcmService.notifyGymAdmin(
+          adminFcmTokens,
+          notifTitle,
+          notifMessage,
+          {
+            type: 'grievance',
+            priority: notifPriority,
+            notificationId: notification._id.toString(),
+            gymId: gymId.toString(),
+            reportId: problemReport.reportId,
+            category,
+            memberName: activeMember.memberName,
+            membershipId: activeMember.membershipId,
+            channel: 'high_importance_channel',
+          }
+        );
+        console.log(`📲 FCM push sent to ${adminFcmTokens.length} gym admin device(s)`);
+        // Clean up stale tokens
+        if (fcmResult?.invalidTokens?.length) {
+          await gymNotificationService.removeStaleGymToken(gymId, fcmResult.invalidTokens);
+        }
+      } else {
+        console.log('⚠️ No FCM tokens found for gym admin – push skipped');
+      }
     } catch (notifError) {
-      console.error('⚠️ Error creating gym notification:', notifError);
-      console.error('⚠️ Notification error details:', notifError.message);
+      console.error('⚠️ Error creating gym notification:', notifError.message);
       // Don't fail the request if notification fails
     }
 

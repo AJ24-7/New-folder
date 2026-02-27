@@ -11,6 +11,13 @@ node_modules/
 **/firebase-service-account.json
 **/firebase-service-account*.json
 
+# Firebase options — generated files containing API keys, never commit!
+**/firebase_options.dart
+
+# Firebase / Google Services config — contain API keys
+**/google-services.json
+**/GoogleService-Info.plist
+
 # Logs
 logs/
 *.log
