@@ -189,4 +189,12 @@ gymSchema.pre('save', function (next) {
 });
 
 // Explicitly specify the collection name to ensure it matches MongoDB
-module.exports = mongoose.models.Gym || mongoose.model('Gym', gymSchema, 'gyms');
+const Gym = mongoose.models.Gym || mongoose.model('Gym', gymSchema, 'gyms');
+
+// Register under 'GymAdmin' alias so that models referencing ref: 'GymAdmin'
+// (Offer, Coupon, etc.) can resolve the schema without a MissingSchemaError.
+if (!mongoose.models.GymAdmin) {
+  mongoose.model('GymAdmin', gymSchema, 'gyms');
+}
+
+module.exports = Gym;
