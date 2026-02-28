@@ -498,11 +498,23 @@ router.get('/memberships/active', authMiddleware, async (req, res) => {
           durationType: durationType,
           price: membership.amount,
         },
+        planType: membership.planSelected || 'Standard',
+        planSelected: membership.planSelected || 'Standard',
+        duration: duration,
+        monthlyPlan: membership.monthlyPlan,
         startDate: membership.joinDate,
         endDate: membership.validUntil,
+        validUntil: membership.validUntil,
         daysRemaining: Math.ceil((new Date(membership.validUntil) - now) / (1000 * 60 * 60 * 24)),
         status: 'active',
         benefits: membership.benefits || [],
+        // Freeze information
+        currentlyFrozen: membership.currentlyFrozen || false,
+        freezeStartDate: membership.freezeStartDate,
+        freezeEndDate: membership.freezeEndDate,
+        freezeDays: membership.freezeHistory ? 
+          membership.freezeHistory.reduce((total, freeze) => total + (freeze.freezeDays || 0), 0) : 0,
+        totalFreezeCount: membership.totalFreezeCount || 0,
       };
     });
     

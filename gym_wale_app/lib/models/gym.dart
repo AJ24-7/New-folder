@@ -14,8 +14,9 @@ class Gym {
   final List<String> images;
   final List<String> amenities;
   final List<String> activities;
-  final String? openingTime;
-  final String? closingTime;
+  final String? openingTime;  // Legacy field
+  final String? closingTime;   // Legacy field
+  final GymOperatingHours? operatingHours;  // New structured hours
   final double rating;
   final int reviewCount;
   final double? distance;
@@ -40,6 +41,7 @@ class Gym {
     this.activities = const [],
     this.openingTime,
     this.closingTime,
+    this.operatingHours,
     this.rating = 0.0,
     this.reviewCount = 0,
     this.distance,
@@ -160,6 +162,9 @@ class Gym {
       activities: _safeParseActivities(json['activities']),
       openingTime: json['openingTime']?.toString(),
       closingTime: json['closingTime']?.toString(),
+      operatingHours: json['operatingHours'] != null 
+          ? GymOperatingHours.fromJson(json['operatingHours']) 
+          : null,
       rating: safeParseDouble(json['rating']),
       reviewCount: safeParseInt(json['reviewCount']),
       distance: json['distance'] != null ? safeParseDouble(json['distance']) : null,
@@ -296,6 +301,7 @@ class Gym {
       'activities': activities,
       'openingTime': openingTime,
       'closingTime': closingTime,
+      'operatingHours': operatingHours?.toJson(),
       'rating': rating,
       'reviewCount': reviewCount,
       'distance': distance,
@@ -321,6 +327,7 @@ class Gym {
     List<String>? activities,
     String? openingTime,
     String? closingTime,
+    GymOperatingHours? operatingHours,
     double? rating,
     int? reviewCount,
     double? distance,
@@ -344,11 +351,61 @@ class Gym {
       activities: activities ?? this.activities,
       openingTime: openingTime ?? this.openingTime,
       closingTime: closingTime ?? this.closingTime,
+      operatingHours: operatingHours ?? this.operatingHours,
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       distance: distance ?? this.distance,
       isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
     );
+  }
+}
+
+// Operating Hours classes for structured gym hours
+class GymOperatingHours {
+  final GymTimeSlot? morning;
+  final GymTimeSlot? evening;
+
+  GymOperatingHours({
+    this.morning,
+    this.evening,
+  });
+
+  factory GymOperatingHours.fromJson(Map<String, dynamic> json) {
+    return GymOperatingHours(
+      morning: json['morning'] != null ? GymTimeSlot.fromJson(json['morning']) : null,
+      evening: json['evening'] != null ? GymTimeSlot.fromJson(json['evening']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (morning != null) 'morning': morning!.toJson(),
+      if (evening != null) 'evening': evening!.toJson(),
+    };
+  }
+}
+
+class GymTimeSlot {
+  final String? opening;
+  final String? closing;
+
+  GymTimeSlot({
+    this.opening,
+    this.closing,
+  });
+
+  factory GymTimeSlot.fromJson(Map<String, dynamic> json) {
+    return GymTimeSlot(
+      opening: json['opening'],
+      closing: json['closing'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      if (opening != null) 'opening': opening,
+      if (closing != null) 'closing': closing,
+    };
   }
 }

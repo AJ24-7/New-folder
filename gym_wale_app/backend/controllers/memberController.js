@@ -1523,6 +1523,8 @@ exports.getMembershipPass = async (req, res) => {
         currentlyFrozen: member.currentlyFrozen,
         freezeStartDate: member.freezeStartDate,
         freezeEndDate: member.freezeEndDate,
+        freezeDays: member.freezeHistory ? 
+          member.freezeHistory.reduce((total, freeze) => total + (freeze.freezeDays || 0), 0) : 0,
         passId: member.passId,
         passQRCode: member.passQRCode
       }

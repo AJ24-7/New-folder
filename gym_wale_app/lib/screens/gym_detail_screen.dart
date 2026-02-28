@@ -445,8 +445,30 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                               onAction: _openMap,
                             ),
                             
-                            // Timings
-                            if (_gym!.openingTime != null)
+                            // Timings - New structured format with morning & evening slots
+                            if (_gym!.operatingHours != null) ...[
+                              if (_gym!.operatingHours!.morning?.opening != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: _buildInfoRow(
+                                    icon: Icons.wb_sunny,
+                                    title: 'Morning: ${_gym!.operatingHours!.morning!.opening} - ${_gym!.operatingHours!.morning!.closing}',
+                                    actionLabel: null,
+                                    onAction: null,
+                                  ),
+                                ),
+                              if (_gym!.operatingHours!.evening?.opening != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: _buildInfoRow(
+                                    icon: Icons.nights_stay,
+                                    title: 'Evening: ${_gym!.operatingHours!.evening!.opening} - ${_gym!.operatingHours!.evening!.closing}',
+                                    actionLabel: null,
+                                    onAction: null,
+                                  ),
+                                ),
+                            ] else if (_gym!.openingTime != null) ...[
+                              // Fallback to legacy format
                               Padding(
                                 padding: const EdgeInsets.only(top: 12),
                                 child: _buildInfoRow(
@@ -456,6 +478,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                   onAction: null,
                                 ),
                               ),
+                            ],
                             
                             // Active Membership Badge (if user is a member)
                             if (_hasActiveMembership && _userMembership != null) ...[
@@ -823,6 +846,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Widget _buildMembershipsTab() {
     // If user has active membership, show status instead of plans
     if (_hasActiveMembership && _userMembership != null) {
+      // Get the correct membership ID
+      final membershipId = _userMembership!['id'] ?? 
+                          _userMembership!['membershipId'] ?? 
+                          _userMembership!['_id'] ?? 
+                          'N/A';
+      
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -851,11 +880,37 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    _buildMembershipInfoRow('Membership ID', _userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'),
+                    _buildMembershipInfoRow('Membership ID', membershipId),
                     const Divider(height: 24),
                     _buildMembershipInfoRow('Plan', '${_userMembership!['planType'] ?? _userMembership!['planSelected'] ?? 'N/A'} - ${_userMembership!['duration'] ?? _userMembership!['monthlyPlan'] ?? 'N/A'} months'),
                     const Divider(height: 24),
-                    _buildMembershipInfoRow('Valid Until', _formatMembershipDate(_userMembership!['validUntil'])),
+                    _buildMembershipInfoRow('Valid Until', _formatEffectiveEndDate(_userMembership!)),
+                    if (_userMembership!['currentlyFrozen'] == true) ...[
+                      const Divider(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.ac_unit, color: Colors.orange, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Currently Frozen',
+                              style: TextStyle(
+                                color: Colors.orange[700],
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -2711,6 +2766,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
   }
 
+  // Format membership valid until date
+  // Note: validUntil already includes any freeze extensions applied by the backend
+  String _formatEffectiveEndDate(Map<String, dynamic> membership) {
+    return _formatMembershipDate(membership['validUntil'] ?? membership['endDate']);
+  }
+
   String _getMembershipIcon(String planType) {
     switch (planType.toLowerCase()) {
       case 'basic':
@@ -2728,6 +2789,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Widget _buildActiveMembershipBadge() {
     if (_userMembership == null) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    // Get the correct membership ID (not user ID!)
+    final membershipId = _userMembership!['id'] ?? 
+                        _userMembership!['membershipId'] ?? 
+                        _userMembership!['_id'] ?? 
+                        'N/A';
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -2795,7 +2862,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'ID: ${_userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'}',
+                  'ID: $membershipId',
                   style: TextStyle(
                     color: Theme.of(context).textTheme.bodyMedium?.color,
                     fontSize: 14,
@@ -2804,12 +2871,36 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                Text(
-                  'Valid until: ${_formatMembershipDate(_userMembership!['validUntil'])}',
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodySmall?.color,
-                    fontSize: 13,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Valid until: ${_formatEffectiveEndDate(_userMembership!)}',
+                      style: TextStyle(
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                        fontSize: 13,
+                      ),
+                    ),
+                    // Show frozen status if applicable
+                    if (_userMembership!['currentlyFrozen'] == true)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.ac_unit, size: 12, color: Colors.orange),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Currently Frozen',
+                              style: TextStyle(
+                                color: Colors.orange[700],
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -2868,6 +2959,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   void _showMembershipQRCode() {
     if (_userMembership == null) return;
     
+    // Get the correct membership ID
+    final membershipId = _userMembership!['id'] ?? 
+                        _userMembership!['membershipId'] ?? 
+                        _userMembership!['_id'] ?? 
+                        'N/A';
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -2891,7 +2988,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A',
+                    membershipId,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -2971,7 +3068,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                         const Icon(Icons.badge, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'Membership ID: ${_userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'}',
+                          'Membership ID: ${_userMembership!['id'] ?? _userMembership!['membershipId'] ?? _userMembership!['_id'] ?? 'N/A'}',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
