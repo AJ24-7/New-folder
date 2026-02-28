@@ -5,6 +5,8 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:geofence_service/geofence_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../models/attendance_settings.dart';
+import './attendance_settings_service.dart';
 
 class GeofencingService extends ChangeNotifier {
   late final GeofenceService _geofenceService;
@@ -22,6 +24,11 @@ class GeofencingService extends ChangeNotifier {
 
   String? _currentGymId;
   String? get currentGymId => _currentGymId;
+
+  AttendanceSettings? _attendanceSettings;
+  AttendanceSettings? get attendanceSettings => _attendanceSettings;
+
+  final AttendanceSettingsService _settingsService = AttendanceSettingsService();
 
   GeofencingService() {
     _geofenceService = GeofenceService.instance.setup(
@@ -411,9 +418,111 @@ class GeofencingService extends ChangeNotifier {
     }
   }
 
+  /// Load and configure geofence based on gym's attendance settings
+  Future<bool> configureFromSettings(String gymId) async {
+    try {
+      debugPrint('[GEOFENCE] Loading attendance settings for gym: $gymId');
+      
+      // Load attendance settings
+      _attendanceSettings = await _settingsService.loadSettings(gymId);
+
+      if (_attendanceSettings == null) {
+        debugPrint('[GEOFENCE] Failed to load attendance settings');
+        return false;
+      }
+
+      debugPrint('[GEOFENCE] Settings loaded - Mode: ${_attendanceSettings!.mode}');
+      debugPrint('[GEOFENCE] Geofence enabled: ${_attendanceSettings!.geofenceEnabled}');
+
+      // Check if geofence is enabled and properly configured
+      if (!_attendanceSettings!.geofenceEnabled) {
+        debugPrint('[GEOFENCE] Geofence is not enabled for this gym');
+        return false;
+      }
+
+      if (_attendanceSettings!.geofenceSettings == null ||
+          !_attendanceSettings!.geofenceSettings!.isValid) {
+        debugPrint('[GEOFENCE] Geofence settings are not properly configured');
+        return false;
+      }
+
+      final geofenceSettings = _attendanceSettings!.geofenceSettings!;
+      
+      // Register geofence with the coordinates from settings
+      final success = await registerGymGeofence(
+        gymId: gymId,
+        latitude: geofenceSettings.latitude!,
+        longitude: geofenceSettings.longitude!,
+        radius: geofenceSettings.radius!,
+      );
+
+      if (success) {
+        debugPrint('[GEOFENCE] Configured successfully from attendance settings');
+        debugPrint('[GEOFENCE] Auto-mark entry: ${geofenceSettings.autoMarkEntry}');
+        debugPrint('[GEOFENCE] Auto-mark exit: ${geofenceSettings.autoMarkExit}');
+      }
+
+      return success;
+    } catch (e) {
+      debugPrint('[GEOFENCE] Error configuring from settings: $e');
+      return false;
+    }
+  }
+
+  /// Check if attendance settings allow geofencing
+  bool isGeofenceEnabledInSettings() {
+    return _attendanceSettings?.geofenceEnabled ?? false;
+  }
+
+  /// Check if auto-mark entry is enabled
+  bool shouldAutoMarkEntry() {
+    return _attendanceSettings?.geofenceSettings?.autoMarkEntry ?? false;
+  }
+
+  /// Check if auto-mark exit is enabled
+  bool shouldAutoMarkExit() {
+    return _attendanceSettings?.geofenceSettings?.autoMarkExit ?? false;
+  }
+
+  /// Check if mock locations are allowed
+  bool areMockLocationsAllowed() {
+    return _attendanceSettings?.geofenceSettings?.allowMockLocation ?? false;
+  }
+
+  /// Get minimum accuracy requirement in meters
+  int? getMinAccuracyRequirement() {
+    return _attendanceSettings?.geofenceSettings?.minAccuracyMeters;
+  }
+
+  /// Refresh attendance settings and reconfigure geofence if needed
+  Future<bool> refreshSettings(String gymId) async {
+    try {
+      debugPrint('[GEOFENCE] Refreshing attendance settings');
+      
+      // Stop current geofence
+      if (_isServiceRunning) {
+        await removeAllGeofences();
+      }
+
+      // Load fresh settings and reconfigure
+      return await configureFromSettings(gymId);
+    } catch (e) {
+      debugPrint('[GEOFENCE] Error refreshing settings: $e');
+      return false;
+    }
+  }
+
+  /// Validate location accuracy against settings
+  bool isLocationAccuracyValid(double accuracy) {
+    final minAccuracy = getMinAccuracyRequirement();
+    if (minAccuracy == null) return true;
+    return accuracy <= minAccuracy;
+  }
+
   @override
   void dispose() {
     _geofenceController.close();
+    _settingsService.dispose();
     super.dispose();
   }
 }

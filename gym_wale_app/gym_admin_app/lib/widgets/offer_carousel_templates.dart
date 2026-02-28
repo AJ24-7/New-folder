@@ -923,10 +923,29 @@ class _OfferCarouselTemplateSelectorState extends State<OfferCarouselTemplateSel
   void initState() {
     super.initState();
     _selectedId = widget.selectedTemplateId;
+    // Set initial page to match the pre-selected template (e.g. when editing)
+    final initialIndex = OfferCarouselTemplates.templates.indexWhere(
+      (t) => t.id == _selectedId,
+    );
+    _currentPage = initialIndex >= 0 ? initialIndex : 0;
+    // Jump to the correct page after the first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_currentPage != 0 && _pageController.hasClients) {
+        _pageController.jumpToPage(_currentPage);
+      }
+    });
     _pageController.addListener(() {
-      int page = _pageController.page!.round();
-      if (page != _currentPage) {
-        setState(() => _currentPage = page);
+      final rawPage = _pageController.page;
+      if (rawPage == null) return;
+      final roundedPage = rawPage.round();
+      if (roundedPage != _currentPage) {
+        setState(() => _currentPage = roundedPage);
+      }
+      // Auto-select when the page has fully settled (no animation in progress)
+      if ((rawPage - rawPage.roundToDouble()).abs() < 0.01 && roundedPage != OfferCarouselTemplates.templates.indexWhere((t) => t.id == _selectedId)) {
+        final newTemplateId = OfferCarouselTemplates.templates[roundedPage].id;
+        setState(() => _selectedId = newTemplateId);
+        widget.onTemplateSelected(newTemplateId);
       }
     });
   }

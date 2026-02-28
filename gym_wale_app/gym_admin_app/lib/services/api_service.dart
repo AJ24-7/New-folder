@@ -741,6 +741,47 @@ class ApiService {
     }
   }
 
+  /// Validate geofence coordinates
+  Future<Map<String, dynamic>?> validateGeofenceCoordinates({
+    required double latitude,
+    required double longitude,
+    required double radius,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConfig.attendance}/settings/validate-geofence',
+        data: {
+          'latitude': latitude,
+          'longitude': longitude,
+          'radius': radius,
+        },
+      );
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      print('Error validating geofence coordinates: $e');
+      return null;
+    }
+  }
+
+  /// Get attendance settings configuration status
+  Future<Map<String, dynamic>?> getAttendanceSettingsStatus() async {
+    try {
+      final response = await _dio.get('${ApiConfig.attendance}/settings/status');
+      
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data['status'];
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching attendance settings status: $e');
+      return null;
+    }
+  }
+
   // ============== GEOFENCE ATTENDANCE ==============
   
   /// Verify geofence location
@@ -1028,4 +1069,48 @@ class ApiService {
       return false;
     }
   }
+
+  // Location Status Methods
+  /// Get all members location status for a gym
+  Future<Map<String, dynamic>?> getMembersLocationStatus() async {
+    try {
+      final response = await _dio.get('/api/member/admin/members-location-status/:gymId');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data;
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching members location status: $e');
+      return null;
+    }
+  }
+
+  /// Get members with location issues
+  Future<List<dynamic>> getMembersWithLocationIssues() async {
+    try {
+      final response = await _dio.get('/api/member/admin/members-location-issues/:gymId');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data['members'] ?? [];
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching members with location issues: $e');
+      return [];
+    }
+  }
+
+  /// Get specific member location status
+  Future<Map<String, dynamic>?> getMemberLocationStatus(String memberId) async {
+    try {
+      final response = await _dio.get('/api/member/location-status/$memberId/:gymId');
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        return response.data['status'];
+      }
+      return null;
+    } catch (e) {
+      print('Error fetching member location status: $e');
+      return null;
+    }
+  }
 }
+

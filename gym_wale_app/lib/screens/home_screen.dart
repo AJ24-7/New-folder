@@ -46,17 +46,24 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _currentCity;
   String? _currentAddress;
   bool _showCenterFAB = true; // Default to showing FAB
+  Set<String> _activeGymIds = {}; // Track gyms user is an active member of
 
   @override
   void initState() {
     super.initState();
     _loadPreferences();
-    _loadData();
-    _loadLocation();
-    _loadNotifications();
-    _loadTrainers();
-    _loadOffers();
+    _initializeData();
     _checkGeofenceSettings();
+  }
+
+  /// Initialize data in proper sequence
+  Future<void> _initializeData() async {
+    await _loadActiveMemberships();
+    await _loadData();
+    await _loadLocation();
+    await _loadNotifications();
+    await _loadTrainers();
+    await _loadOffers();
   }
 
   /// Check if gym uses geofence attendance and warn about background location
@@ -137,6 +144,39 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       print('[HOME] Error checking geofence settings: $e');
       // Silently fail - don't disrupt user experience
+    }
+  }
+
+  /// Load user's active memberships to filter gyms
+  Future<void> _loadActiveMemberships() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (!authProvider.isAuthenticated) {
+        return;
+      }
+
+      final activeMemberships = await ApiService.getActiveMemberships();
+      
+      setState(() {
+        _activeGymIds = activeMemberships
+            .map((membership) {
+              // Gym ID is nested under gym.id in the response
+              if (membership['gym'] != null && membership['gym'] is Map) {
+                return membership['gym']['id']?.toString();
+              }
+              return null;
+            })
+            .where((id) => id != null)
+            .cast<String>()
+            .toSet();
+      });
+      
+      print('[HOME] Loaded ${_activeGymIds.length} active gym memberships');
+      if (_activeGymIds.isNotEmpty) {
+        print('[HOME] Active gym IDs: $_activeGymIds');
+      }
+    } catch (e) {
+      print('[HOME] Error loading active memberships: $e');
     }
   }
 
@@ -246,8 +286,22 @@ class _HomeScreenState extends State<HomeScreen> {
       final gyms = await ApiService.getGyms();
       
       if (mounted) {
+        print('[HOME] Total gyms loaded: ${gyms.length}');
+        print('[HOME] Active gym IDs to filter: $_activeGymIds');
+        
+        // Filter out gyms where user is an active member
+        final filteredGyms = gyms.where((gym) {
+          final isActiveMember = _activeGymIds.contains(gym.id);
+          if (isActiveMember) {
+            print('[HOME] Filtering out gym: ${gym.name} (${gym.id})');
+          }
+          return !isActiveMember;
+        }).toList();
+        
+        print('[HOME] Gyms after filtering: ${filteredGyms.length}');
+        
         setState(() {
-          _popularGyms = gyms.take(5).toList();
+          _popularGyms = filteredGyms.take(5).toList();
         });
       }
     } catch (e) {
@@ -331,11 +385,12 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Load offers/banners (combine backend offers with static feature/tip banners)
   Future<void> _loadOffers() async {
     try {
-      // Load backend offers
+      // Load backend offers – only show super-admin / platform-level offers
+      // (gymId == null means it was created by the platform, not a gym admin).
       final offersData = await ApiService.getOffers(city: _currentCity);
       final backendOffers = offersData
           .map((data) => BannerOffer.fromJson(data))
-          .where((offer) => offer.isValid)
+          .where((offer) => offer.isValid && offer.gymId == null)
           .toList();
       
       // Create static app feature and tip banners
@@ -475,8 +530,21 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       
       if (mounted) {
+        print('[HOME] Nearby gyms loaded: ${gyms.length}');
+        print('[HOME] Active gym IDs to filter: $_activeGymIds');
+        
         setState(() {
-          _popularGyms = gyms.take(5).toList();
+          // Filter out gyms where user is an active member
+          final filteredGyms = gyms.where((gym) {
+            final isActiveMember = _activeGymIds.contains(gym.id);
+            if (isActiveMember) {
+              print('[HOME] Filtering out nearby gym: ${gym.name} (${gym.id})');
+            }
+            return !isActiveMember;
+          }).toList();
+          
+          print('[HOME] Nearby gyms after filtering: ${filteredGyms.length}');
+          _popularGyms = filteredGyms.take(5).toList();
         });
       }
     } catch (e) {

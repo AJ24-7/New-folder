@@ -231,19 +231,33 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
       return res.json({
         success: true,
         settings: {
+          gymId: gymId,
           mode: 'manual',
           geofenceEnabled: false,
-          requiresBackgroundLocation: false
+          requiresBackgroundLocation: false,
+          autoMarkEnabled: false,
+          geofenceSettings: null
         }
       });
     }
 
     // Return only necessary fields for member app
     const memberSettings = {
+      gymId: gymId,
       mode: settings.mode,
       geofenceEnabled: settings.geofenceSettings?.enabled || false,
       requiresBackgroundLocation: settings.geofenceSettings?.enabled || false,
-      autoMarkEnabled: settings.autoMarkEnabled || false
+      autoMarkEnabled: settings.autoMarkEnabled || false,
+      geofenceSettings: settings.geofenceSettings?.enabled ? {
+        enabled: settings.geofenceSettings.enabled,
+        latitude: settings.geofenceSettings.latitude,
+        longitude: settings.geofenceSettings.longitude,
+        radius: settings.geofenceSettings.radius,
+        autoMarkEntry: settings.geofenceSettings.autoMarkEntry,
+        autoMarkExit: settings.geofenceSettings.autoMarkExit,
+        allowMockLocation: settings.geofenceSettings.allowMockLocation,
+        minAccuracyMeters: settings.geofenceSettings.minAccuracyMeters
+      } : null
     };
 
     res.json({
@@ -256,6 +270,131 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Failed to fetch attendance settings',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Validate geofence coordinates
+ * POST /api/attendance/settings/validate-geofence
+ */
+exports.validateGeofenceCoordinates = async (req, res) => {
+  try {
+    const gymId = req.gym?.id || req.admin?.id;
+    const { latitude, longitude, radius } = req.body;
+
+    if (!gymId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Gym ID not found in request'
+      });
+    }
+
+    // Validate coordinates
+    if (!latitude || !longitude || !radius) {
+      return res.status(400).json({
+        success: false,
+        message: 'Latitude, longitude, and radius are required'
+      });
+    }
+
+    // Validate latitude range (-90 to 90)
+    if (latitude < -90 || latitude > 90) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid latitude. Must be between -90 and 90'
+      });
+    }
+
+    // Validate longitude range (-180 to 180)
+    if (longitude < -180 || longitude > 180) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid longitude. Must be between -180 and 180'
+      });
+    }
+
+    // Validate radius (minimum 10 meters, maximum 1000 meters)
+    if (radius < 10 || radius > 1000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid radius. Must be between 10 and 1000 meters'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Geofence coordinates are valid',
+      coordinates: {
+        latitude,
+        longitude,
+        radius
+      }
+    });
+
+  } catch (error) {
+    console.error('[VALIDATE GEOFENCE ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error validating geofence coordinates',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Check if attendance settings are configured
+ * GET /api/attendance/settings/status
+ */
+exports.getAttendanceSettingsStatus = async (req, res) => {
+  try {
+    const gymId = req.gym?.id || req.admin?.id;
+
+    if (!gymId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Gym ID not found in request'
+      });
+    }
+
+    const settings = await AttendanceSettings.findOne({ gym: gymId });
+
+    if (!settings) {
+      return res.json({
+        success: true,
+        status: {
+          configured: false,
+          mode: 'manual',
+          geofenceConfigured: false,
+          requiresSetup: true
+        }
+      });
+    }
+
+    const geofenceConfigured = Boolean(
+      settings.geofenceSettings?.enabled &&
+      settings.geofenceSettings?.latitude &&
+      settings.geofenceSettings?.longitude &&
+      settings.geofenceSettings?.radius
+    );
+
+    res.json({
+      success: true,
+      status: {
+        configured: true,
+        mode: settings.mode,
+        geofenceConfigured,
+        requiresSetup: settings.mode === 'geofence' && !geofenceConfigured,
+        autoMarkEnabled: settings.autoMarkEnabled
+      }
+    });
+
+  } catch (error) {
+    console.error('[GET ATTENDANCE SETTINGS STATUS ERROR]', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching attendance settings status',
       error: error.message
     });
   }

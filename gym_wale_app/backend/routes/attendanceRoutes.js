@@ -11,6 +11,8 @@ const attendanceSettingsController = require('../controllers/attendanceSettingsC
 router.get('/settings', gymadminAuth, attendanceSettingsController.getAttendanceSettings);
 router.put('/settings', gymadminAuth, attendanceSettingsController.updateAttendanceSettings);
 router.post('/settings/reset', gymadminAuth, attendanceSettingsController.resetAttendanceSettings);
+router.post('/settings/validate-geofence', gymadminAuth, attendanceSettingsController.validateGeofenceCoordinates);
+router.get('/settings/status', gymadminAuth, attendanceSettingsController.getAttendanceSettingsStatus);
 
 // Enhanced rush hour analysis endpoint for gym details page with professional bar chart data
 router.get('/rush-analysis/:gymId', async (req, res) => {

@@ -4,9 +4,12 @@ import 'package:geofence_service/geofence_service.dart';
 import '../services/geofencing_service.dart';
 import '../services/api_service.dart';
 import '../services/local_notification_service.dart';
+import '../services/attendance_settings_service.dart';
+import '../models/attendance_settings.dart';
 
 class AttendanceProvider extends ChangeNotifier {
   GeofencingService? _geofencingService;
+  final AttendanceSettingsService _settingsService = AttendanceSettingsService();
   
   StreamSubscription<GeofenceStatus>? _geofenceSubscription;
 
@@ -30,6 +33,9 @@ class AttendanceProvider extends ChangeNotifier {
 
   Map<String, dynamic>? _attendanceStats;
   Map<String, dynamic>? get attendanceStats => _attendanceStats;
+
+  AttendanceSettings? _attendanceSettings;
+  AttendanceSettings? get attendanceSettings => _attendanceSettings;
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -67,10 +73,26 @@ class AttendanceProvider extends ChangeNotifier {
     final gymId = _geofencingService!.currentGymId;
     if (gymId == null) return;
 
+    // Check if auto-mark is enabled in settings before marking attendance
+    if (!isAutoMarkEnabled()) {
+      debugPrint('[ATTENDANCE] Auto-mark is disabled, skipping automatic attendance');
+      return;
+    }
+
     if (status == GeofenceStatus.ENTER) {
-      await markAttendanceEntry(gymId);
+      // Check if auto-mark entry is enabled
+      if (_geofencingService!.shouldAutoMarkEntry()) {
+        await markAttendanceEntry(gymId);
+      } else {
+        debugPrint('[ATTENDANCE] Auto-mark entry is disabled in settings');
+      }
     } else if (status == GeofenceStatus.EXIT) {
-      await markAttendanceExit(gymId);
+      // Check if auto-mark exit is enabled
+      if (_geofencingService!.shouldAutoMarkExit()) {
+        await markAttendanceExit(gymId);
+      } else {
+        debugPrint('[ATTENDANCE] Auto-mark exit is disabled in settings');
+      }
     }
   }
 
@@ -605,9 +627,125 @@ class AttendanceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Load attendance settings for a gym
+  Future<bool> loadAttendanceSettings(String gymId) async {
+    try {
+      debugPrint('[ATTENDANCE PROVIDER] Loading attendance settings for gym: $gymId');
+      
+      _attendanceSettings = await _settingsService.loadSettings(gymId);
+      
+      if (_attendanceSettings != null) {
+        debugPrint('[ATTENDANCE PROVIDER] Settings loaded successfully');
+        debugPrint('[ATTENDANCE PROVIDER] Mode: ${_attendanceSettings!.mode}');
+        debugPrint('[ATTENDANCE PROVIDER] Geofence enabled: ${_attendanceSettings!.geofenceEnabled}');
+        debugPrint('[ATTENDANCE PROVIDER] Auto-mark enabled: ${_attendanceSettings!.autoMarkEnabled}');
+        notifyListeners();
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      debugPrint('[ATTENDANCE PROVIDER] Error loading settings: $e');
+      return false;
+    }
+  }
+
+  /// Check if geofencing should be enabled for this gym
+  bool shouldEnableGeofencing() {
+    return _attendanceSettings?.geofenceEnabled ?? false;
+  }
+
+  /// Check if auto-mark is enabled
+  bool isAutoMarkEnabled() {
+    return _attendanceSettings?.autoMarkEnabled ?? false;
+  }
+
+  /// Get attendance mode
+  AttendanceMode? getAttendanceMode() {
+    return _attendanceSettings?.mode;
+  }
+
+  /// Setup geofencing with attendance settings integration
+  Future<bool> setupGeofencingWithSettings(String gymId) async {
+    try {
+      if (_geofencingService == null) {
+        debugPrint('[ATTENDANCE] Geofencing service not initialized');
+        return false;
+      }
+
+      // First load attendance settings
+      final settingsLoaded = await loadAttendanceSettings(gymId);
+      if (!settingsLoaded) {
+        debugPrint('[ATTENDANCE] Failed to load attendance settings');
+        return false;
+      }
+
+      // Check if geofencing should be enabled
+      if (!shouldEnableGeofencing()) {
+        debugPrint('[ATTENDANCE] Geofencing is not enabled for this gym');
+        debugPrint('[ATTENDANCE] Current mode: ${_attendanceSettings?.mode}');
+        return false;
+      }
+
+      // Configure geofencing from settings
+      final success = await _geofencingService!.configureFromSettings(gymId);
+      
+      if (success) {
+        debugPrint('[ATTENDANCE] Geofencing setup successful with settings');
+        // Fetch today's attendance after setting up geofence
+        await fetchTodayAttendance(gymId);
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      debugPrint('[ATTENDANCE] Error setting up geofencing with settings: $e');
+      return false;
+    }
+  }
+
+  /// Refresh attendance settings and update geofencing if needed
+  Future<bool> refreshAttendanceSettings(String gymId) async {
+    try {
+      debugPrint('[ATTENDANCE PROVIDER] Refreshing attendance settings');
+      
+      // Clear cached settings and reload
+      _settingsService.clearSettings();
+      final loaded = await loadAttendanceSettings(gymId);
+      
+      if (loaded && _geofencingService != null) {
+        // If geofencing is enabled in settings, reconfigure it
+        if (shouldEnableGeofencing()) {
+          await _geofencingService!.refreshSettings(gymId);
+        } else {
+          // If geofencing is disabled, remove any active geofences
+          await removeGeofencing();
+        }
+      }
+      
+      return loaded;
+    } catch (e) {
+      debugPrint('[ATTENDANCE PROVIDER] Error refreshing settings: $e');
+      return false;
+    }
+  }
+
+  /// Check if geofence is properly configured
+  bool isGeofenceConfigured() {
+    if (_geofencingService == null) return false;
+    return _geofencingService!.isGeofenceEnabledInSettings();
+  }
+
+  /// Validate location against settings requirements
+  bool validateLocationAccuracy(double accuracy) {
+    if (_geofencingService == null) return true;
+    return _geofencingService!.isLocationAccuracyValid(accuracy);
+  }
+
   @override
   void dispose() {
     _geofenceSubscription?.cancel();
+    _settingsService.dispose();
     super.dispose();
   }
 }

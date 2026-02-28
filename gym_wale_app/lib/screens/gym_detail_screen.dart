@@ -23,6 +23,7 @@ import '../widgets/equipment_gallery_widget.dart';
 import '../widgets/activity_widgets.dart';
 import 'booking_screen.dart';
 import 'login_screen.dart';
+import 'report_problem_screen.dart';
 
 class GymDetailScreen extends StatefulWidget {
   final String gymId;
@@ -44,7 +45,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   bool _isLoading = true;
   bool _isFavorite = false;
   int _selectedTab = 0;
-  UserMembership? _userMembership;
+  Map<String, dynamic>? _userMembership; // Store raw membership data
   bool _hasActiveMembership = false;
   late PageController _imagePageController;
   int _currentImageIndex = 0;
@@ -63,6 +64,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   void dispose() {
     _imagePageController.dispose();
     super.dispose();
+  }
+
+  /// Helper to extract consistent gym ID from membership data
+  String? _extractGymId(dynamic membership) {
+    if (membership == null) return null;
+    final gym = membership['gym'];
+    if (gym == null) return null;
+    return gym['_id'] ?? gym['id'];
   }
 
   void _startAutoScroll() {
@@ -126,23 +135,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         
         // Parse activities from raw data
         List<Activity> activities = [];
-        print('DEBUG: Checking activities in gymDataRaw');
-        print('DEBUG: activities field exists: ${gymDataRaw['activities'] != null}');
-        print('DEBUG: activities is List: ${gymDataRaw['activities'] is List}');
-        print('DEBUG: activities data: ${gymDataRaw['activities']}');
         
         if (gymDataRaw['activities'] != null && gymDataRaw['activities'] is List) {
           try {
             activities = (gymDataRaw['activities'] as List)
-                .map((a) {
-                  print('DEBUG: Parsing activity item: $a');
-                  return Activity.fromJson(a as Map<String, dynamic>);
-                })
+                .map((a) => Activity.fromJson(a as Map<String, dynamic>))
                 .toList();
-            print('DEBUG: Parsed ${activities.length} activities');
-            activities.forEach((activity) {
-              print('DEBUG: Activity - Name: ${activity.name}, Icon: ${activity.icon}, Desc: ${activity.description}');
-            });
           } catch (e) {
             print('Error parsing activities: $e');
           }
@@ -159,10 +157,6 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           _isFavorite = isFav;
           _isLoading = false;
         });
-        
-        print('DEBUG: Final activities count in state: ${_activities.length}');
-        print('DEBUG: Membership plan loaded: ${membershipPlan != null}');
-        print('DEBUG: Membership plan options: ${membershipPlan?.monthlyOptions.length ?? 0}');
       }
     } catch (e) {
       print('Error loading gym details: $e');
@@ -173,6 +167,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Future<void> _checkUserMembership() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (!authProvider.isAuthenticated) {
+      print('[Membership Check] User not authenticated');
       setState(() {
         _hasActiveMembership = false;
         _userMembership = null;
@@ -181,21 +176,35 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
 
     try {
-      final result = await ApiService.checkUserMembership(widget.gymId);
-      if (result['success'] == true && result['hasActiveMembership'] == true) {
-        setState(() {
-          _hasActiveMembership = true;
-          _userMembership = result['membership'] as UserMembership?;
-        });
-        print('User has active membership: ${_userMembership?.membershipId}');
-      } else {
-        setState(() {
-          _hasActiveMembership = false;
-          _userMembership = null;
-        });
+      // Get all active memberships (same as subscriptions screen)
+      final memberships = await ApiService.getActiveMemberships();
+      print('[Membership Check] Loaded ${memberships.length} active memberships');
+      
+      // Check if current gym is in the active memberships list
+      for (final membership in memberships) {
+        final gymId = _extractGymId(membership);
+        print('[Membership Check] Checking membership - gymId: $gymId, targetGymId: ${widget.gymId}');
+        
+        if (gymId != null && gymId.toString() == widget.gymId) {
+          // Found active membership for this gym
+          print('[Membership Check] ✓ Found active membership for gym ${widget.gymId}');
+          print('[Membership Check] Membership data: ${membership['id'] ?? membership['membershipId']}');
+          setState(() {
+            _hasActiveMembership = true;
+            _userMembership = membership; // Store raw membership data
+          });
+          return;
+        }
       }
+      
+      // No active membership found for this gym
+      print('[Membership Check] ✗ No active membership found for gym ${widget.gymId}');
+      setState(() {
+        _hasActiveMembership = false;
+        _userMembership = null;
+      });
     } catch (e) {
-      print('Error checking membership: $e');
+      print('[Membership Check] Error loading memberships: $e');
       setState(() {
         _hasActiveMembership = false;
         _userMembership = null;
@@ -305,7 +314,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                   color: _currentImageIndex == index
                                       ? Colors.white
-                                      : Colors.white.withOpacity(0.5),
+                                      : Colors.white.withValues(alpha: 0.5),
                                 ),
                               ),
                             ),
@@ -342,7 +351,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
+                            color: Colors.black.withValues(alpha: 0.08),
                             blurRadius: 20,
                             offset: const Offset(0, 4),
                           ),
@@ -398,8 +407,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                               decoration: BoxDecoration(
                                 gradient: LinearGradient(
                                   colors: [
-                                    AppTheme.warningColor.withOpacity(0.3),
-                                    AppTheme.secondaryColor.withOpacity(0.2),
+                                    AppTheme.warningColor.withValues(alpha: 0.3),
+                                    AppTheme.secondaryColor.withValues(alpha: 0.2),
                                   ],
                                 ),
                                 borderRadius: BorderRadius.circular(12),
@@ -454,23 +463,56 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                               _buildActiveMembershipBadge(),
                               const SizedBox(height: 12),
                               // Member Problem Report Button
-                              SizedBox(
+                              Container(
                                 width: double.infinity,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.red.withValues(alpha: 0.5),
+                                    width: 2,
+                                  ),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.red.withValues(alpha: 0.08),
+                                      Colors.red.withValues(alpha: 0.12),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                ),
                                 child: ElevatedButton.icon(
-                                  onPressed: _showProblemReportDialog,
+                                  onPressed: () {
+                                    // Navigate to the detailed report screen
+                                    if (_userMembership != null) {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => ReportProblemScreen(
+                                            gymId: widget.gymId,
+                                            gymName: _gym!.name,
+                                            membershipId: _userMembership!['id'] ?? _userMembership!['membershipId'] ?? '',
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  },
                                   style: ElevatedButton.styleFrom(
                                     padding: const EdgeInsets.symmetric(vertical: 16),
-                                    backgroundColor: Colors.orange.shade600,
+                                    backgroundColor: Colors.transparent,
+                                    foregroundColor: Colors.red.shade700,
+                                    elevation: 0,
+                                    shadowColor: Colors.transparent,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
-                                  icon: const Icon(Icons.report_problem, size: 24),
-                                  label: const Text(
+                                  icon: Icon(Icons.report_problem, size: 24, color: Colors.red.shade700),
+                                  label: Text(
                                     'Report a Problem',
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
+                                      color: Colors.red.shade700,
                                     ),
                                   ),
                                 ),
@@ -569,7 +611,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
+              color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon, color: AppTheme.primaryColor, size: 20),
@@ -589,7 +631,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
               onPressed: onAction,
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -629,7 +671,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppTheme.primaryColor.withOpacity(0.3),
+                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -738,7 +780,6 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 itemCount: _activities.length,
                 itemBuilder: (context, index) {
                   final activity = _activities[index];
-                  print('DEBUG: Rendering activity: ${activity.name}, icon: ${activity.icon}');
                   return ActivityCard(activity: activity);
                 },
               );
@@ -748,10 +789,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Colors.grey.withOpacity(0.3),
+                color: Colors.grey.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -792,10 +833,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [AppTheme.primaryColor.withOpacity(0.1), AppTheme.accentColor.withOpacity(0.1)],
+                    colors: [AppTheme.primaryColor.withValues(alpha: 0.1), AppTheme.accentColor.withValues(alpha: 0.1)],
                   ),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 2),
+                  border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3), width: 2),
                 ),
                 child: Column(
                   children: [
@@ -810,11 +851,11 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 24),
-                    _buildMembershipInfoRow('Membership ID', _userMembership!.membershipId),
+                    _buildMembershipInfoRow('Membership ID', _userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'),
                     const Divider(height: 24),
-                    _buildMembershipInfoRow('Plan', '${_userMembership!.planSelected} - ${_userMembership!.monthlyPlan}'),
+                    _buildMembershipInfoRow('Plan', '${_userMembership!['planType'] ?? _userMembership!['planSelected'] ?? 'N/A'} - ${_userMembership!['duration'] ?? _userMembership!['monthlyPlan'] ?? 'N/A'} months'),
                     const Divider(height: 24),
-                    _buildMembershipInfoRow('Valid Until', _userMembership!.formattedValidUntil),
+                    _buildMembershipInfoRow('Valid Until', _formatMembershipDate(_userMembership!['validUntil'])),
                     const SizedBox(height: 24),
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -1040,25 +1081,25 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
 
   // ── Offer Carousel ──────────────────────────────────────────────────────────
 
-  /// Template-aware gradient colours keyed by GymOffer.templateId
-  static Map<String, List<Color>> _templateGradients = {
-    'modern_gradient':   [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFD946EF)],
-    'bold_accent':       [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
-    'minimal_elegant':   [Color(0xFF1E293B), Color(0xFF334155)],
-    'vibrant_neon':      [Color(0xFF00B4D8), Color(0xFF7B2FBE)],
-    'premium_gold':      [Color(0xFFD4A017), Color(0xFFFF8C00)],
-    'fresh_spring':      [Color(0xFF10B981), Color(0xFF34D399)],
-    'sunset_vibes':      [Color(0xFFFF6B6B), Color(0xFFFFD700)],
-    'ocean_blue':        [Color(0xFF1E40AF), Color(0xFF60A5FA)],
-    'monochrome_classic':[Color(0xFF111827), Color(0xFF374151)],
-    'fire_energy':       [Color(0xFFEF4444), Color(0xFFF97316)],
+  /// Template gradient definitions – keyed by GymOffer.templateId
+  static const Map<String, List<Color>> _templateGradients = {
+    'modern_gradient':    [Color(0xFF6366F1), Color(0xFF8B5CF6), Color(0xFFD946EF)],
+    'bold_accent':        [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+    'minimal_elegant':    [Color(0xFF1E293B), Color(0xFF334155)],
+    'vibrant_neon':       [Color(0xFF00B4D8), Color(0xFF7B2FBE)],
+    'premium_gold':       [Color(0xFFD4A017), Color(0xFFFF8C00)],
+    'fresh_spring':       [Color(0xFF10B981), Color(0xFF34D399)],
+    'sunset_vibes':       [Color(0xFFFF6B6B), Color(0xFFFFD700)],
+    'ocean_blue':         [Color(0xFF1E40AF), Color(0xFF60A5FA)],
+    'monochrome_classic': [Color(0xFF111827), Color(0xFF374151)],
+    'fire_energy':        [Color(0xFFEF4444), Color(0xFFF97316)],
   };
 
   List<Color> _resolveGradient(GymOffer offer) {
-    if (offer.templateId != null && _templateGradients.containsKey(offer.templateId)) {
+    if (offer.templateId != null &&
+        _templateGradients.containsKey(offer.templateId)) {
       return _templateGradients[offer.templateId!]!;
     }
-    // Fallback based on offer type
     switch (offer.type) {
       case 'percentage': return [Color(0xFF6366F1), Color(0xFF8B5CF6)];
       case 'fixed':      return [Color(0xFF10B981), Color(0xFF34D399)];
@@ -1069,6 +1110,12 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   }
 
   Widget _buildOffersCarousel() {
+    final activeOffers =
+        _offers.where((o) => o.status == 'active' && !o.isExpired).toList();
+    if (activeOffers.isEmpty) return const SizedBox.shrink();
+
+    final singleOffer = activeOffers.length == 1;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(0, 8, 0, 8),
       child: Column(
@@ -1087,7 +1134,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.local_offer, color: Colors.white, size: 16),
+                  child: const Icon(Icons.local_offer,
+                      color: Colors.white, size: 16),
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -1098,13 +1146,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 ),
                 const SizedBox(width: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryColor.withOpacity(0.12),
+                    color: AppTheme.primaryColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    '${_offers.length}',
+                    '${activeOffers.length}',
                     style: TextStyle(
                       color: AppTheme.primaryColor,
                       fontWeight: FontWeight.bold,
@@ -1117,33 +1166,45 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           ),
           const SizedBox(height: 12),
 
-          // Carousel
-          cs.CarouselSlider.builder(
-            itemCount: _offers.length,
-            options: cs.CarouselOptions(
-              height: _offers.first.features.isNotEmpty ? 230 : 200,
-              viewportFraction: 0.88,
-              enlargeCenterPage: true,
-              enlargeFactor: 0.18,
-              autoPlay: _offers.length > 1,
-              autoPlayInterval: const Duration(seconds: 4),
-              autoPlayAnimationDuration: const Duration(milliseconds: 700),
-              autoPlayCurve: Curves.easeInOutCubic,
-              onPageChanged: (index, _) =>
-                  setState(() => _currentOfferIndex = index),
+          // Single offer: plain card; multiple offers: carousel
+          if (singleOffer)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                height: activeOffers.first.features.isNotEmpty ? 230 : 200,
+                child: _buildOfferCarouselCard(activeOffers.first),
+              ),
+            )
+          else ...[
+            cs.CarouselSlider.builder(
+              itemCount: activeOffers.length,
+              options: cs.CarouselOptions(
+                height: activeOffers.any((o) => o.features.isNotEmpty)
+                    ? 230
+                    : 200,
+                viewportFraction: 0.88,
+                enlargeCenterPage: true,
+                enlargeFactor: 0.18,
+                autoPlay: true,
+                autoPlayInterval: const Duration(seconds: 4),
+                autoPlayAnimationDuration:
+                    const Duration(milliseconds: 700),
+                autoPlayCurve: Curves.easeInOutCubic,
+                enableInfiniteScroll: false,
+                onPageChanged: (index, _) =>
+                    setState(() => _currentOfferIndex = index),
+              ),
+              itemBuilder: (context, index, _) =>
+                  _buildOfferCarouselCard(activeOffers[index]),
             ),
-            itemBuilder: (context, index, _) =>
-                _buildOfferCarouselCard(_offers[index]),
-          ),
 
-          // Dot indicators
-          if (_offers.length > 1)
+            // Dot indicators
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(
-                  _offers.length,
+                  activeOffers.length,
                   (i) => AnimatedContainer(
                     duration: const Duration(milliseconds: 300),
                     margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -1152,25 +1213,45 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     decoration: BoxDecoration(
                       color: _currentOfferIndex == i
                           ? AppTheme.primaryColor
-                          : AppTheme.primaryColor.withOpacity(0.25),
+                          : AppTheme.primaryColor.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
   }
 
   Widget _buildOfferCarouselCard(GymOffer offer) {
+    final tid = offer.templateId ?? '';
+
+    // ── bold_accent: white card with coloured border + accent bar ──
+    if (tid == 'bold_accent') return _buildBoldAccentCard(offer);
+
+    // ── minimal_elegant: dark card, thin white rule, spaced typography ──
+    if (tid == 'minimal_elegant') return _buildMinimalElegantCard(offer);
+
+    // ── vibrant_neon: dark bg + neon gradient text + neon glow shadow ──
+    if (tid == 'vibrant_neon') return _buildVibrantNeonCard(offer);
+
+    // All gradient-based templates share the same gradient card layout
+    return _buildGradientCard(offer);
+  }
+
+  // ── gradient card (shared by modern_gradient / premium_gold / fresh_spring /
+  //    sunset_vibes / ocean_blue / monochrome_classic / fire_energy + fallback) ──
+  Widget _buildGradientCard(GymOffer offer) {
     final gradients = _resolveGradient(offer);
-    final isDark = gradients.first.computeLuminance() < 0.4;
-    final fg = isDark ? Colors.white : Colors.black87;
-    final fgMuted = isDark ? Colors.white70 : Colors.black54;
+    final fg = Colors.white;
+    final fgMuted = Colors.white70;
     final dateStr =
-        '${offer.startDate.day}/${offer.startDate.month} – ${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+        '${offer.startDate.day}/${offer.startDate.month} – '
+        '${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+    final isPremiumGold = offer.templateId == 'premium_gold';
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -1183,9 +1264,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: gradients.first.withOpacity(0.4),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
+            color: gradients.first.withValues(alpha: 0.45),
+            blurRadius: 16,
+            offset: const Offset(0, 7),
           ),
         ],
       ),
@@ -1193,50 +1274,47 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         child: Stack(
           children: [
-            // Decorative background circle
+            // Decorative circles
             Positioned(
-              right: -30,
-              top: -30,
+              right: -30, top: -30,
               child: Container(
-                width: 130,
-                height: 130,
+                width: 130, height: 130,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.08),
+                  color: Colors.white.withValues(alpha: 0.08),
                 ),
               ),
             ),
             Positioned(
-              left: -20,
-              bottom: -20,
+              left: -20, bottom: -20,
               child: Container(
-                width: 90,
-                height: 90,
+                width: 90, height: 90,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                 ),
               ),
             ),
+            if (isPremiumGold)
+              const Positioned.fill(child: _GoldPatternOverlay()),
 
-            // Content
             Padding(
               padding: const EdgeInsets.all(18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top row: discount badge + HOT tag
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Discount badge
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.22),
+                          color: Colors.white.withValues(alpha: 0.22),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                              color: Colors.white.withOpacity(0.4), width: 1),
+                              color: Colors.white.withValues(alpha: 0.4), width: 1),
                         ),
                         child: Text(
                           offer.discountText,
@@ -1276,12 +1354,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.18),
+                            color: Colors.white.withValues(alpha: 0.18),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
-                                color: Colors.white.withOpacity(0.5),
-                                width: 1,
-                                style: BorderStyle.solid),
+                                color: Colors.white.withValues(alpha: 0.5), width: 1),
                           ),
                           child: Text(
                             offer.couponCode!,
@@ -1296,33 +1372,23 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     ],
                   ),
                   const SizedBox(height: 10),
-
-                  // Title
                   Text(
                     offer.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: fg,
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                    ),
+                        color: fg,
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
-
-                  // Description
                   Text(
                     offer.description,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: fgMuted,
-                      fontSize: 12.5,
-                      height: 1.35,
-                    ),
+                        color: fgMuted, fontSize: 12.5, height: 1.35),
                   ),
-
-                  // Features (if any)
                   if (offer.features.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Wrap(
@@ -1334,7 +1400,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
+                                  color: Colors.white.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(f,
@@ -1346,36 +1412,31 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                           .toList(),
                     ),
                   ],
-
                   const Spacer(),
-
-                  // Bottom meta row
                   Row(
                     children: [
                       Icon(offer.categoryIcon, color: fg, size: 14),
                       const SizedBox(width: 4),
-                      Text(
-                        offer.categoryDisplay,
-                        style: TextStyle(
-                            color: fg, fontSize: 11, fontWeight: FontWeight.w600),
-                      ),
+                      Text(offer.categoryDisplay,
+                          style: TextStyle(
+                              color: fg,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
                       const SizedBox(width: 14),
                       Icon(Icons.calendar_today, color: fgMuted, size: 12),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: Text(
-                          dateStr,
-                          style: TextStyle(color: fgMuted, fontSize: 11),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        child: Text(dateStr,
+                            style: TextStyle(color: fgMuted, fontSize: 11),
+                            overflow: TextOverflow.ellipsis),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: offer.isExpired
-                              ? Colors.red.withOpacity(0.28)
-                              : Colors.greenAccent.withOpacity(0.25),
+                              ? Colors.red.withValues(alpha: 0.28)
+                              : Colors.greenAccent.withValues(alpha: 0.25),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -1391,8 +1452,6 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       ),
                     ],
                   ),
-
-                  // Usage & min-amount
                   if (offer.maxUses != null || offer.minAmount > 0) ...[
                     const SizedBox(height: 6),
                     Row(
@@ -1400,24 +1459,510 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                         if (offer.maxUses != null) ...[
                           Icon(Icons.group, color: fgMuted, size: 12),
                           const SizedBox(width: 3),
-                          Text(
-                            offer.usageStatus,
-                            style: TextStyle(color: fgMuted, fontSize: 10.5),
-                          ),
+                          Text(offer.usageStatus,
+                              style: TextStyle(
+                                  color: fgMuted, fontSize: 10.5)),
                           const SizedBox(width: 12),
                         ],
                         if (offer.minAmount > 0) ...[
-                          Icon(Icons.currency_rupee, color: fgMuted, size: 12),
-                          Text(
-                            'Min ₹${offer.minAmount.toInt()}',
-                            style: TextStyle(color: fgMuted, fontSize: 10.5),
-                          ),
+                          Icon(Icons.currency_rupee,
+                              color: fgMuted, size: 12),
+                          Text('Min ₹${offer.minAmount.toInt()}',
+                              style: TextStyle(
+                                  color: fgMuted, fontSize: 10.5)),
                         ],
                       ],
                     ),
                   ],
                 ],
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── bold_accent template card ─────────────────────────────────────────────
+  Widget _buildBoldAccentCard(GymOffer offer) {
+    const accent = Color(0xFFFF6B6B);
+    final dateStr =
+        '${offer.startDate.day}/${offer.startDate.month} – '
+        '${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accent, width: 3),
+        boxShadow: [
+          BoxShadow(
+              color: accent.withValues(alpha: 0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 6)),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(17),
+        child: Stack(
+          children: [
+            // Left accent bar
+            Positioned(
+              left: 0, top: 0, bottom: 0,
+              child: Container(
+                width: 10,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0xFFFF6B6B), Color(0xFFFF8E53)],
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              offer.discountText,
+                              style: const TextStyle(
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w900,
+                                  color: accent,
+                                  letterSpacing: 1),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              offer.title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1E293B)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (offer.couponCode != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: accent, width: 1.5),
+                          ),
+                          child: Text(
+                            offer.couponCode!,
+                            style: const TextStyle(
+                                color: accent,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 11,
+                                letterSpacing: 1.2),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    offer.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.grey[700],
+                        height: 1.35),
+                  ),
+                  if (offer.features.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: offer.features
+                          .take(3)
+                          .map((f) => Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: accent.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                      color: accent.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(f,
+                                    style: const TextStyle(
+                                        color: accent,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w500)),
+                              ))
+                          .toList(),
+                    ),
+                  ],
+                  const Spacer(),
+                  Row(
+                    children: [
+                      Icon(offer.categoryIcon,
+                          color: Colors.grey[600], size: 13),
+                      const SizedBox(width: 4),
+                      Text(offer.categoryDisplay,
+                          style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 12),
+                      Icon(Icons.calendar_today,
+                          color: Colors.grey[500], size: 12),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(dateStr,
+                            style: TextStyle(
+                                color: Colors.grey[500], fontSize: 11),
+                            overflow: TextOverflow.ellipsis),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: offer.isExpired
+                              ? Colors.red.withValues(alpha: 0.1)
+                              : Colors.green.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: offer.isExpired
+                                  ? Colors.red.withValues(alpha: 0.4)
+                                  : Colors.green.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          offer.remainingDays,
+                          style: TextStyle(
+                            color: offer.isExpired
+                                ? Colors.red
+                                : Colors.green[700],
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── minimal_elegant template card ─────────────────────────────────────────
+  Widget _buildMinimalElegantCard(GymOffer offer) {
+    const bg = Color(0xFF1E293B);
+    final dateStr =
+        '${offer.startDate.day}/${offer.startDate.month} – '
+        '${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 18,
+              offset: const Offset(0, 8)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 50,
+              height: 3,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    colors: [Colors.white, Colors.white.withValues(alpha: 0.2)]),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        offer.discountText,
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w300,
+                            color: Colors.white,
+                            letterSpacing: 3),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        offer.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5),
+                      ),
+                    ],
+                  ),
+                ),
+                if (offer.couponCode != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.3), width: 1),
+                    ),
+                    child: Text(
+                      offer.couponCode!,
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.9),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          letterSpacing: 1.5),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              offer.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  height: 1.4),
+            ),
+            if (offer.features.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: offer.features
+                    .take(3)
+                    .map((f) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.06),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2)),
+                          ),
+                          child: Text(f,
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.75),
+                                  fontSize: 10,
+                                  letterSpacing: 0.5)),
+                        ))
+                    .toList(),
+              ),
+            ],
+            const Spacer(),
+            Row(
+              children: [
+                Icon(offer.categoryIcon,
+                    color: Colors.white38, size: 13),
+                const SizedBox(width: 4),
+                Text(offer.categoryDisplay,
+                    style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.55),
+                        fontSize: 11,
+                        letterSpacing: 0.5)),
+                const SizedBox(width: 12),
+                Icon(Icons.calendar_today,
+                    color: Colors.white30, size: 12),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(dateStr,
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 11),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── vibrant_neon template card ─────────────────────────────────────────────
+  Widget _buildVibrantNeonCard(GymOffer offer) {
+    const neon1 = Color(0xFF00F5FF);
+    const neon2 = Color(0xFFFF00FF);
+    final dateStr =
+        '${offer.startDate.day}/${offer.startDate.month} – '
+        '${offer.endDate.day}/${offer.endDate.month}/${offer.endDate.year}';
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: neon1, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+              color: neon1.withValues(alpha: 0.4),
+              blurRadius: 20,
+              spreadRadius: 0),
+          BoxShadow(
+              color: neon2.withValues(alpha: 0.25),
+              blurRadius: 20,
+              spreadRadius: 0),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ShaderMask(
+                    shaderCallback: (bounds) => const LinearGradient(
+                      colors: [neon1, neon2],
+                    ).createShader(bounds),
+                    child: Text(
+                      offer.discountText,
+                      style: const TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                          letterSpacing: 1.5),
+                    ),
+                  ),
+                ),
+                if (offer.couponCode != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: neon1.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border:
+                          Border.all(color: neon1.withValues(alpha: 0.6), width: 1),
+                    ),
+                    child: Text(
+                      offer.couponCode!,
+                      style: TextStyle(
+                          color: neon1,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11,
+                          letterSpacing: 1.5),
+                    ),
+                  ),
+                if (offer.highlightOffer && offer.couponCode == null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange, width: 1),
+                    ),
+                    child: const Text('HOT',
+                        style: TextStyle(
+                            color: Colors.orange,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              offer.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                  letterSpacing: 0.5),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              offer.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 12.5,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  height: 1.35),
+            ),
+            if (offer.features.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: offer.features
+                    .take(3)
+                    .map((f) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: neon1.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: neon1.withValues(alpha: 0.3), width: 1),
+                          ),
+                          child: Text(f,
+                              style: TextStyle(
+                                  color: neon1.withValues(alpha: 0.9),
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w500)),
+                        ))
+                    .toList(),
+              ),
+            ],
+            const Spacer(),
+            Row(
+              children: [
+                Icon(offer.categoryIcon,
+                    color: neon1.withValues(alpha: 0.7), size: 13),
+                const SizedBox(width: 4),
+                Text(offer.categoryDisplay,
+                    style: TextStyle(
+                        color: neon1.withValues(alpha: 0.8),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(width: 12),
+                Icon(Icons.calendar_today,
+                    color: Colors.white30, size: 12),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(dateStr,
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.45),
+                          fontSize: 11),
+                      overflow: TextOverflow.ellipsis),
+                ),
+              ],
             ),
           ],
         ),
@@ -1490,8 +2035,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              AppTheme.primaryColor.withOpacity(0.05),
-              AppTheme.accentColor.withOpacity(0.05),
+              AppTheme.primaryColor.withValues(alpha: 0.05),
+              AppTheme.accentColor.withValues(alpha: 0.05),
             ],
           ),
         ),
@@ -1511,7 +2056,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.primaryColor.withOpacity(0.3),
+                          color: AppTheme.primaryColor.withValues(alpha: 0.3),
                           blurRadius: 8,
                           offset: const Offset(0, 4),
                         ),
@@ -1607,9 +2152,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     return Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.green.withOpacity(0.1),
+                        color: Colors.green.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -1786,7 +2331,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.1),
+                      color: Colors.green.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: Colors.green, width: 2),
                     ),
@@ -1983,7 +2528,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                           color: AppTheme.backgroundColor,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: AppTheme.primaryColor.withOpacity(0.2),
+                            color: AppTheme.primaryColor.withValues(alpha: 0.2),
                             width: 1,
                           ),
                         ),
@@ -2155,22 +2700,54 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
+  // Helper methods for membership data
+  String _formatMembershipDate(dynamic dateValue) {
+    if (dateValue == null) return 'N/A';
+    try {
+      final date = DateTime.parse(dateValue.toString());
+      return '${date.day}/${date.month}/${date.year}';
+    } catch (e) {
+      return dateValue.toString();
+    }
+  }
+
+  String _getMembershipIcon(String planType) {
+    switch (planType.toLowerCase()) {
+      case 'basic':
+        return '🥉';
+      case 'standard':
+        return '🥈';
+      case 'premium':
+        return '🥇';
+      default:
+        return '🎫';
+    }
+  }
+
   // Build Active Membership Badge
   Widget _buildActiveMembershipBadge() {
     if (_userMembership == null) return const SizedBox.shrink();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [AppTheme.primaryColor, AppTheme.accentColor],
+          colors: [
+            AppTheme.successColor.withValues(alpha: isDark ? 0.2 : 0.15),
+            AppTheme.primaryColor.withValues(alpha: isDark ? 0.15 : 0.1),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppTheme.successColor.withValues(alpha: isDark ? 0.4 : 0.3),
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.primaryColor.withOpacity(0.3),
+            color: AppTheme.successColor.withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -2181,12 +2758,16 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: AppTheme.successColor.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: AppTheme.successColor.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
             ),
             child: const Icon(
               Icons.card_membership,
-              color: AppTheme.primaryColor,
+              color: AppTheme.successColor,
               size: 32,
             ),
           ),
@@ -2198,14 +2779,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 Row(
                   children: [
                     Text(
-                      _userMembership!.planTypeIcon,
+                      _getMembershipIcon(_userMembership!['planType'] ?? _userMembership!['planSelected'] ?? ''),
                       style: const TextStyle(fontSize: 16),
                     ),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'Active Member',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Theme.of(context).textTheme.bodyLarge?.color,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
@@ -2214,9 +2795,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'ID: ${_userMembership!.membershipId}',
-                  style: const TextStyle(
-                    color: Colors.white,
+                  'ID: ${_userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'}',
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyMedium?.color,
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 0.5,
@@ -2224,9 +2805,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Valid until: ${_userMembership!.formattedValidUntil}',
+                  'Valid until: ${_formatMembershipDate(_userMembership!['validUntil'])}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
+                    color: Theme.of(context).textTheme.bodySmall?.color,
                     fontSize: 13,
                   ),
                 ),
@@ -2235,19 +2816,23 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           ),
           GestureDetector(
             onTap: () {
-              // Show QR code in a dialog
-              _showMembershipQRCode();
+              // Navigate to subscriptions screen
+              Navigator.pushNamed(context, '/subscriptions');
             },
             child: Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
               ),
               child: const Icon(
-                Icons.qr_code,
+                Icons.arrow_forward,
                 color: AppTheme.primaryColor,
-                size: 28,
+                size: 24,
               ),
             ),
           ),
@@ -2306,7 +2891,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _userMembership!.membershipId,
+                    _userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
@@ -2386,7 +2971,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                         const Icon(Icons.badge, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'Membership ID: ${_userMembership!.membershipId}',
+                          'Membership ID: ${_userMembership!['id'] ?? _userMembership!['membershipId'] ?? 'N/A'}',
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
@@ -2614,13 +3199,13 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _selectedOption.isPopular
-              ? widget.planColor.withOpacity(0.5)
-              : Theme.of(context).dividerColor.withOpacity(0.5),
+              ? widget.planColor.withValues(alpha: 0.5)
+              : Theme.of(context).dividerColor.withValues(alpha: 0.5),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: widget.planColor.withOpacity(0.1),
+            color: widget.planColor.withValues(alpha: 0.1),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -2653,8 +3238,8 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            widget.planColor.withOpacity(0.1),
-            widget.planColor.withOpacity(0.05),
+            widget.planColor.withValues(alpha: 0.1),
+            widget.planColor.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -2682,7 +3267,7 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.withOpacity(0.3),
+                    color: Colors.red.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -2707,7 +3292,7 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: widget.planColor.withOpacity(0.3),
+                  color: widget.planColor.withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -2846,10 +3431,10 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: widget.planColor.withOpacity(0.05),
+              color: widget.planColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: widget.planColor.withOpacity(0.2),
+                color: widget.planColor.withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -2943,7 +3528,7 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 elevation: 4,
-                shadowColor: widget.planColor.withOpacity(0.4),
+                shadowColor: widget.planColor.withValues(alpha: 0.4),
               ),
               child: const Text(
                 'Buy Membership',
@@ -3016,13 +3601,13 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: widget.membership.isPopular
-              ? widget.planColor.withOpacity(0.5)
-              : Theme.of(context).dividerColor.withOpacity(0.5),
+              ? widget.planColor.withValues(alpha: 0.5)
+              : Theme.of(context).dividerColor.withValues(alpha: 0.5),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: widget.planColor.withOpacity(0.1),
+            color: widget.planColor.withValues(alpha: 0.1),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -3055,8 +3640,8 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            widget.planColor.withOpacity(0.1),
-            widget.planColor.withOpacity(0.05),
+            widget.planColor.withValues(alpha: 0.1),
+            widget.planColor.withValues(alpha: 0.05),
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
@@ -3084,7 +3669,7 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
                 borderRadius: BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.red.withOpacity(0.3),
+                    color: Colors.red.withValues(alpha: 0.3),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -3109,7 +3694,7 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: widget.planColor.withOpacity(0.3),
+                  color: widget.planColor.withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 5),
                 ),
@@ -3252,10 +3837,10 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: widget.planColor.withOpacity(0.05),
+              color: widget.planColor.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: widget.planColor.withOpacity(0.2),
+                color: widget.planColor.withValues(alpha: 0.2),
               ),
             ),
             child: Row(
@@ -3343,7 +3928,7 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
                   borderRadius: BorderRadius.circular(10),
                 ),
                 elevation: 4,
-                shadowColor: widget.planColor.withOpacity(0.4),
+                shadowColor: widget.planColor.withValues(alpha: 0.4),
               ),
               child: const Text(
                 'Buy Membership',
@@ -3456,7 +4041,7 @@ class _TrialBookingDialogState extends State<_TrialBookingDialog> {
             margin: const EdgeInsets.only(top: 8),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: AppTheme.successColor.withOpacity(0.1),
+              color: AppTheme.successColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppTheme.successColor),
             ),
@@ -3579,7 +4164,7 @@ class _TrialBookingDialogState extends State<_TrialBookingDialog> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.primaryColor.withOpacity(0.1),
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(
@@ -3620,3 +4205,36 @@ class _TrialBookingDialogState extends State<_TrialBookingDialog> {
     );
   }
 }
+
+// ── Gold pattern overlay for premium_gold template ─────────────────────────
+class _GoldPatternOverlay extends StatelessWidget {
+  const _GoldPatternOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(painter: _GoldPatternPainter());
+  }
+}
+
+class _GoldPatternPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.06)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const spacing = 22.0;
+    for (double x = -size.height; x < size.width + size.height; x += spacing) {
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x + size.height, size.height),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GoldPatternPainter old) => false;
+}
+
+

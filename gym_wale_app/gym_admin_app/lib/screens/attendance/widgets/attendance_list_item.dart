@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../models/attendance_record.dart';
+import '../../../widgets/member_location_status_badge.dart';
 
 /// Attendance List Item Widget
 /// Displays individual attendance record with actions
@@ -8,33 +9,54 @@ class AttendanceListItem extends StatelessWidget {
   final AttendanceRecord record;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final MemberLocationStatus? locationStatus;
+  final bool showLocationBadge;
 
   const AttendanceListItem({
     super.key,
     required this.record,
     required this.onEdit,
     required this.onDelete,
+    this.locationStatus,
+    this.showLocationBadge = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: CircleAvatar(
-        radius: 24,
-        backgroundImage: record.memberPhoto != null
-            ? NetworkImage(record.memberPhoto!)
-            : null,
-        backgroundColor: _getStatusColor(record.status).withValues(alpha: 0.2),
-        child: record.memberPhoto == null
-            ? Text(
-                record.memberName.substring(0, 1).toUpperCase(),
-                style: TextStyle(
-                  color: _getStatusColor(record.status),
-                  fontWeight: FontWeight.bold,
-                ),
-              )
-            : null,
+      leading: Stack(
+        children: [
+          CircleAvatar(
+            radius: 24,
+            backgroundImage: record.memberPhoto != null
+                ? NetworkImage(record.memberPhoto!)
+                : null,
+            backgroundColor: _getStatusColor(record.status).withValues(alpha: 0.2),
+            child: record.memberPhoto == null
+                ? Text(
+                    record.memberName.substring(0, 1).toUpperCase(),
+                    style: TextStyle(
+                      color: _getStatusColor(record.status),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  )
+                : null,
+          ),
+          // Location status badge overlay
+          if (showLocationBadge && locationStatus != null)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: MemberLocationStatusBadge(
+                locationEnabled: locationStatus!.locationEnabled,
+                hasPermission: locationStatus!.hasPermission,
+                hasBackgroundPermission: locationStatus!.hasBackgroundPermission,
+                isStale: locationStatus!.isStale,
+                size: 16,
+              ),
+            ),
+        ],
       ),
       title: Text(
         record.memberName,

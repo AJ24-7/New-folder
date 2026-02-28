@@ -13,6 +13,7 @@ import '../../models/attendance_stats.dart';
 import '../../models/attendance_settings.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../../widgets/stat_card.dart';
+import '../../widgets/member_location_status_badge.dart';
 import '../support/support_screen.dart';
 import '../offers/offers_screen.dart';
 import 'widgets/attendance_calendar.dart';
@@ -39,6 +40,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
   AttendanceStats? _stats;
   AttendanceSettings? _settings;
   Map<String, dynamic>? _rushHourData;
+  Map<String, dynamic>? _locationStatusData;
+  Map<String, dynamic> _memberLocationStatuses = {};
   
   bool _isLoading = true;
   bool _hasError = false;
@@ -70,6 +73,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
         _apiService.getAttendanceSettings(),
         _apiService.getRushHourAnalysis(days: 7),
+        _apiService.getMembersLocationStatus(),
       ]);
       
       setState(() {
@@ -77,6 +81,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         _stats = results[1] as AttendanceStats?;
         _settings = results[2] as AttendanceSettings?;
         _rushHourData = results[3] as Map<String, dynamic>?;
+        _locationStatusData = results[4] as Map<String, dynamic>?;
+        
+        // Parse location status data
+        if (_locationStatusData != null && _locationStatusData!['statuses'] != null) {
+          for (var status in _locationStatusData!['statuses']) {
+            final memberId = status['memberId']?['_id'] ?? status['memberId'];
+            if (memberId != null) {
+              _memberLocationStatuses[memberId] = status;
+            }
+          }
+        }
+        
         _isLoading = false;
       });
     } catch (e) {
@@ -755,10 +771,19 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 itemCount: filteredRecords.length,
                 separatorBuilder: (context, index) => const Divider(height: 1),
                 itemBuilder: (context, index) {
+                  final record = filteredRecords[index];
+                  final locationStatus = _memberLocationStatuses[record.memberId];
+                  final isGeofenceMode = _settings?.mode == AttendanceMode.geofence || 
+                                        _settings?.mode == AttendanceMode.hybrid;
+                  
                   return AttendanceListItem(
-                    record: filteredRecords[index],
-                    onEdit: () => _editAttendance(filteredRecords[index]),
-                    onDelete: () => _deleteAttendance(filteredRecords[index]),
+                    record: record,
+                    onEdit: () => _editAttendance(record),
+                    onDelete: () => _deleteAttendance(record),
+                    locationStatus: locationStatus != null
+                        ? MemberLocationStatus.fromJson(locationStatus)
+                        : null,
+                    showLocationBadge: isGeofenceMode,
                   );
                 },
               ),

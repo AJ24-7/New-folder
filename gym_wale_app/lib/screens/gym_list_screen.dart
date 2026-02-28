@@ -42,6 +42,8 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   bool _isLoading = true;
   bool _showFilters = false;
   String _selectedFilter = 'All';
+  Set<String> _activeGymIds = {}; // Track gyms user is an active member of
+  bool _isManualSearch = false; // Track if user is manually searching
 
   @override
   void initState() {
@@ -53,7 +55,21 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     );
     _selectedActivities = widget.initialActivities ?? [];
     _priceRange = widget.maxPrice ?? 5000;
-    _loadGyms();
+    _initializeData();
+    
+    // Listen to search changes to detect manual search
+    _searchController.addListener(() {
+      setState(() {
+        _isManualSearch = _searchController.text.isNotEmpty;
+      });
+      _applyFilters(); // Reapply filters when search changes
+    });
+  }
+
+  /// Initialize data in proper sequence
+  Future<void> _initializeData() async {
+    await _loadActiveMemberships();
+    await _loadGyms();
   }
 
   @override
@@ -63,6 +79,34 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     _cityController.dispose();
     _pincodeController.dispose();
     super.dispose();
+  }
+
+  /// Load user's active memberships to filter gyms
+  Future<void> _loadActiveMemberships() async {
+    try {
+      final activeMemberships = await ApiService.getActiveMemberships();
+      
+      setState(() {
+        _activeGymIds = activeMemberships
+            .map((membership) {
+              // Gym ID is nested under gym.id in the response
+              if (membership['gym'] != null && membership['gym'] is Map) {
+                return membership['gym']['id']?.toString();
+              }
+              return null;
+            })
+            .where((id) => id != null)
+            .cast<String>()
+            .toSet();
+      });
+      
+      print('[GYM_LIST] Loaded ${_activeGymIds.length} active gym memberships');
+      if (_activeGymIds.isNotEmpty) {
+        print('[GYM_LIST] Active gym IDs: $_activeGymIds');
+      }
+    } catch (e) {
+      print('[GYM_LIST] Error loading active memberships: $e');
+    }
   }
 
   Future<void> _loadGyms() async {
@@ -144,6 +188,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   }
 
   void _applyFilters() {
+    print('[GYM_LIST] Applying filters...');
+    print('[GYM_LIST] Total gyms: ${_gyms.length}');
+    print('[GYM_LIST] Active gym IDs: $_activeGymIds');
+    print('[GYM_LIST] Is manual search: $_isManualSearch');
+    
     setState(() {
       _filteredGyms = _gyms.where((gym) {
         // Price filter
@@ -165,8 +214,16 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           );
         }
         
-        return matchesPrice && matchesSearch && matchesActivities;
+        // Filter out active member gyms UNLESS user is manually searching
+        bool notActiveMember = !_activeGymIds.contains(gym.id) || _isManualSearch;
+        if (_activeGymIds.contains(gym.id)) {
+          print('[GYM_LIST] Gym ${gym.name} (${gym.id}) - Active member: ${_isManualSearch ? "shown (manual search)" : "hidden"}');
+        }
+        
+        return matchesPrice && matchesSearch && matchesActivities && notActiveMember;
       }).toList();
+      
+      print('[GYM_LIST] Filtered gyms: ${_filteredGyms.length}');
       
       // Apply sort
       _sortGyms(_selectedFilter);
@@ -491,14 +548,18 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                           padding: const EdgeInsets.all(16),
                           itemCount: _filteredGyms.length,
                           itemBuilder: (context, index) {
+                            final gym = _filteredGyms[index];
+                            final isActiveMember = _activeGymIds.contains(gym.id);
+                            
                             return GymCard(
-                              gym: _filteredGyms[index],
+                              gym: gym,
+                              showActiveMemberBadge: isActiveMember,
                               onTap: () {
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                     builder: (_) => GymDetailScreen(
-                                      gymId: _filteredGyms[index].id,
+                                      gymId: gym.id,
                                     ),
                                   ),
                                 );

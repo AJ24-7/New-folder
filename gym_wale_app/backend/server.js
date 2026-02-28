@@ -149,6 +149,7 @@ const geofenceAttendanceRoutes = require('./routes/geofenceAttendance');
 const geofenceConfigRoutes = require('./routes/geofenceConfig');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const chatRoutes = require('./routes/chatRoutes');
+const memberLocationStatusRoutes = require('./routes/memberLocationStatus');
 
 // API Routes
 app.use('/api/admin', adminRoutes);
@@ -172,6 +173,7 @@ app.use('/api/attendance', geofenceAttendanceRoutes);
 app.use('/api/geofence', geofenceConfigRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/member', memberLocationStatusRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
