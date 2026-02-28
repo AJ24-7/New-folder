@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/attendance_settings.dart';
 import './attendance_settings_service.dart';
+import './local_notification_service.dart';
 
 class GeofencingService extends ChangeNotifier {
   late final GeofenceService _geofenceService;
@@ -30,12 +31,18 @@ class GeofencingService extends ChangeNotifier {
 
   final AttendanceSettingsService _settingsService = AttendanceSettingsService();
 
+  // ── Dwell tracking (5-minute rule) ─────────────────────────────────────────
+  // gymId → timestamp of first ENTER event (used to enforce 5-min dwell)
+  final Map<String, DateTime> _enterTimestamps = {};
+
   GeofencingService() {
     _geofenceService = GeofenceService.instance.setup(
-      interval: 5000,
-      accuracy: 100,
-      loiteringDelayMs: 60000,
-      statusChangeDelayMs: 10000,
+      interval: 5000,       // location poll every 5 s
+      accuracy: 100,        // 100 m accuracy bucket
+      // loiteringDelayMs = 5 min dwell before DWELL event fires
+      // This is the core "stay 5 minutes" enforcement.
+      loiteringDelayMs: 300000,   // 5 minutes = 300 000 ms
+      statusChangeDelayMs: 10000, // 10 s debounce before state switch
       useActivityRecognition: true,
       allowMockLocations: false,
       printDevLog: kDebugMode,
@@ -322,21 +329,28 @@ class GeofencingService extends ChangeNotifier {
       dynamic location) async {
     debugPrint('[GEOFENCE] Status changed: ${geofenceStatus.toString()}');
     debugPrint('[GEOFENCE] Gym ID: ${geofence.id}');
-    
+
     if (location != null) {
       debugPrint('[GEOFENCE] Location: ${location.latitude}, ${location.longitude}');
       debugPrint('[GEOFENCE] Accuracy: ${location.accuracy}');
       debugPrint('[GEOFENCE] Is Mock: ${location.isMock ?? false}');
     }
 
-    // Emit event to stream
+    // Emit raw event to stream (AttendanceProvider listens to this)
     _geofenceController.add(geofenceStatus);
 
-    // Handle ENTER and EXIT events
     if (geofenceStatus == GeofenceStatus.ENTER) {
-      _handleGeofenceEntry(geofence.id, location);
+      // Record entry time and show "gym detected" notification.
+      // Actual attendance marking waits for DWELL (5 min).
+      _enterTimestamps[geofence.id] = DateTime.now();
+      await _handleGeofenceEntry(geofence.id, location);
+    } else if (geofenceStatus == GeofenceStatus.DWELL) {
+      // User has been inside the geofence for loiteringDelayMs (5 min).
+      // This is the trigger for auto attendance marking.
+      await _handleGeofenceDwell(geofence.id, location);
     } else if (geofenceStatus == GeofenceStatus.EXIT) {
-      _handleGeofenceExit(geofence.id, location);
+      _enterTimestamps.remove(geofence.id);
+      await _handleGeofenceExit(geofence.id, location);
     }
   }
 
@@ -362,20 +376,33 @@ class GeofencingService extends ChangeNotifier {
   }
 
   /// Handle geofence ENTER event
+  /// Fires when the user first crosses into the geofence boundary.
+  /// We show a local notification so the user knows the 5-min timer started.
   Future<void> _handleGeofenceEntry(String gymId, dynamic location) async {
-    debugPrint('[GEOFENCE] ENTER event for gym: $gymId');
-    
-    // This will be called by the attendance provider
-    // We just log here and emit to stream
-    // The actual API call will be made by AttendanceProvider listening to the stream
+    debugPrint('[GEOFENCE] ENTER event for gym: $gymId (5-min dwell timer started)');
+    try {
+      // Notify user that we detected the gym — attendance will be marked at DWELL
+      await LocalNotificationService.instance.showGeofenceEnteredNotification(
+        gymName: _attendanceSettings?.gymId ?? 'your gym',
+      );
+    } catch (e) {
+      debugPrint('[GEOFENCE] Error showing entry notification: $e');
+    }
+  }
+
+  /// Handle geofence DWELL event (fires after loiteringDelayMs = 5 min).
+  /// This is the actual trigger for auto attendance marking.
+  /// AttendanceProvider listens to the stream and will call the backend API.
+  Future<void> _handleGeofenceDwell(String gymId, dynamic location) async {
+    debugPrint('[GEOFENCE] DWELL event (5 min inside) for gym: $gymId – triggering attendance mark');
+    // The stream event (DWELL) is already emitted above; AttendanceProvider
+    // will detect it and call markAttendanceEntry().
   }
 
   /// Handle geofence EXIT event
   Future<void> _handleGeofenceExit(String gymId, dynamic location) async {
     debugPrint('[GEOFENCE] EXIT event for gym: $gymId');
-    
-    // This will be called by the attendance provider
-    // We just log here and emit to stream
+    // Stream event (EXIT) already emitted; AttendanceProvider handles the API call.
   }
 
   /// Get current location

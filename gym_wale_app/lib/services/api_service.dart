@@ -2582,6 +2582,55 @@ class ApiService {
     }
   }
 
+  /// Get attendance history for a member at a gym
+  static Future<Map<String, dynamic>> getAttendanceHistory(
+    String gymId, {
+    String? startDate,
+    String? endDate,
+    int limit = 30,
+  }) async {
+    try {
+      final params = {'limit': limit.toString()};
+      if (startDate != null) params['startDate'] = startDate;
+      if (endDate != null) params['endDate'] = endDate;
+      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/history/$gymId')
+          .replace(queryParameters: params);
+      final response = await http.get(url, headers: _headers).timeout(ApiConfig.timeout);
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, ...data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch history', 'attendance': []};
+    } catch (e) {
+      print('Get attendance history error: $e');
+      return {'success': false, 'message': e.toString(), 'attendance': []};
+    }
+  }
+
+  /// Get monthly attendance statistics for a member at a gym
+  static Future<Map<String, dynamic>> getAttendanceStats(
+    String gymId, {
+    int? month,
+    int? year,
+  }) async {
+    try {
+      final params = <String, String>{};
+      if (month != null) params['month'] = month.toString();
+      if (year != null) params['year'] = year.toString();
+      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/stats/$gymId')
+          .replace(queryParameters: params);
+      final response = await http.get(url, headers: _headers).timeout(ApiConfig.timeout);
+      final data = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return {'success': true, ...data};
+      }
+      return {'success': false, 'message': data['message'] ?? 'Failed to fetch stats'};
+    } catch (e) {
+      print('Get attendance stats error: $e');
+      return {'success': false, 'message': e.toString()};
+    }
+  }
+
   /// Verify if user is inside geofence
   static Future<Map<String, dynamic>> verifyGeofence(Map<String, dynamic> data) async {
     try {
@@ -2618,7 +2667,7 @@ class ApiService {
   /// Get gym's attendance settings (public endpoint for members)
   static Future<Map<String, dynamic>> getGymAttendanceSettings(String gymId) async {
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/gym/$gymId/attendance-settings');
+      final url = Uri.parse('${ApiConfig.baseUrl}/gyms/$gymId/attendance-settings');
       
       final response = await http.get(
         url,

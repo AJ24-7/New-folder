@@ -3,6 +3,38 @@ const Gym = require('../models/gym');
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
 const Notification = require('../models/Notification');
+const { getFirebaseMessaging } = require('../config/firebase');
+
+// ─── FCM push helper ────────────────────────────────────────────────────────
+/**
+ * Send a silent-priority FCM push to a member's registered device token.
+ * Fails gracefully — never blocks the attendance flow.
+ */
+async function sendFcmPush(fcmToken, title, body, data = {}) {
+  if (!fcmToken) return;
+  const messaging = getFirebaseMessaging();
+  if (!messaging) return;
+  try {
+    await messaging.send({
+      token: fcmToken,
+      notification: { title, body },
+      data: Object.fromEntries(
+        Object.entries(data).map(([k, v]) => [k, String(v)])
+      ),
+      android: {
+        priority: 'high',
+        notification: { channelId: 'gym_wale_attendance', sound: 'default' },
+      },
+      apns: {
+        payload: { aps: { sound: 'default', badge: 1 } },
+      },
+    });
+    console.log(`📲 FCM push sent to token ...${fcmToken.slice(-6)}`);
+  } catch (fcmErr) {
+    console.warn('⚠️  FCM push failed (non-fatal):', fcmErr.message);
+  }
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 // Helper function to calculate distance between two coordinates (Haversine formula)
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
@@ -217,6 +249,13 @@ exports.autoMarkEntry = async (req, res) => {
                 });
                 await notification.save();
                 console.log(`📲 Attendance update notification sent to member ${memberId}`);
+                // Send FCM push to device
+                await sendFcmPush(
+                    member.fcmToken,
+                    '✅ Attendance Updated',
+                    `Welcome back to ${gym.name || 'the gym'}! Checked in at ${existingAttendance.checkInTime}.`,
+                    { type: 'attendance_entry', gymId: String(gymId), attendanceId: String(existingAttendance._id) }
+                );
             } catch (notifError) {
                 console.error('Failed to send attendance update notification:', notifError);
             }
@@ -287,6 +326,18 @@ exports.autoMarkEntry = async (req, res) => {
             });
             await notification.save();
             console.log(`📲 Attendance entry notification sent to member ${memberId}`);
+            // Send FCM push to device
+            await sendFcmPush(
+                member.fcmToken,
+                '✅ Attendance Marked',
+                `Welcome to ${gym.name || 'the gym'}! Auto-recorded at ${currentTime}.`,
+                {
+                    type: 'attendance_entry',
+                    gymId: String(gymId),
+                    attendanceId: String(newAttendance._id),
+                    sessionsRemaining: String(activeMembership.sessionsRemaining ?? ''),
+                }
+            );
         } catch (notifError) {
             console.error('Failed to send attendance entry notification:', notifError);
             // Don't fail the attendance marking if notification fails
@@ -403,6 +454,19 @@ exports.autoMarkExit = async (req, res) => {
             });
             await notification.save();
             console.log(`📲 Attendance exit notification sent to member ${memberId}`);
+            // Send FCM push to device
+            const exitMember = await Member.findById(memberId).select('fcmToken').lean();
+            await sendFcmPush(
+                exitMember?.fcmToken,
+                '👋 Gym Exit Recorded',
+                `Great session at ${gymName}! You trained for ${durationInMinutes} min. See you next time!`,
+                {
+                    type: 'attendance_exit',
+                    gymId: String(gymId),
+                    attendanceId: String(attendance._id),
+                    durationInMinutes: String(durationInMinutes),
+                }
+            );
         } catch (notifError) {
             console.error('Failed to send attendance exit notification:', notifError);
         }
@@ -627,4 +691,4 @@ exports.verifyGeofence = async (req, res) => {
     }
 };
 
-module.exports = exports;
+

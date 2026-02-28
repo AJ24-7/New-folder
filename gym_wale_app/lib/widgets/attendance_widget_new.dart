@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../services/location_monitoring_service.dart';
 import '../services/api_service.dart';
 import '../widgets/location_warning_dialog.dart';
+import '../screens/attendance_history_screen.dart';
 
 /// Stateful wrapper for AttendanceWidget that connects to AttendanceProvider
 class AttendanceWidget extends StatefulWidget {
@@ -466,7 +467,15 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
-                  // TODO: Navigate to attendance history screen
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AttendanceHistoryScreen(
+                        gymId: widget.gymId,
+                        gymName: widget.gymName ?? 'Gym',
+                      ),
+                    ),
+                  );
                 },
                 icon: const Icon(Icons.history),
                 label: const Text('View Attendance History'),

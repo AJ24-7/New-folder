@@ -1,25 +1,47 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Location Permissions -->
+    <!-- ═══════════════════════════════════════════════════════════
+         LOCATION PERMISSIONS (required for geofence attendance)
+    ═══════════════════════════════════════════════════════════════ -->
+    <!-- Standard location (foreground) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    
-    <!-- Background Location Permission for Android 10+ (API 29+) -->
+
+    <!-- Background location — mandatory for auto-attendance during gym hours
+         Android 10+ (API 29+): user must explicitly grant "Allow all the time" -->
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
-    
-    <!-- Activity Recognition Permission for better geofencing -->
+
+    <!-- ═══════════════════════════════════════════════════════════
+         BACKGROUND SERVICE PERMISSIONS
+    ═══════════════════════════════════════════════════════════════ -->
+    <!-- Activity Recognition — improves geofence accuracy & reduces battery drain -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
-    
-    <!-- Wake Lock for background geofence service -->
+
+    <!-- Android 12+ (API 31+): explicit activity recognition for step/motion detection -->
+    <uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Wake Lock — keeps CPU alive while geofence service is running -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    
-    <!-- Foreground Service Permission for Android 9+ (API 28+) -->
+
+    <!-- Foreground Service — required to run background location service visibly -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    
-    <!-- Notification Permission for Android 13+ -->
+
+    <!-- Restart service after device reboot (persists geofence across reboots) -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- Schedule exact alarms for operating-hours attendance window checks -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <!-- ═══════════════════════════════════════════════════════════
+         NOTIFICATION PERMISSIONS
+    ═══════════════════════════════════════════════════════════════ -->
+    <!-- Android 13+ (API 33+): must request POST_NOTIFICATIONS at runtime -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    
-    <!-- Internet Permission -->
+
+    <!-- ═══════════════════════════════════════════════════════════
+         NETWORK / STORAGE PERMISSIONS
+    ═══════════════════════════════════════════════════════════════ -->
     <uses-permission android:name="android.permission.INTERNET"/>
     
     <!-- Camera and Storage Permissions for Profile Image Upload -->
@@ -62,12 +84,43 @@
             </intent-filter>
         </activity>
         
-        <!-- Geofence Service for background location tracking -->
+        <!-- ─────────────────────────────────────────────────────────
+             GEOFENCE BACKGROUND SERVICE (geofence_service package)
+             Uses the service registered by the geofence_service pub package.
+             foregroundServiceType="location" keeps it alive while tracking.
+        ──────────────────────────────────────────────────────────── -->
         <service
-            android:name="com.flutter_geofence.FlutterGeofenceService"
+            android:name="com.pravera.geofence_service.GeofenceService"
             android:exported="false"
-            android:foregroundServiceType="location"
-            android:permission="android.permission.BIND_JOB_SERVICE" />
+            android:foregroundServiceType="location" />
+
+        <!-- ─────────────────────────────────────────────────────────
+             BOOT RECEIVER — re-registers geofences after device reboot
+        ──────────────────────────────────────────────────────────── -->
+        <receiver
+            android:name="com.pravera.geofence_service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ─────────────────────────────────────────────────────────
+             FLUTTER LOCAL NOTIFICATIONS — attendance pop-up channel
+        ──────────────────────────────────────────────────────────── -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
             
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
@@ -78,7 +131,7 @@
         <!-- Firebase Cloud Messaging -->
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_channel_id"
-            android:value="gym_wale_notifications" />
+            android:value="gym_wale_attendance" />
             
         <!-- Notification Icon (default launcher icon) -->
         <meta-data

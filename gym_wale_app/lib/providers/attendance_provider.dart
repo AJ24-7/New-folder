@@ -68,30 +68,39 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   /// Handle geofence status changes
+  /// ─────────────────────────────────────────────────────────────────────────
+  /// ENTER  → user crossed the boundary; GeofencingService already showed the
+  ///          "Gym detected – stay 5 min" local notification. Nothing to do here.
+  /// DWELL  → user has been inside for loiteringDelayMs (5 minutes) → AUTO MARK
+  /// EXIT   → user left the geofence → auto-mark exit
   Future<void> _onGeofenceStatusChanged(GeofenceStatus status) async {
     if (_geofencingService == null) return;
     final gymId = _geofencingService!.currentGymId;
     if (gymId == null) return;
 
-    // Check if auto-mark is enabled in settings before marking attendance
+    // Respect admin-configured auto-mark setting.
     if (!isAutoMarkEnabled()) {
-      debugPrint('[ATTENDANCE] Auto-mark is disabled, skipping automatic attendance');
+      debugPrint('[ATTENDANCE] Auto-mark disabled by gym settings – skipping.');
       return;
     }
 
     if (status == GeofenceStatus.ENTER) {
-      // Check if auto-mark entry is enabled
+      // Notification shown by GeofencingService; no API call yet.
+      debugPrint('[ATTENDANCE] Geofence ENTER – waiting for 5-min DWELL before marking.');
+    } else if (status == GeofenceStatus.DWELL) {
+      // 5 minutes elapsed inside the geofence → mark entry
       if (_geofencingService!.shouldAutoMarkEntry()) {
+        debugPrint('[ATTENDANCE] Geofence DWELL (5 min) – auto-marking attendance entry.');
         await markAttendanceEntry(gymId);
       } else {
-        debugPrint('[ATTENDANCE] Auto-mark entry is disabled in settings');
+        debugPrint('[ATTENDANCE] Auto-mark entry disabled in settings.');
       }
     } else if (status == GeofenceStatus.EXIT) {
-      // Check if auto-mark exit is enabled
       if (_geofencingService!.shouldAutoMarkExit()) {
+        debugPrint('[ATTENDANCE] Geofence EXIT – auto-marking attendance exit.');
         await markAttendanceExit(gymId);
       } else {
-        debugPrint('[ATTENDANCE] Auto-mark exit is disabled in settings');
+        debugPrint('[ATTENDANCE] Auto-mark exit disabled in settings.');
       }
     }
   }
@@ -474,9 +483,22 @@ class AttendanceProvider extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      // Note: This should be updated to use the actual geofence-attendance endpoint when available
-      // For now, use a placeholder that returns empty list
-      _attendanceHistory = [];
+      final response = await ApiService.getAttendanceHistory(
+        gymId,
+        startDate: startDate,
+        endDate: endDate,
+        limit: limit,
+      );
+
+      if (response['success'] == true) {
+        final raw = response['attendance'] as List? ?? [];
+        _attendanceHistory = raw
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } else {
+        _attendanceHistory = [];
+        _errorMessage = response['message'];
+      }
 
       _isLoading = false;
       notifyListeners();
@@ -499,18 +521,27 @@ class AttendanceProvider extends ChangeNotifier {
       _errorMessage = null;
       notifyListeners();
 
-      final queryParams = <String, dynamic>{};
-      if (month != null) queryParams['month'] = month.toString();
-      if (year != null) queryParams['year'] = year.toString();
+      final response = await ApiService.getAttendanceStats(
+        gymId,
+        month: month,
+        year: year,
+      );
 
-      // Note: This should use the actual geofence-attendance stats endpoint
-      // For now, return empty stats
-      _attendanceStats = {
-        'presentDays': 0,
-        'totalDays': 0,
-        'attendanceRate': 0.0,
-        'avgDuration': 0,
-      };
+      if (response['success'] == true && response['stats'] != null) {
+        final s = response['stats'] as Map;
+        _attendanceStats = {
+          'presentDays':    s['presentDays']    ?? 0,
+          'totalDays':      s['totalDays']      ?? 0,
+          'attendanceRate': (s['attendanceRate'] ?? 0.0) / 100.0,
+          'avgDuration':    s['averageDurationMinutes'] ?? 0,
+          'geofenceDays':   s['geofenceDays']   ?? 0,
+        };
+      } else {
+        _attendanceStats = {
+          'presentDays': 0, 'totalDays': 0,
+          'attendanceRate': 0.0, 'avgDuration': 0, 'geofenceDays': 0,
+        };
+      }
 
       _isLoading = false;
       notifyListeners();

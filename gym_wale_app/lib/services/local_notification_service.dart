@@ -1,276 +1,282 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-/// Local Notification Service for showing attendance notifications
-/// 
-/// This service handles local notifications for attendance events.
-/// For full push notification support, enable Firebase Cloud Messaging.
-/// 
-/// SETUP INSTRUCTIONS:
-/// 
-/// 1. Add dependencies to pubspec.yaml:
-///    ```yaml
-///    dependencies:
-///      flutter_local_notifications: ^18.0.1
-///    ```
-/// 
-/// 2. Android Configuration (android/app/src/main/AndroidManifest.xml):
-///    ```xml
-///    <!-- Add inside <application> tag -->
-///    <meta-data
-///        android:name="com.google.firebase.messaging.default_notification_channel_id"
-///        android:value="gym_wale_attendance" />
-///    ```
-/// 
-/// 3. iOS Configuration:
-///    - Add notification capability in Xcode
-///    - Update Info.plist for notification permissions
-
+/// ────────────────────────────────────────────────────────────────────────────
+/// LocalNotificationService
+///
+/// Device-level local notifications for all geofence + attendance events:
+///   • Gym entry detected        → informs user that 5-min dwell check starts
+///   • Attendance auto-marked    → success pop-up with check-in time
+///   • Geofence exit recorded    → workout duration summary
+///   • Background location warning (if permission missing)
+///
+/// Works on Android (API 21+) and iOS (13+). Web is silently skipped.
+/// ────────────────────────────────────────────────────────────────────────────
 class LocalNotificationService {
+  // ── Singleton ──────────────────────────────────────────────────────────────
   static LocalNotificationService? _instance;
   static LocalNotificationService get instance {
     _instance ??= LocalNotificationService._();
     return _instance!;
   }
-
   LocalNotificationService._();
 
-  // Uncomment when flutter_local_notifications is added
-  // FlutterLocalNotificationsPlugin? _notificationsPlugin;
+  // ── Core plugin ────────────────────────────────────────────────────────────
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
+
   bool _initialized = false;
 
-  /// Initialize local notifications
+  // ── Notification IDs ───────────────────────────────────────────────────────
+  static const int _idGeofenceEnter   = 2001;
+  static const int _idAttendanceEntry = 2002;
+  static const int _idAttendanceExit  = 2003;
+  static const int _idGeneral         = 2000;
+  static const int _idLocationWarning = 2010;
+
+  // ── Android channel IDs ────────────────────────────────────────────────────
+  static const String _channelAttendanceId    = 'gym_wale_attendance';
+  static const String _channelAttendanceName  = 'Attendance Notifications';
+  static const String _channelForegroundId    = 'gym_wale_geofence_service';
+  static const String _channelForegroundName  = 'Geofence Background Service';
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // INITIALIZE
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /// Call once from `main()` before runApp, or from the root widget initState.
   Future<void> initialize() async {
     if (_initialized) return;
-
+    if (kIsWeb) {
+      debugPrint('[LOCAL_NOTIF] Web – skipping local notifications.');
+      return;
+    }
     try {
-      if (kIsWeb) {
-        debugPrint('[LOCAL_NOTIF] Local notifications not supported on web');
-        return;
-      }
-
-      // TODO: Uncomment when flutter_local_notifications package is added
-      /*
-      _notificationsPlugin = FlutterLocalNotificationsPlugin();
-
-      // Android initialization
-      const AndroidInitializationSettings androidSettings =
-          AndroidInitializationSettings('@drawable/ic_notification');
-
-      // iOS initialization
-      const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
+      const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+      const darwinSettings = DarwinInitializationSettings(
         requestAlertPermission: true,
         requestBadgePermission: true,
         requestSoundPermission: true,
       );
-
-      const InitializationSettings initSettings = InitializationSettings(
+      const initSettings = InitializationSettings(
         android: androidSettings,
-        iOS: iosSettings,
+        iOS:     darwinSettings,
+        macOS:   darwinSettings,
       );
 
-      await _notificationsPlugin!.initialize(
+      await _plugin.initialize(
         initSettings,
-        onDidReceiveNotificationResponse: _onNotificationTapped,
+        onDidReceiveNotificationResponse: _onTap,
+        onDidReceiveBackgroundNotificationResponse: _onBackgroundTap,
       );
 
-      // Create notification channel for Android
-      await _createNotificationChannels();
-
+      await _createAndroidChannels();
       _initialized = true;
-      debugPrint('[LOCAL_NOTIF] Local notification service initialized');
-      */
-
-      _initialized = true;
-      debugPrint('[LOCAL_NOTIF] Local notification service initialized (stub mode)');
-      debugPrint('[LOCAL_NOTIF] To enable: Add flutter_local_notifications to pubspec.yaml');
+      debugPrint('[LOCAL_NOTIF] Initialized.');
     } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error initializing: $e');
+      debugPrint('[LOCAL_NOTIF] Init error: $e');
     }
   }
 
-  /// Create notification channels for Android
-  /// TODO: Uncomment when flutter_local_notifications is added
-  /*
-  Future<void> _createNotificationChannels() async {
-    const AndroidNotificationChannel attendanceChannel = AndroidNotificationChannel(
-      'gym_wale_attendance',
-      'Attendance Notifications',
-      description: 'Notifications for automatic attendance marking',
+  Future<void> _createAndroidChannels() async {
+    if (!Platform.isAndroid) return;
+    final android = _plugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
+    if (android == null) return;
+    await android.createNotificationChannel(const AndroidNotificationChannel(
+      _channelAttendanceId,
+      _channelAttendanceName,
+      description: 'Automatic attendance marking notifications',
       importance: Importance.high,
       playSound: true,
       enableVibration: true,
       showBadge: true,
+    ));
+    await android.createNotificationChannel(const AndroidNotificationChannel(
+      _channelForegroundId,
+      _channelForegroundName,
+      description: 'Keeps geofence tracking running in the background',
+      importance: Importance.low,
+      playSound: false,
+      enableVibration: false,
+      showBadge: false,
+    ));
+    debugPrint('[LOCAL_NOTIF] Android channels created.');
+  }
+
+  static void _onTap(NotificationResponse r) =>
+      debugPrint('[LOCAL_NOTIF] Tapped: ${r.payload}');
+
+  @pragma('vm:entry-point')
+  static void _onBackgroundTap(NotificationResponse r) =>
+      debugPrint('[LOCAL_NOTIF] Background tap: ${r.payload}');
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PERMISSION REQUEST
+  // ────────────────────────────────────────────────────────────────────────────
+
+  Future<bool> requestPermission() async {
+    if (kIsWeb) return false;
+    try {
+      if (Platform.isIOS) {
+        final granted = await _plugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+        return granted ?? false;
+      }
+      if (Platform.isAndroid) {
+        final granted = await _plugin
+            .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin>()
+            ?.requestNotificationsPermission();
+        return granted ?? false;
+      }
+    } catch (e) {
+      debugPrint('[LOCAL_NOTIF] requestPermission error: $e');
+    }
+    return true;
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PUBLIC NOTIFICATION METHODS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  /// Shown immediately when user enters the geofence.
+  /// Tells the user that a 5-minute dwell check has started.
+  Future<void> showGeofenceEnteredNotification({required String gymName}) async {
+    await _show(
+      id: _idGeofenceEnter,
+      title: '📍 Gym Detected – $gymName',
+      body:
+          'You\'re near $gymName. Stay for 5 minutes to auto-mark your attendance.',
+      payload: 'geofence_enter',
     );
-
-    await _notificationsPlugin!
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(attendanceChannel);
   }
 
-  /// Handle notification tap
-  void _onNotificationTapped(NotificationResponse response) {
-    debugPrint('[LOCAL_NOTIF] Notification tapped: ${response.payload}');
-    // Handle navigation based on payload
-    // You can use a navigation service or callback here
-  }
-  */
-
-  /// Show attendance entry notification
+  /// Shown when the 5-minute dwell completes and attendance is auto-marked.
   Future<void> showAttendanceEntryNotification({
     required String gymName,
     required String time,
     int? sessionsRemaining,
   }) async {
-    try {
-      final title = '✅ Attendance Marked';
-      final body = sessionsRemaining != null
-          ? 'Welcome to $gymName! Check-in: $time. Sessions left: $sessionsRemaining'
-          : 'Welcome to $gymName! Check-in time: $time';
-
-      await _showNotification(
-        id: 1001,
-        title: title,
-        body: body,
-        payload: 'attendance_entry',
-      );
-    } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error showing entry notification: $e');
-    }
+    final body = (sessionsRemaining != null && sessionsRemaining > 0)
+        ? 'Welcome to $gymName! ✅ Checked in at $time. Sessions left: $sessionsRemaining'
+        : 'Welcome to $gymName! ✅ Attendance marked at $time.';
+    await _show(
+      id: _idAttendanceEntry,
+      title: '✅ Attendance Marked',
+      body: body,
+      payload: 'attendance_entry',
+    );
   }
 
-  /// Show attendance exit notification
+  /// Shown when the user exits the geofence.
   Future<void> showAttendanceExitNotification({
     required String gymName,
     required String time,
     required int durationMinutes,
   }) async {
-    try {
-      final title = '👋 Gym Exit Recorded';
-      final body = 'You checked out at $time. Workout duration: $durationMinutes minutes. Great session!';
-
-      await _showNotification(
-        id: 1002,
-        title: title,
-        body: body,
-        payload: 'attendance_exit',
-      );
-    } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error showing exit notification: $e');
-    }
+    await _show(
+      id: _idAttendanceExit,
+      title: '👋 Gym Exit Recorded',
+      body:
+          'Checked out from $gymName at $time. Duration: ${_fmt(durationMinutes)}. Great session! 💪',
+      payload: 'attendance_exit',
+    );
   }
 
-  /// Show generic attendance notification
+  /// Generic attendance notification (API-driven message).
   Future<void> showAttendanceNotification({
     required String title,
     required String message,
   }) async {
+    await _show(
+        id: _idGeneral, title: title, body: message, payload: 'attendance_general');
+  }
+
+  /// Warning when background location permission is missing.
+  Future<void> showLocationPermissionWarning() async {
+    await _show(
+      id: _idLocationWarning,
+      title: '⚠️ Background Location Required',
+      body:
+          'Enable "Always" location permission so Gym Wale can auto-mark your gym attendance.',
+      payload: 'location_warning',
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // CANCEL
+  // ────────────────────────────────────────────────────────────────────────────
+
+  Future<void> cancelNotification(int id) async {
     try {
-      await _showNotification(
-        id: 1000,
-        title: title,
-        body: message,
-        payload: 'attendance_general',
-      );
+      await _plugin.cancel(id);
     } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error showing notification: $e');
+      debugPrint('[LOCAL_NOTIF] cancelNotification error: $e');
     }
   }
 
-  /// Internal method to show notification
-  Future<void> _showNotification({
+  Future<void> cancelAllNotifications() async {
+    try {
+      await _plugin.cancelAll();
+    } catch (e) {
+      debugPrint('[LOCAL_NOTIF] cancelAll error: $e');
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // INTERNAL HELPERS
+  // ────────────────────────────────────────────────────────────────────────────
+
+  Future<void> _show({
     required int id,
     required String title,
     required String body,
     String? payload,
+    bool ongoing = false,
   }) async {
     if (!_initialized) {
-      debugPrint('[LOCAL_NOTIF] Not initialized, skipping notification: $title');
+      debugPrint('[LOCAL_NOTIF] Not initialized – skipping "$title"');
       return;
     }
-
-    // TODO: Uncomment when flutter_local_notifications is added
-    /*
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'gym_wale_attendance',
-      'Attendance Notifications',
-      channelDescription: 'Notifications for automatic attendance marking',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-      enableVibration: true,
-      playSound: true,
-      icon: '@drawable/ic_notification',
-    );
-
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-
-    const NotificationDetails platformDetails = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-
-    await _notificationsPlugin!.show(
-      id,
-      title,
-      body,
-      platformDetails,
-      payload: payload,
-    );
-    */
-
-    // Stub mode - just log
-    debugPrint('[LOCAL_NOTIF] Would show notification:');
-    debugPrint('[LOCAL_NOTIF]   Title: $title');
-    debugPrint('[LOCAL_NOTIF]   Body: $body');
-    debugPrint('[LOCAL_NOTIF]   Payload: $payload');
-  }
-
-  /// Request notification permission (iOS)
-  Future<bool> requestPermission() async {
+    if (kIsWeb) return;
     try {
-      // TODO: Uncomment when flutter_local_notifications is added
-      /*
-      if (Platform.isIOS) {
-        final bool? granted = await _notificationsPlugin
-            ?.resolvePlatformSpecificImplementation<IOSFlutterLocalNotificationsPlugin>()
-            ?.requestPermissions(
-              alert: true,
-              badge: true,
-              sound: true,
-            );
-        return granted ?? false;
-      }
-      */
-      return true; // Android doesn't need explicit permission for local notifications
+      final androidDetails = AndroidNotificationDetails(
+        _channelAttendanceId,
+        _channelAttendanceName,
+        channelDescription: 'Automatic attendance marking notifications',
+        importance: Importance.high,
+        priority: Priority.high,
+        ongoing: ongoing,
+        autoCancel: !ongoing,
+        playSound: true,
+        enableVibration: true,
+        icon: '@mipmap/ic_launcher',
+        styleInformation: BigTextStyleInformation(body),
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      await _plugin.show(
+        id, title, body,
+        NotificationDetails(android: androidDetails, iOS: iosDetails),
+        payload: payload,
+      );
+      debugPrint('[LOCAL_NOTIF] Shown: "$title"');
     } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error requesting permission: $e');
-      return false;
+      debugPrint('[LOCAL_NOTIF] _show error: $e');
     }
   }
 
-  /// Cancel a specific notification
-  Future<void> cancelNotification(int id) async {
-    try {
-      // TODO: Uncomment when flutter_local_notifications is added
-      // await _notificationsPlugin?.cancel(id);
-      debugPrint('[LOCAL_NOTIF] Notification $id cancelled');
-    } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error cancelling notification: $e');
-    }
-  }
-
-  /// Cancel all notifications
-  Future<void> cancelAllNotifications() async {
-    try {
-      // TODO: Uncomment when flutter_local_notifications is added
-      // await _notificationsPlugin?.cancelAll();
-      debugPrint('[LOCAL_NOTIF] All notifications cancelled');
-    } catch (e) {
-      debugPrint('[LOCAL_NOTIF] Error cancelling all notifications: $e');
-    }
+  String _fmt(int minutes) {
+    if (minutes < 60) return '$minutes min';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m > 0 ? '${h}h ${m}min' : '${h}h';
   }
 }

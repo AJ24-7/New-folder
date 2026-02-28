@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- ═══════════════════════════════════════════════════════════════
+	     FLUTTER & APP IDENTITY
+	════════════════════════════════════════════════════════════════== -->
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Gym Wale</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>gym_wale_app</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(FLUTTER_BUILD_NAME)</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchStoryboardName</key>
+	<string>LaunchScreen</string>
+	<key>UIMainStoryboardFile</key>
+	<string>Main</string>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     LOCATION PERMISSION DESCRIPTIONS
+	     (iOS will show these strings to the user in the permission dialogs)
+	════════════════════════════════════════════════════════════════== -->
+
+	<!-- Shown when the app is in use — needed for gym detection -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Gym Wale uses your location to detect when you arrive at the gym and automatically mark your attendance.</string>
+
+	<!-- Shown when requesting "Always" permission for background tracking -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Gym Wale needs continuous background location access to automatically mark your attendance when you enter the gym during operating hours, even if the app is closed.</string>
+
+	<!-- Required for iOS 11 and below (kept for compatibility) -->
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Gym Wale uses your location in the background to detect when you arrive at the gym and mark your attendance automatically.</string>
+
+	<!-- Motion & fitness data — used by geofence_service for activity recognition -->
+	<key>NSMotionUsageDescription</key>
+	<string>Gym Wale uses motion data to accurately detect gym entry and improve geofence performance.</string>
+
+	<!-- Camera & Photo Library permissions for profile image upload -->
+	<key>NSCameraUsageDescription</key>
+	<string>Gym Wale needs camera access to let you update your profile picture.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Gym Wale needs photo library access to let you select a profile picture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Gym Wale needs access to save images to your photo library.</string>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     BACKGROUND MODES
+	     ─────────────────────────────────────────────────────────────
+	     location          → continuous background location for geofencing
+	     fetch             → periodic background fetches (sync attendance)
+	     remote-notification → FCM push while app is backgrounded
+	     processing        → BGTaskScheduler for attendance processing tasks
+	════════════════════════════════════════════════════════════════== -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+		<string>fetch</string>
+		<string>remote-notification</string>
+		<string>processing</string>
+	</array>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     NOTIFICATION SETTINGS
+	════════════════════════════════════════════════════════════════== -->
+	<key>UIUserNotificationSettings</key>
+	<dict>
+		<key>UIUserNotificationTypes</key>
+		<integer>7</integer>
+	</dict>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     GOOGLE MAPS API KEY (set via environment / build config)
+	════════════════════════════════════════════════════════════════== -->
+	<key>io.flutter.embedded_views_preview</key>
+	<true/>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     TRANSPORT SECURITY
+	════════════════════════════════════════════════════════════════== -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<!-- Allow HTTP connections to local development server -->
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<!-- For production use, remove this and restrict to your domain -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     UI SETTINGS
+	════════════════════════════════════════════════════════════════== -->
+	<key>UIViewControllerBasedStatusBarAppearance</key>
+	<false/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+	<key>UISupportedInterfaceOrientations~ipad</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     FIREBASE / PUSH NOTIFICATIONS
+	════════════════════════════════════════════════════════════════== -->
+	<!-- Firebase requires access to camera roll on iOS 14+ when targeting photos -->
+</dict>
+</plist>
