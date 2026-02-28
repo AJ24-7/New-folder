@@ -373,7 +373,7 @@ router.delete('/photos/:photoId', gymadminAuth, require('../controllers/gymContr
 router.get('/:id', async (req, res) => {
   try {
     const gym = await Gym.findById(req.params.id)
-      .select('gymName email phone location description gymPhotos logoUrl openingTime closingTime membersCount equipment activities membershipPlans createdAt')
+      .select('gymName email phone location description gymPhotos logoUrl openingTime closingTime operatingHours membersCount equipment activities membershipPlans createdAt')
       .lean();
 
     if (!gym) {
@@ -407,6 +407,7 @@ router.get('/:id', async (req, res) => {
       logoUrl: gym.logoUrl,
       openingTime: gym.openingTime,
       closingTime: gym.closingTime,
+      operatingHours: gym.operatingHours || null,
       rating: Math.round(avgRating * 10) / 10,
       reviewCount: reviews.length,
       activities: gym.activities || [], // Return full activity objects with name, icon, description

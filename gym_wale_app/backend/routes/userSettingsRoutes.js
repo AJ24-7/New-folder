@@ -505,6 +505,10 @@ router.get('/memberships/active', authMiddleware, async (req, res) => {
         startDate: membership.joinDate,
         endDate: membership.validUntil,
         validUntil: membership.validUntil,
+        // membershipValidUntil is extended by freeze; use it as the authoritative expiry date
+        membershipValidUntil: membership.membershipValidUntil || null,
+        // Use the human-readable membershipId; fall back to MongoDB _id as string
+        membershipId: membership.membershipId || membership._id.toString(),
         daysRemaining: Math.ceil((new Date(membership.validUntil) - now) / (1000 * 60 * 60 * 24)),
         status: 'active',
         benefits: membership.benefits || [],

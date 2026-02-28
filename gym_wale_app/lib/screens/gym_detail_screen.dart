@@ -183,12 +183,13 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       // Check if current gym is in the active memberships list
       for (final membership in memberships) {
         final gymId = _extractGymId(membership);
-        print('[Membership Check] Checking membership - gymId: $gymId, targetGymId: ${widget.gymId}');
+        final membershipId = membership['membershipId'] ?? membership['id'] ?? '';
+        print('[Membership Check] Checking membership - gymId: $gymId, membershipId: $membershipId, targetGymId: ${widget.gymId}');
         
         if (gymId != null && gymId.toString() == widget.gymId) {
           // Found active membership for this gym
           print('[Membership Check] ✓ Found active membership for gym ${widget.gymId}');
-          print('[Membership Check] Membership data: ${membership['id'] ?? membership['membershipId']}');
+          print('[Membership Check] Membership ID: $membershipId');
           setState(() {
             _hasActiveMembership = true;
             _userMembership = membership; // Store raw membership data
@@ -452,7 +453,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                   padding: const EdgeInsets.only(top: 12),
                                   child: _buildInfoRow(
                                     icon: Icons.wb_sunny,
-                                    title: 'Morning: ${_gym!.operatingHours!.morning!.opening} - ${_gym!.operatingHours!.morning!.closing}',
+                                    title: 'Morning: ${_formatHHMMTime(_gym!.operatingHours!.morning!.opening)} - ${_formatHHMMTime(_gym!.operatingHours!.morning!.closing)}',
                                     actionLabel: null,
                                     onAction: null,
                                   ),
@@ -462,7 +463,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                                   padding: const EdgeInsets.only(top: 12),
                                   child: _buildInfoRow(
                                     icon: Icons.nights_stay,
-                                    title: 'Evening: ${_gym!.operatingHours!.evening!.opening} - ${_gym!.operatingHours!.evening!.closing}',
+                                    title: 'Evening: ${_formatHHMMTime(_gym!.operatingHours!.evening!.opening)} - ${_formatHHMMTime(_gym!.operatingHours!.evening!.closing)}',
                                     actionLabel: null,
                                     onAction: null,
                                   ),
@@ -846,9 +847,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Widget _buildMembershipsTab() {
     // If user has active membership, show status instead of plans
     if (_hasActiveMembership && _userMembership != null) {
-      // Get the correct membership ID
-      final membershipId = _userMembership!['id'] ?? 
-                          _userMembership!['membershipId'] ?? 
+      // Get the correct membership ID (membershipId field is the actual membership ID)
+      final membershipId = _userMembership!['membershipId'] ?? 
+                          _userMembership!['id'] ?? 
                           _userMembership!['_id'] ?? 
                           'N/A';
       
@@ -2767,9 +2768,36 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   }
 
   // Format membership valid until date
-  // Note: validUntil already includes any freeze extensions applied by the backend
+  // Priority: membershipValidUntil (freeze-adjusted, set by admin portal)
+  //           > validUntil (user-side date)
+  //           > endDate (alias for validUntil)
   String _formatEffectiveEndDate(Map<String, dynamic> membership) {
-    return _formatMembershipDate(membership['validUntil'] ?? membership['endDate']);
+    final membershipValidUntil = membership['membershipValidUntil'];
+    final validUntil = membership['validUntil'];
+    final endDate = membership['endDate'];
+
+    if (membershipValidUntil != null && membershipValidUntil.toString().isNotEmpty) {
+      return _formatMembershipDate(membershipValidUntil);
+    } else if (validUntil != null && validUntil.toString().isNotEmpty) {
+      return _formatMembershipDate(validUntil);
+    } else if (endDate != null && endDate.toString().isNotEmpty) {
+      return _formatMembershipDate(endDate);
+    }
+    return 'N/A';
+  }
+
+  /// Converts a 24-hour "HH:MM" time string (as saved by gym profile screen)
+  /// to a 12-hour "h:MM AM/PM" display string.
+  String _formatHHMMTime(String? timeStr) {
+    if (timeStr == null || timeStr.isEmpty) return timeStr ?? '';
+    final parts = timeStr.split(':');
+    if (parts.length != 2) return timeStr;
+    final hour = int.tryParse(parts[0]);
+    final minute = int.tryParse(parts[1]);
+    if (hour == null || minute == null) return timeStr;
+    final period = hour < 12 ? 'AM' : 'PM';
+    final displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+    return '$displayHour:${minute.toString().padLeft(2, '0')} $period';
   }
 
   String _getMembershipIcon(String planType) {
@@ -2790,9 +2818,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     if (_userMembership == null) return const SizedBox.shrink();
     final isDark = Theme.of(context).brightness == Brightness.dark;
     
-    // Get the correct membership ID (not user ID!)
-    final membershipId = _userMembership!['id'] ?? 
-                        _userMembership!['membershipId'] ?? 
+    // Get the correct membership ID (membershipId field is the actual membership ID)
+    final membershipId = _userMembership!['membershipId'] ?? 
+                        _userMembership!['id'] ?? 
                         _userMembership!['_id'] ?? 
                         'N/A';
     
@@ -2959,9 +2987,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   void _showMembershipQRCode() {
     if (_userMembership == null) return;
     
-    // Get the correct membership ID
-    final membershipId = _userMembership!['id'] ?? 
-                        _userMembership!['membershipId'] ?? 
+    // Get the correct membership ID (membershipId field is the actual membership ID)
+    final membershipId = _userMembership!['membershipId'] ?? 
+                        _userMembership!['id'] ?? 
                         _userMembership!['_id'] ?? 
                         'N/A';
     

@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'location_permission_service.dart';
 import '../config/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
