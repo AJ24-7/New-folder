@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const memberLocationStatusController = require('../controllers/memberLocationStatusController');
-const authenticateToken = require('../middleware/authenticateToken');
-const authenticateAdmin = require('../middleware/authenticateAdmin');
+const authMiddleware = require('../middleware/authMiddleware');
+const gymadminAuth = require('../middleware/gymadminAuth');
 
 /**
  * Member Location Status Routes
@@ -11,33 +11,33 @@ const authenticateAdmin = require('../middleware/authenticateAdmin');
 
 // Member routes (require member authentication)
 router.post('/location-status', 
-  authenticateToken, 
+  authMiddleware, 
   memberLocationStatusController.updateLocationStatus
 );
 
 router.get('/location-status/:memberId/:gymId', 
-  authenticateToken, 
+  authMiddleware, 
   memberLocationStatusController.getLocationStatus
 );
 
 router.post('/acknowledge-warning', 
-  authenticateToken, 
+  authMiddleware, 
   memberLocationStatusController.acknowledgeWarning
 );
 
 router.get('/geofence-requirements/:gymId', 
-  authenticateToken, 
+  authMiddleware, 
   memberLocationStatusController.getGeofenceRequirements
 );
 
 // Admin routes (require admin authentication)
 router.get('/admin/members-location-status/:gymId', 
-  authenticateAdmin, 
+  gymadminAuth, 
   memberLocationStatusController.getGymMembersLocationStatus
 );
 
 router.get('/admin/members-location-issues/:gymId', 
-  authenticateAdmin, 
+  gymadminAuth, 
   memberLocationStatusController.getMembersWithLocationIssues
 );
 
