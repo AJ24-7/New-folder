@@ -145,6 +145,7 @@ const userSettingsRoutes = require('./routes/userSettingsRoutes');
 const favoritesRoutes = require('./routes/favoritesRoutes');
 const memberProblemReportRoutes = require('./routes/memberProblemReportRoutes');
 const workoutRoutes = require('./routes/workoutRoutes');
+const attendanceRoutes = require('./routes/attendanceRoutes');
 const geofenceAttendanceRoutes = require('./routes/geofenceAttendance');
 const geofenceConfigRoutes = require('./routes/geofenceConfig');
 const equipmentRoutes = require('./routes/equipmentRoutes');
@@ -169,7 +170,9 @@ app.use('/api/support', supportRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/member-problems', memberProblemReportRoutes);
 app.use('/api/workouts', workoutRoutes);
-app.use('/api/attendance', geofenceAttendanceRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/attendance/geofence', geofenceAttendanceRoutes);
+app.use('/api/geofence-attendance', geofenceAttendanceRoutes); // Backward compatibility for member app
 app.use('/api/geofence', geofenceConfigRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/chat', chatRoutes);
