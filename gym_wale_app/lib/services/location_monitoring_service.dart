@@ -3,7 +3,7 @@ import 'package:geolocator/geolocator.dart';
 import 'dart:async';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'location_permission_service.dart';
-import '../config/api_constants.dart';
+import '../config/api_config.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
@@ -23,11 +23,9 @@ class LocationMonitoringService {
 
   // Status cache
   LocationStatus? _lastStatus;
-  DateTime? _lastUpdate;
 
   // Configuration
   static const Duration _updateInterval = Duration(minutes: 5);
-  static const Duration _quickUpdateInterval = Duration(seconds: 30);
   static const String _prefsKeyGymId = 'current_gym_id';
   static const String _prefsKeyMemberId = 'current_member_id';
 
@@ -54,7 +52,7 @@ class LocationMonitoringService {
   Future<void> startMonitoring() async {
     if (_isMonitoring) return;
 
-    print('[LocationMonitor] Starting location monitoring...');
+    debugPrint('[LocationMonitor] Starting location monitoring...');
     _isMonitoring = true;
 
     // Do immediate check
@@ -68,7 +66,7 @@ class LocationMonitoringService {
 
   /// Stop monitoring
   void stopMonitoring() {
-    print('[LocationMonitor] Stopping location monitoring...');
+    debugPrint('[LocationMonitor] Stopping location monitoring...');
     _isMonitoring = false;
     _monitoringTimer?.cancel();
     _monitoringTimer = null;
@@ -85,19 +83,41 @@ class LocationMonitoringService {
       }
 
       _lastStatus = status;
-      _lastUpdate = DateTime.now();
 
       return status;
     } catch (e) {
-      print('[LocationMonitor] Error checking status: $e');
+      debugPrint('[LocationMonitor] Error checking status: $e');
       rethrow;
     }
   }
 
   /// Get current location status
   Future<LocationStatus> getCurrentLocationStatus() async {
-    bool locationEnabled = await Geolocator.isLocationServiceEnabled();
-    LocationPermission permission = await Geolocator.checkPermission();
+    // For web platform, geofencing is not supported
+    if (kIsWeb) {
+      debugPrint('[LocationMonitor] Running on web - Geofencing not supported');
+      return LocationStatus(
+        locationEnabled: false,
+        locationPermission: 'notSupported',
+        backgroundLocationEnabled: false,
+        backgroundLocationPermission: 'notSupported',
+        locationAccuracy: 'unknown',
+        currentLocation: null,
+        platform: 'web',
+        isWebPlatform: true,
+      );
+    }
+
+    // For mobile platforms
+    bool locationEnabled = false;
+    LocationPermission permission = LocationPermission.denied;
+    
+    try {
+      locationEnabled = await Geolocator.isLocationServiceEnabled();
+      permission = await Geolocator.checkPermission();
+    } catch (e) {
+      debugPrint('[LocationMonitor] Error checking location status: $e');
+    }
     
     // Get background location permission status (platform specific)
     bool backgroundEnabled = false;
@@ -121,22 +141,20 @@ class LocationMonitoringService {
       platform = 'android';
     } else if (defaultTargetPlatform == TargetPlatform.iOS) {
       platform = 'ios';
-    } else if (kIsWeb) {
-      platform = 'web';
     }
 
     // Get current location
     Position? position;
     try {
-      if (locationEnabled && permission == LocationPermission.always ||
-          permission == LocationPermission.whileInUse) {
+      if (locationEnabled && (permission == LocationPermission.always ||
+          permission == LocationPermission.whileInUse)) {
         position = await Geolocator.getCurrentPosition(
           desiredAccuracy: LocationAccuracy.high,
           timeLimit: const Duration(seconds: 10),
         );
       }
     } catch (e) {
-      print('[LocationMonitor] Error getting position: $e');
+      debugPrint('[LocationMonitor] Error getting position: $e');
     }
 
     // Determine location accuracy
@@ -166,6 +184,7 @@ class LocationMonitoringService {
             )
           : null,
       platform: platform,
+      isWebPlatform: false,
     );
   }
 
@@ -176,7 +195,7 @@ class LocationMonitoringService {
     }
 
     try {
-      final url = Uri.parse('${ApiConstants.baseUrl}/api/member/location-status');
+      final url = Uri.parse('${ApiConfig.baseUrl}/member/location-status');
       
       final response = await http.post(
         url,
@@ -212,14 +231,14 @@ class LocationMonitoringService {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        print('[LocationMonitor] Status reported successfully');
+        debugPrint('[LocationMonitor] Status reported successfully');
         return data;
       } else {
-        print('[LocationMonitor] Failed to report status: ${response.statusCode}');
+        debugPrint('[LocationMonitor] Failed to report status: ${response.statusCode}');
         throw Exception('Failed to report location status');
       }
     } catch (e) {
-      print('[LocationMonitor] Error reporting status: $e');
+      debugPrint('[LocationMonitor] Error reporting status: $e');
       throw Exception('Error reporting location status: $e');
     }
   }
@@ -231,7 +250,7 @@ class LocationMonitoringService {
     }
 
     try {
-      final url = Uri.parse('${ApiConstants.baseUrl}/api/member/geofence-requirements/$_currentGymId');
+      final url = Uri.parse('${ApiConfig.baseUrl}/member/geofence-requirements/$_currentGymId');
       
       final response = await http.get(
         url,
@@ -248,7 +267,7 @@ class LocationMonitoringService {
       }
       return null;
     } catch (e) {
-      print('[LocationMonitor] Error fetching geofence requirements: $e');
+      debugPrint('[LocationMonitor] Error fetching geofence requirements: $e');
       return null;
     }
   }
@@ -307,7 +326,7 @@ class LocationMonitoringService {
         final status = await getCurrentLocationStatus();
         await _reportStatusToBackend(status);
       } catch (e) {
-        print('[LocationMonitor] Error reporting app close: $e');
+        debugPrint('[LocationMonitor] Error reporting app close: $e');
       }
     }
   }
@@ -330,6 +349,7 @@ class LocationStatus {
   final String locationAccuracy;
   final LocationData? currentLocation;
   final String platform;
+  final bool isWebPlatform;
 
   LocationStatus({
     required this.locationEnabled,
@@ -339,16 +359,20 @@ class LocationStatus {
     required this.locationAccuracy,
     this.currentLocation,
     required this.platform,
+    this.isWebPlatform = false,
   });
 
   bool get meetsBasicRequirements =>
-      locationEnabled && locationPermission == 'granted';
+      !isWebPlatform && locationEnabled && locationPermission == 'granted';
 
   bool get meetsGeofenceRequirements =>
+      !isWebPlatform &&
       locationEnabled &&
       locationPermission == 'granted' &&
       backgroundLocationEnabled &&
       backgroundLocationPermission == 'granted';
+      
+  bool get supportsGeofencing => !isWebPlatform;
 }
 
 /// Location Data Model

@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/diet_service.dart';
+import '../services/location_monitoring_service.dart';
+import '../providers/auth_provider.dart';
 import '../models/trial_booking.dart';
 import '../models/user_diet_subscription.dart';
 import '../models/diet_plan.dart';
@@ -33,6 +37,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
 
   bool _isLoading = true;
   int _selectedTabIndex = 0;
+  
+  final LocationMonitoringService _locationMonitoring = LocationMonitoringService();
 
   @override
   void initState() {
@@ -44,11 +50,50 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
       }
     });
     _loadAllSubscriptions();
+    _initializeLocationMonitoring();
+  }
+
+  /// Initialize location monitoring for active memberships
+  Future<void> _initializeLocationMonitoring() async {
+    try {
+      // Skip location monitoring on web platform
+      if (kIsWeb) {
+        debugPrint('[SubscriptionsScreen] Web platform - Skipping location monitoring');
+        return;
+      }
+      
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final user = authProvider.user;
+      final token = ApiService.token;
+      
+      if (user == null || token == null) {
+        return;
+      }
+
+      // Wait for memberships to load
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Initialize monitoring for first active gym membership
+      if (_gymMemberships.isNotEmpty) {
+        final firstGymId = _extractGymId(_gymMemberships[0]);
+        if (firstGymId != null) {
+          await _locationMonitoring.initialize(
+            gymId: firstGymId,
+            memberId: user.id,
+            authToken: token,
+          );
+          debugPrint('[SubscriptionsScreen] Location monitoring initialized for gym: $firstGymId');
+        }
+      }
+    } catch (e) {
+      debugPrint('[SubscriptionsScreen] Error initializing location monitoring: $e');
+    }
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    // Don't dispose location monitoring - it's a singleton
     super.dispose();
   }
 
@@ -1289,6 +1334,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
             // Attendance Widget - Show for gym memberships
             AttendanceWidget(
               gymId: _extractGymId(membership) ?? '',
+              gymName: gymName,
             ),
             const SizedBox(height: 12),
             

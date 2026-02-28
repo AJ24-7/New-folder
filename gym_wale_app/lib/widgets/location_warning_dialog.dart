@@ -122,7 +122,7 @@ class LocationWarningDialog extends StatelessWidget {
         color = Colors.orange;
         break;
       case LocationWarningType.lowAccuracy:
-        icon = FontAwesomeIcons.signalWeak;
+        icon = FontAwesomeIcons.locationCrosshairs;
         color = Colors.amber;
         break;
       case LocationWarningType.geofenceNotSetup:

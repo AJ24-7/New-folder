@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../providers/attendance_provider.dart';
+import '../providers/auth_provider.dart';
 import '../l10n/app_localizations.dart';
+import '../services/location_monitoring_service.dart';
+import '../services/api_service.dart';
+import '../widgets/location_warning_dialog.dart';
 
 /// Stateful wrapper for AttendanceWidget that connects to AttendanceProvider
 class AttendanceWidget extends StatefulWidget {
@@ -20,12 +25,25 @@ class AttendanceWidget extends StatefulWidget {
 }
 
 class _AttendanceWidgetState extends State<AttendanceWidget> {
+  final LocationMonitoringService _locationMonitoring = LocationMonitoringService();
+  LocationStatus? _locationStatus;
+  bool _isCheckingLocation = false;
+  bool _geofenceEnabled = false;
+  bool _showLocationWarning = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAttendanceData();
+      _checkGeofenceAndLocation();
     });
+  }
+
+  @override
+  void dispose() {
+    // Don't dispose the singleton service, just stop monitoring for this gym
+    super.dispose();
   }
 
   Future<void> _loadAttendanceData() async {
@@ -37,6 +55,109 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
       year: DateTime.now().year,
     );
   }
+
+  /// Check if geofence is enabled and verify location setup
+  Future<void> _checkGeofenceAndLocation() async {
+    if (widget.gymId.isEmpty) return;
+
+    setState(() {
+      _isCheckingLocation = true;
+    });
+
+    try {
+      // Get geofence requirements from backend
+      final response = await ApiService.getGymAttendanceSettings(widget.gymId);
+      
+      if (response['success'] == true && response['settings'] != null) {
+        final settings = response['settings'];
+        final geofenceEnabled = settings['geofenceEnabled'] == true ||
+                               settings['mode'] == 'geofence' ||
+                               settings['mode'] == 'hybrid';
+        
+        setState(() {
+          _geofenceEnabled = geofenceEnabled;
+        });
+
+        // Skip location monitoring on web platform
+        if (kIsWeb) {
+          debugPrint('[AttendanceWidget] Web platform - Geofencing not supported');
+          if (geofenceEnabled) {
+            // Show a static warning that geofencing is not supported on web
+            setState(() {
+              _showLocationWarning = true;
+              _locationStatus = null; // Set to null to indicate web platform
+            });
+          }
+          return;
+        }
+
+        if (geofenceEnabled) {
+          // Initialize location monitoring (mobile only)
+          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+          final user = authProvider.user;
+          final token = ApiService.token;
+          
+          if (user != null && token != null) {
+            await _locationMonitoring.initialize(
+              gymId: widget.gymId,
+              memberId: user.id,
+              authToken: token,
+            );
+          }
+
+          // Check current location status
+          final status = await _locationMonitoring.getCurrentLocationStatus();
+          setState(() {
+            _locationStatus = status;
+            _showLocationWarning = !status.meetsGeofenceRequirements;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[AttendanceWidget] Error checking geofence: $e');
+    } finally {
+      setState(() {
+        _isCheckingLocation = false;
+      });
+    }
+  }
+
+  /// Show location warning dialog
+  Future<void> _showLocationWarningDialog() async {
+    if (_locationStatus == null) return;
+
+    final warnings = <LocationWarning>[];
+
+    if (!_locationStatus!.locationEnabled) {
+      warnings.add(LocationWarning.locationDisabled());
+    }
+    
+    if (_locationStatus!.locationPermission != 'granted') {
+      warnings.add(LocationWarning.permissionDenied());
+    }
+    
+    if (!_locationStatus!.backgroundLocationEnabled ||
+        _locationStatus!.backgroundLocationPermission != 'granted') {
+      warnings.add(LocationWarning.backgroundPermissionDenied());
+    }
+    
+    if (_locationStatus!.locationAccuracy == 'low') {
+      warnings.add(LocationWarning.lowAccuracy());
+    }
+
+    if (warnings.isNotEmpty) {
+      await LocationWarningDialog.show(
+        context,
+        warnings: warnings,
+      );
+      
+      // Recheck after user returns from settings
+      await Future.delayed(const Duration(seconds: 1));
+      await _checkGeofenceAndLocation();
+    }
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -52,8 +173,95 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
           return _buildErrorState(l10n, provider.errorMessage!);
         }
 
-        return _buildContent(l10n, provider);
+        return Column(
+          children: [
+            // Show location warning banner if geofence is enabled but location is not set up
+            // On web, show info message if geofence is enabled
+            // On mobile, show warning if location requirements not met
+            if (_geofenceEnabled && _showLocationWarning)
+              _buildLocationWarningBanner(),
+            _buildContent(l10n, provider),
+          ],
+        );
       },
+    );
+  }
+
+  /// Build location warning banner
+  Widget _buildLocationWarningBanner() {
+    String message;
+    bool showFixButton = true;
+    
+    // Web platform specific message
+    if (kIsWeb) {
+      message = 'Automatic attendance is not available on web. Please use the mobile app for geofence-based attendance.';
+      showFixButton = false;
+    } else if (_locationStatus == null) {
+      message = 'Location access required for automatic attendance';
+    } else if (!_locationStatus!.locationEnabled) {
+      message = 'Enable location services for attendance tracking';
+    } else if (_locationStatus!.locationPermission != 'granted') {
+      message = 'Allow location permission for attendance';
+    } else if (!_locationStatus!.backgroundLocationEnabled) {
+      message = 'Enable background location for automatic attendance';
+    } else {
+      message = 'Location access required for automatic attendance';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            kIsWeb ? Icons.info_outline : Icons.location_off,
+            color: Colors.orange,
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              message,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.orange,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          if (showFixButton) ...[
+            const SizedBox(width: 8),
+            TextButton(
+              onPressed: _isCheckingLocation ? null : _showLocationWarningDialog,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+              child: _isCheckingLocation
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Text('Fix Now'),
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -125,19 +333,53 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
                   children: [
                     const Icon(Icons.calendar_today, color: Colors.white, size: 20),
                     const SizedBox(width: 8),
-                    Text(
-                      'Attendance',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Attendance',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (_geofenceEnabled)
+                          Row(
+                            children: [
+                              Icon(
+                                _locationStatus?.meetsGeofenceRequirements == true
+                                    ? Icons.check_circle
+                                    : Icons.location_off,
+                                color: _locationStatus?.meetsGeofenceRequirements == true
+                                    ? Colors.green[300]
+                                    : Colors.orange[300],
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _locationStatus?.meetsGeofenceRequirements == true
+                                    ? 'Auto-tracking enabled'
+                                    : 'Location setup required',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                      ],
                     ),
                   ],
                 ),
                 IconButton(
                   icon: const Icon(Icons.refresh, color: Colors.white),
-                  onPressed: _loadAttendanceData,
+                  onPressed: () {
+                    _loadAttendanceData();
+                    if (_geofenceEnabled) {
+                      _checkGeofenceAndLocation();
+                    }
+                  },
                   tooltip: 'Refresh',
                 ),
               ],

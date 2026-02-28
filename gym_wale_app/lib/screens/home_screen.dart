@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:geolocator/geolocator.dart';
@@ -53,7 +54,6 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _loadPreferences();
     _initializeData();
-    _checkGeofenceSettings();
   }
 
   /// Initialize data in proper sequence
@@ -64,19 +64,30 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadNotifications();
     await _loadTrainers();
     await _loadOffers();
+    
+    // Check geofence settings after all data is loaded and user is authenticated
+    await _checkGeofenceSettings();
   }
 
   /// Check if gym uses geofence attendance and warn about background location
   Future<void> _checkGeofenceSettings() async {
     try {
+      // Skip geofence checks on web platform
+      if (kIsWeb) {
+        debugPrint('[HOME] Web platform detected - Skipping geofence checks');
+        return;
+      }
+      
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final user = authProvider.user;
       
       if (user == null) {
+        debugPrint('[HOME] User not authenticated, skipping geofence check');
         return; // User not logged in
       }
 
       // Get user's active memberships
+      debugPrint('[HOME] Checking geofence settings for active memberships');
       final activeMemberships = await ApiService.getActiveMemberships();
       
       if (activeMemberships.isEmpty) {
@@ -89,60 +100,89 @@ class _HomeScreenState extends State<HomeScreen> {
       final now = DateTime.now().millisecondsSinceEpoch;
       
       for (final membership in activeMemberships) {
-        final gymId = membership['gymId']?.toString();
-        final gymName = membership['gymName']?.toString() ?? 
-                        membership['gym']?['name']?.toString() ?? 
-                        'Your gym';
+        // Extract gym ID from various possible locations
+        String? gymId;
+        String? gymName;
+        
+        if (membership['gymId'] != null) {
+          gymId = membership['gymId'].toString();
+        } else if (membership['gym']?['_id'] != null) {
+          gymId = membership['gym']['_id'].toString();
+        } else if (membership['gym']?['id'] != null) {
+          gymId = membership['gym']['id'].toString();
+        }
+        
+        gymName = membership['gymName']?.toString() ?? 
+                  membership['gym']?['gymName']?.toString() ?? 
+                  membership['gym']?['name']?.toString() ?? 
+                  'Your gym';
         
         if (gymId == null) continue;
         
-        // Check if we've already shown this warning for this gym
+        // Check if we've already shown this warning for this gym today
         final lastWarningShown = prefs.getInt('geofence_warning_shown_$gymId');
         
-        // Show warning once per week per gym
-        if (lastWarningShown != null && (now - lastWarningShown) < 7 * 24 * 60 * 60 * 1000) {
-          continue; // Already shown recently for this gym
+        // Show warning once per day per gym
+        if (lastWarningShown != null && (now - lastWarningShown) < 24 * 60 * 60 * 1000) {
+          continue; // Already shown today for this gym
         }
 
         // Fetch gym's attendance settings
+        debugPrint('[HOME] Fetching attendance settings for gym: $gymId ($gymName)');
         final response = await ApiService.getGymAttendanceSettings(gymId);
         
         if (response['success'] == true) {
           final settings = response['settings'];
-          final geofenceEnabled = settings['geofenceEnabled'] == true;
+          final geofenceEnabled = settings['geofenceEnabled'] == true ||
+                                  settings['mode'] == 'geofence' ||
+                                  settings['mode'] == 'hybrid';
+          
+          debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
           
           if (!geofenceEnabled) {
             continue; // Geofence not enabled for this gym
           }
 
           // Check if we need to show warning
-          final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
-            geofencingService: geofencingService,
-            geofenceEnabled: geofenceEnabled,
-          );
+          debugPrint('[HOME] Checking if should show location warning for gym: $gymName');
+          
+          try {
+            final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
+              geofencingService: geofencingService,
+              geofenceEnabled: geofenceEnabled,
+            );
 
-          if (shouldShow && mounted) {
-            // Wait a bit for the screen to fully load
-            await Future.delayed(const Duration(seconds: 1));
-            
-            if (mounted) {
-              await BackgroundLocationWarningDialog.show(
-                context: context,
-                gymName: gymName,
-                geofencingService: geofencingService,
-              );
+            debugPrint('[HOME] Should show warning: $shouldShow');
+
+            if (shouldShow && mounted) {
+              // Wait a bit for the screen to fully load
+              await Future.delayed(const Duration(milliseconds: 800));
               
-              // Mark as shown for this gym
-              await prefs.setInt('geofence_warning_shown_$gymId', now);
+              if (mounted) {
+                debugPrint('[HOME] Showing location warning dialog for gym: $gymName');
+                await BackgroundLocationWarningDialog.show(
+                  context: context,
+                  gymName: gymName,
+                  geofencingService: geofencingService,
+                );
+                
+                // Mark as shown for this gym
+                await prefs.setInt('geofence_warning_shown_$gymId', now);
+                debugPrint('[HOME] Location warning shown and marked in preferences');
+              }
+              
+              // Only show warning for one gym at a time
+              break;
             }
-            
-            // Only show warning for one gym at a time
-            break;
+          } catch (warningError) {
+            debugPrint('[HOME] Error showing location warning: $warningError');
+            // Continue to next membership if this one fails
+            continue;
           }
         }
       }
     } catch (e) {
-      print('[HOME] Error checking geofence settings: $e');
+      debugPrint('[HOME] Error checking geofence settings: $e');
       // Silently fail - don't disrupt user experience
     }
   }

@@ -8,21 +8,45 @@ import 'package:permission_handler/permission_handler.dart' as ph;
 class LocationPermissionService {
   /// Check if location services are enabled
   static Future<bool> isLocationServiceEnabled() async {
+    // Web platform doesn't support location services check
+    if (kIsWeb) {
+      return false;
+    }
     return await Geolocator.isLocationServiceEnabled();
   }
 
   /// Check current permission status
   static Future<LocationPermission> checkPermission() async {
+    // Web platform returns denied as it doesn't support native permissions
+    if (kIsWeb) {
+      return LocationPermission.denied;
+    }
     return await Geolocator.checkPermission();
   }
 
   /// Request location permission
   static Future<LocationPermission> requestPermission() async {
+    // Web platform returns denied as it doesn't support native permissions
+    if (kIsWeb) {
+      return LocationPermission.denied;
+    }
     return await Geolocator.requestPermission();
   }
 
   /// Check if we have required permissions for geofencing
   static Future<PermissionStatus> checkGeofencingPermissions() async {
+    // Web platform doesn't support geofencing
+    if (kIsWeb) {
+      return PermissionStatus(
+        hasLocationPermission: false,
+        hasBackgroundPermission: false,
+        hasActivityRecognition: false,
+        canUseGeofencing: false,
+        message: 'Geofencing is not supported on web platform. Please use the mobile app for automatic attendance.',
+        isWebPlatform: true,
+      );
+    }
+    
     // Check if location services are enabled
     final serviceEnabled = await isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -32,6 +56,7 @@ class LocationPermissionService {
         hasActivityRecognition: false,
         canUseGeofencing: false,
         message: 'Location services are disabled. Please enable location in settings.',
+        isWebPlatform: false,
       );
     }
 
@@ -47,6 +72,7 @@ class LocationPermissionService {
         hasActivityRecognition: false,
         canUseGeofencing: false,
         message: 'Location permission is required for attendance tracking.',
+        isWebPlatform: false,
       );
     }
 
@@ -83,6 +109,18 @@ class LocationPermissionService {
 
   /// Request all required permissions for geofencing
   static Future<PermissionStatus> requestGeofencingPermissions() async {
+    // Web platform doesn't support geofencing
+    if (kIsWeb) {
+      return PermissionStatus(
+        hasLocationPermission: false,
+        hasBackgroundPermission: false,
+        hasActivityRecognition: false,
+        canUseGeofencing: false,
+        message: 'Geofencing is not supported on web platform. Please use the mobile app for automatic attendance.',
+        isWebPlatform: true,
+      );
+    }
+    
     // Check if location services are enabled
     final serviceEnabled = await isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -92,6 +130,7 @@ class LocationPermissionService {
         hasActivityRecognition: false,
         canUseGeofencing: false,
         message: 'Please enable location services in your device settings.',
+        isWebPlatform: false,
       );
     }
 
@@ -109,6 +148,7 @@ class LocationPermissionService {
         hasActivityRecognition: false,
         canUseGeofencing: false,
         message: 'Location permission denied. Attendance tracking requires location access.',
+        isWebPlatform: false,
       );
     }
 
@@ -119,6 +159,7 @@ class LocationPermissionService {
         hasActivityRecognition: false,
         canUseGeofencing: false,
         message: 'Location permission permanently denied. Please enable in app settings.',
+        isWebPlatform: false,
       );
     }
 
@@ -153,6 +194,7 @@ class LocationPermissionService {
       hasActivityRecognition: hasActivityRecognition,
       canUseGeofencing: canUseGeofencing,
       message: message,
+      isWebPlatform: false,
     );
   }
 
@@ -215,6 +257,7 @@ class PermissionStatus {
   final bool hasActivityRecognition;
   final bool canUseGeofencing;
   final String message;
+  final bool isWebPlatform;
 
   PermissionStatus({
     required this.hasLocationPermission,
@@ -222,8 +265,10 @@ class PermissionStatus {
     required this.hasActivityRecognition,
     required this.canUseGeofencing,
     required this.message,
+    this.isWebPlatform = false,
   });
 
-  bool get isFullyGranted => hasLocationPermission && hasBackgroundPermission;
-  bool get needsBackgroundPermission => hasLocationPermission && !hasBackgroundPermission;
+  bool get isFullyGranted => !isWebPlatform && hasLocationPermission && hasBackgroundPermission;
+  bool get needsBackgroundPermission => !isWebPlatform && hasLocationPermission && !hasBackgroundPermission;
+  bool get supportsGeofencing => !isWebPlatform;
 }

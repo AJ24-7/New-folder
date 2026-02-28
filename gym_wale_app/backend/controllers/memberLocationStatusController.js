@@ -63,7 +63,10 @@ exports.updateLocationStatus = async (req, res) => {
                            attendanceSettings?.mode === 'hybrid';
 
     // Add warnings if geofence is enabled but location is not properly configured
-    if (geofenceEnabled) {
+    // Skip warnings for web platform as geofencing is not supported
+    const isWebPlatform = deviceInfo?.platform === 'web';
+    
+    if (geofenceEnabled && !isWebPlatform) {
       const warnings = [];
 
       if (!locationEnabled) {

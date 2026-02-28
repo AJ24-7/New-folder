@@ -7,12 +7,14 @@ class BackgroundLocationWarningDialog extends StatelessWidget {
   final String gymName;
   final VoidCallback? onSettingsPressed;
   final VoidCallback? onDismiss;
+  final bool isLocationDisabled;
 
   const BackgroundLocationWarningDialog({
     Key? key,
     required this.gymName,
     this.onSettingsPressed,
     this.onDismiss,
+    this.isLocationDisabled = false,
   }) : super(key: key);
 
   @override
@@ -89,31 +91,53 @@ class BackgroundLocationWarningDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'To track your attendance automatically when you enter and exit the gym, you need to:',
-              style: TextStyle(
+            Text(
+              isLocationDisabled
+                  ? 'Location services are currently turned off. To track your attendance automatically when you enter and exit the gym, you need to:'
+                  : 'To track your attendance automatically when you enter and exit the gym, you need to:',
+              style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 12),
-            _buildStep(
-              '1',
-              'Enable "Allow all the time" or "Always" for location access',
-              Colors.blue,
-            ),
-            const SizedBox(height: 8),
-            _buildStep(
-              '2',
-              'Keep location services enabled on your device',
-              Colors.green,
-            ),
-            const SizedBox(height: 8),
-            _buildStep(
-              '3',
-              'Ensure the app isn\'t restricted by battery optimization',
-              Colors.purple,
-            ),
+            if (isLocationDisabled) ...[
+              _buildStep(
+                '1',
+                'Turn on location services in your device settings',
+                Colors.orange,
+              ),
+              const SizedBox(height: 8),
+              _buildStep(
+                '2',
+                'Enable "Allow all the time" or "Always" for location access',
+                Colors.blue,
+              ),
+              const SizedBox(height: 8),
+              _buildStep(
+                '3',
+                'Ensure the app isn\'t restricted by battery optimization',
+                Colors.purple,
+              ),
+            ] else ...[
+              _buildStep(
+                '1',
+                'Enable "Allow all the time" or "Always" for location access',
+                Colors.blue,
+              ),
+              const SizedBox(height: 8),
+              _buildStep(
+                '2',
+                'Keep location services enabled on your device',
+                Colors.green,
+              ),
+              const SizedBox(height: 8),
+              _buildStep(
+                '3',
+                'Ensure the app isn\'t restricted by battery optimization',
+                Colors.purple,
+              ),
+            ],
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -165,7 +189,7 @@ class BackgroundLocationWarningDialog extends StatelessWidget {
             }
           },
           icon: const Icon(Icons.settings),
-          label: const Text('Open Settings'),
+          label: Text(isLocationDisabled ? 'Open Location Settings' : 'Open Settings'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.orange,
             foregroundColor: Colors.white,
@@ -223,14 +247,23 @@ class BackgroundLocationWarningDialog extends StatelessWidget {
     required String gymName,
     required GeofencingService geofencingService,
   }) async {
-    return showDialog(
+    // Check if location is disabled
+    final locationEnabled = await geofencingService.isLocationServiceEnabled();
+    final isLocationDisabled = !locationEnabled;
+    
+    return showDialog<void>(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => BackgroundLocationWarningDialog(
+      barrierDismissible: true,
+      builder: (BuildContext context) => BackgroundLocationWarningDialog(
         gymName: gymName,
+        isLocationDisabled: isLocationDisabled,
         onSettingsPressed: () async {
-          // Open app settings to allow user to change location permission
-          await geofencingService.openAppSettings();
+          // Open appropriate settings based on issue
+          if (isLocationDisabled) {
+            await geofencingService.openLocationSettings();
+          } else {
+            await geofencingService.openAppSettings();
+          }
         },
       ),
     );
@@ -243,6 +276,13 @@ class BackgroundLocationWarningDialog extends StatelessWidget {
   }) async {
     if (!geofenceEnabled) {
       return false; // No need to show if geofence is disabled
+    }
+
+    // Check if location services are enabled first
+    final locationEnabled = await geofencingService.isLocationServiceEnabled();
+    if (!locationEnabled) {
+      debugPrint('[WARNING_DIALOG] Location services are disabled');
+      return true; // Show warning if location is disabled
     }
 
     // Check current permission status

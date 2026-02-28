@@ -294,6 +294,16 @@ class GeofencingService extends ChangeNotifier {
     }
   }
 
+  /// Check if location services are enabled on the device
+  Future<bool> isLocationServiceEnabled() async {
+    try {
+      return await geo.Geolocator.isLocationServiceEnabled();
+    } catch (e) {
+      debugPrint('[GEOFENCE] Error checking location service: $e');
+      return false;
+    }
+  }
+
   /// Save geofence data to preferences
   Future<void> _saveGeofenceToPreferences(
       String gymId, double latitude, double longitude, double radius) async {
