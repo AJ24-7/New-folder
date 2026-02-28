@@ -207,6 +207,54 @@ class LocalNotificationService {
     );
   }
 
+  // Ongoing notification ID used for the foreground-service-like notification
+  static const int _idGeofenceActive = 2020;
+
+  /// Shows a persistent (ongoing) notification while geofence tracking is
+  /// active.  This keeps the Android process alive longer when the app is
+  /// in the background and prevents Android from killing it silently.
+  Future<void> showGeofenceActiveNotification({String gymName = 'your gym'}) async {
+    if (!_initialized || kIsWeb) return;
+    try {
+      final androidDetails = AndroidNotificationDetails(
+        _channelForegroundId,
+        _channelForegroundName,
+        channelDescription: 'Keeps geofence tracking running in the background',
+        importance: Importance.low,
+        priority: Priority.low,
+        ongoing: true,
+        autoCancel: false,
+        playSound: false,
+        enableVibration: false,
+        icon: '@mipmap/ic_launcher',
+        showWhen: false,
+        styleInformation: BigTextStyleInformation(
+            'Monitoring location near $gymName to auto-mark attendance.'),
+      );
+      const iosDetails = DarwinNotificationDetails();
+      await _plugin.show(
+        _idGeofenceActive,
+        '📍 Gym Attendance Tracking Active',
+        'Monitoring location near $gymName.',
+        NotificationDetails(android: androidDetails, iOS: iosDetails),
+        payload: 'geofence_active',
+      );
+      debugPrint('[LOCAL_NOTIF] Geofence active notification shown.');
+    } catch (e) {
+      debugPrint('[LOCAL_NOTIF] showGeofenceActiveNotification error: $e');
+    }
+  }
+
+  /// Cancels the ongoing geofence-active notification.
+  Future<void> hideGeofenceActiveNotification() async {
+    try {
+      await _plugin.cancel(_idGeofenceActive);
+      debugPrint('[LOCAL_NOTIF] Geofence active notification dismissed.');
+    } catch (e) {
+      debugPrint('[LOCAL_NOTIF] hideGeofenceActiveNotification error: $e');
+    }
+  }
+
   // ────────────────────────────────────────────────────────────────────────────
   // CANCEL
   // ────────────────────────────────────────────────────────────────────────────

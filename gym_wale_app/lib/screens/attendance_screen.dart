@@ -4,9 +4,11 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../providers/attendance_provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import '../services/location_permission_service.dart';
 import '../services/geofencing_service.dart';
 import '../config/app_theme.dart';
+import 'attendance_history_screen.dart';
 
 /// User Attendance Screen
 /// Shows attendance status, check-in/out times, and geofence information
@@ -17,16 +19,36 @@ class AttendanceScreen extends StatefulWidget {
   State<AttendanceScreen> createState() => _AttendanceScreenState();
 }
 
-class _AttendanceScreenState extends State<AttendanceScreen> {
+class _AttendanceScreenState extends State<AttendanceScreen>
+    with WidgetsBindingObserver {
   bool _isLoadingPermissions = true;
   PermissionStatus? _permissionStatus;
   bool _isSettingUpGeofence = false;
+  String? _activeGymId;
+  bool _isLoadingGymId = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkPermissions();
     _loadAttendanceData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Refresh attendance data whenever the app returns to the foreground.
+  /// This covers the case where the background foreground-task or the
+  /// geofence_service marked attendance while the screen was not visible.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadAttendanceData();
+    }
   }
 
   Future<void> _checkPermissions() async {
@@ -41,17 +63,65 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
   }
 
+  /// Resolve the user's active gym ID from their membership
+  Future<String?> _resolveActiveGymId() async {
+    if (_activeGymId != null) return _activeGymId;
+    if (_isLoadingGymId) return null;
+    _isLoadingGymId = true;
+    try {
+      // First check if geofence service already knows the gymId (restored from prefs)
+      final geofencingService =
+          Provider.of<GeofencingService>(context, listen: false);
+      if (geofencingService.currentGymId != null) {
+        _activeGymId = geofencingService.currentGymId;
+        return _activeGymId;
+      }
+
+      // Fetch from active memberships API
+      final memberships = await ApiService.getActiveMemberships();
+      for (final m in memberships) {
+        String? gymId;
+        if (m['gymId'] != null) {
+          gymId = m['gymId'].toString();
+        } else if (m['gym'] != null && m['gym'] is Map) {
+          gymId = (m['gym']['_id'] ?? m['gym']['id'])?.toString();
+        }
+        if (gymId != null && gymId.isNotEmpty) {
+          _activeGymId = gymId;
+          return gymId;
+        }
+      }
+    } catch (e) {
+      debugPrint('[ATTENDANCE SCREEN] Error resolving gym ID: $e');
+    } finally {
+      _isLoadingGymId = false;
+    }
+    return null;
+  }
+
   Future<void> _loadAttendanceData() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
-    
-    // TODO: Get gym ID from user's active membership
-    // For now, this needs to be fetched from user memberships
-    // You may need to add a currentGymId field to User model or get it from UserMembership
+    final attendanceProvider =
+        Provider.of<AttendanceProvider>(context, listen: false);
+
     final currentUser = authProvider.user;
-    if (currentUser != null) {
-      // await attendanceProvider.fetchTodayAttendance(gymId);
+    if (currentUser == null) return;
+
+    final gymId = await _resolveActiveGymId();
+    if (gymId == null) {
+      debugPrint('[ATTENDANCE SCREEN] No active gym membership found');
+      return;
     }
+
+    // Fetch today's attendance status and monthly stats
+    await Future.wait([
+      attendanceProvider.fetchTodayAttendance(gymId),
+      attendanceProvider.fetchAttendanceStats(
+        gymId,
+        month: DateTime.now().month,
+        year: DateTime.now().year,
+      ),
+    ]);
   }
 
   Future<void> _requestPermissions() async {
@@ -72,54 +142,53 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   Future<void> _setupGeofence() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
-    
+    final attendanceProvider =
+        Provider.of<AttendanceProvider>(context, listen: false);
+
     final currentUser = authProvider.user;
     if (currentUser == null) {
-      _showSnackBar('Please login to enable attendance tracking', isError: true);
+      _showSnackBar('Please login to enable attendance tracking',
+          isError: true);
       return;
     }
 
-    // TODO: Get gym ID from user's active membership or stored preferences
-    // You need to:
-    // 1. Add a method to get user's active gym membership
-    // 2. Store current gym ID in SharedPreferences when user joins
-    // 3. Or add currentGymId field to User model
-    
-    // For now, return an error to guide user
-    _showSnackBar('Please configure your gym membership first', isError: true);
-    return;
-    
-    // Uncomment below when gym ID retrieval is implemented
-    /*
-    setState(() {
-      _isSettingUpGeofence = true;
-    });
+    setState(() => _isSettingUpGeofence = true);
 
     try {
-      // Get gym details to get geofence coordinates
-      // TODO: Fetch actual gym coordinates from API using gym ID
-      final gymId = 'YOUR_GYM_ID'; // Get from user's active membership
-      final success = await attendanceProvider.setupGeofencing(
-        gymId: gymId,
-        latitude: 28.6139, // TODO: Replace with actual gym latitude from API
-        longitude: 77.2090, // TODO: Replace with actual gym longitude from API
-        radius: 100.0, // TODO: Replace with actual gym geofence radius from API
-      );
+      // Resolve gymId from active membership
+      final gymId = await _resolveActiveGymId();
+      if (gymId == null) {
+        _showSnackBar(
+            'No active gym membership found. Please join a gym first.',
+            isError: true);
+        return;
+      }
+
+      // setupGeofencingWithSettings fetches gym coordinates from attendance
+      // settings API and registers the geofence. It also loads _attendanceSettings
+      // so that isAutoMarkEnabled() / shouldAutoMarkEntry() work correctly.
+      final success =
+          await attendanceProvider.setupGeofencingWithSettings(gymId);
 
       if (success) {
         _showSnackBar('Automatic attendance tracking enabled!');
+        // Refresh today's attendance status
+        await attendanceProvider.fetchTodayAttendance(gymId);
       } else {
-        _showSnackBar('Failed to setup attendance tracking', isError: true);
+        // setupGeofencingWithSettings() returns false either when geofencing is
+        // disabled for this gym or coordinates aren't configured.
+        // Fall back to reading raw gym location from the gym document.
+        final error = attendanceProvider.errorMessage;
+        _showSnackBar(
+            error ?? 'Geofence not configured for this gym. Contact your gym.',
+            isError: true);
       }
     } catch (e) {
-      _showSnackBar('Error: $e', isError: true);
+      debugPrint('[ATTENDANCE SCREEN] Setup error: $e');
+      _showSnackBar('Error enabling tracking: $e', isError: true);
     } finally {
-      setState(() {
-        _isSettingUpGeofence = false;
-      });
+      setState(() => _isSettingUpGeofence = false);
     }
-    */
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
@@ -140,9 +209,41 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         actions: [
           IconButton(
             icon: const Icon(FontAwesomeIcons.clockRotateLeft),
-            onPressed: () {
-              // Navigate to attendance history
-              Navigator.pushNamed(context, '/attendance-history');
+            onPressed: () async {
+              // Resolve the gymId before navigating so AttendanceHistoryScreen
+              // receives the required parameters.
+              final gymId = await _resolveActiveGymId();
+              if (gymId == null || !mounted) return;
+
+              // Attempt to get gym name from memberships for the app bar title
+              String gymName = 'Your Gym';
+              try {
+                final memberships = await ApiService.getActiveMemberships();
+                for (final m in memberships) {
+                  final mGymId = (m['gymId'] ??
+                          m['gym']?['_id'] ??
+                          m['gym']?['id'])
+                      ?.toString();
+                  if (mGymId == gymId) {
+                    gymName = m['gymName']?.toString() ??
+                        m['gym']?['gymName']?.toString() ??
+                        m['gym']?['name']?.toString() ??
+                        'Your Gym';
+                    break;
+                  }
+                }
+              } catch (_) {}
+
+              if (!mounted) return;
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => AttendanceHistoryScreen(
+                    gymId: gymId,
+                    gymName: gymName,
+                  ),
+                ),
+              );
             },
             tooltip: 'History',
           ),

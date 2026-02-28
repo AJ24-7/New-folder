@@ -1,5 +1,6 @@
 const AttendanceSettings = require('../models/AttendanceSettings');
 const Gym = require('../models/gym');
+const GeofenceConfig = require('../models/GeofenceConfig');
 
 /**
  * Get attendance settings for a gym
@@ -226,38 +227,49 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
     // Get attendance settings
     let settings = await AttendanceSettings.findOne({ gym: gymId });
 
+    // ── Also load GeofenceConfig (the source-of-truth for geofence geometry) ──
+    const geofenceConfig = await GeofenceConfig.findOne({ gym: gymId });
+
     if (!settings) {
-      // Return default settings
+      // Return default settings, but still include GeofenceConfig data if present
+      const fallbackGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig);
       return res.json({
         success: true,
         settings: {
           gymId: gymId,
-          mode: 'manual',
-          geofenceEnabled: false,
-          requiresBackgroundLocation: false,
-          autoMarkEnabled: false,
-          geofenceSettings: null
+          mode: geofenceConfig?.enabled ? 'geofence' : 'manual',
+          geofenceEnabled: geofenceConfig?.enabled || false,
+          requiresBackgroundLocation: geofenceConfig?.enabled || false,
+          autoMarkEnabled: geofenceConfig?.autoMarkEntry || false,
+          geofenceSettings: fallbackGeoSettings
         }
       });
     }
+
+    // ── Build geofenceSettings: prefer GeofenceConfig (covers polygon+circular),
+    //    fall back to AttendanceSettings.geofenceSettings if no GeofenceConfig ──
+    const resolvedGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig)
+      || (settings.geofenceSettings?.enabled ? {
+          enabled: settings.geofenceSettings.enabled,
+          latitude: settings.geofenceSettings.latitude,
+          longitude: settings.geofenceSettings.longitude,
+          radius: settings.geofenceSettings.radius,
+          autoMarkEntry: settings.geofenceSettings.autoMarkEntry,
+          autoMarkExit: settings.geofenceSettings.autoMarkExit,
+          allowMockLocation: settings.geofenceSettings.allowMockLocation,
+          minAccuracyMeters: settings.geofenceSettings.minAccuracyMeters,
+          type: 'circular',
+          polygonCoordinates: []
+        } : null);
 
     // Return only necessary fields for member app
     const memberSettings = {
       gymId: gymId,
       mode: settings.mode,
-      geofenceEnabled: settings.geofenceSettings?.enabled || false,
-      requiresBackgroundLocation: settings.geofenceSettings?.enabled || false,
-      autoMarkEnabled: settings.autoMarkEnabled || false,
-      geofenceSettings: settings.geofenceSettings?.enabled ? {
-        enabled: settings.geofenceSettings.enabled,
-        latitude: settings.geofenceSettings.latitude,
-        longitude: settings.geofenceSettings.longitude,
-        radius: settings.geofenceSettings.radius,
-        autoMarkEntry: settings.geofenceSettings.autoMarkEntry,
-        autoMarkExit: settings.geofenceSettings.autoMarkExit,
-        allowMockLocation: settings.geofenceSettings.allowMockLocation,
-        minAccuracyMeters: settings.geofenceSettings.minAccuracyMeters
-      } : null
+      geofenceEnabled: resolvedGeoSettings?.enabled || false,
+      requiresBackgroundLocation: resolvedGeoSettings?.enabled || false,
+      autoMarkEnabled: settings.autoMarkEnabled || resolvedGeoSettings?.autoMarkEntry || false,
+      geofenceSettings: resolvedGeoSettings
     };
 
     res.json({
@@ -399,3 +411,49 @@ exports.getAttendanceSettingsStatus = async (req, res) => {
     });
   }
 };
+
+// ── Helper: build member-facing geofenceSettings object from a GeofenceConfig doc
+// Returns null when no config exists or config is disabled.
+function _buildGeofenceSettingsFromConfig(config) {
+  if (!config || !config.enabled) return null;
+
+  const base = {
+    enabled: true,
+    autoMarkEntry: config.autoMarkEntry !== false,
+    autoMarkExit: config.autoMarkExit !== false,
+    allowMockLocation: config.allowMockLocation || false,
+    minAccuracyMeters: config.minimumAccuracy || 20,
+    type: config.type || 'circular',
+    polygonCoordinates: config.polygonCoordinates || []
+  };
+
+  if (config.type === 'polygon') {
+    // For polygon: compute centroid as lat/lng and max vertex distance as radius
+    const coords = config.polygonCoordinates || [];
+    if (coords.length >= 3) {
+      const sumLat = coords.reduce((s, c) => s + c.lat, 0);
+      const sumLng = coords.reduce((s, c) => s + c.lng, 0);
+      base.latitude = sumLat / coords.length;
+      base.longitude = sumLng / coords.length;
+
+      // Max distance from centroid to any vertex (used as bounding-circle radius)
+      let maxDist = 0;
+      for (const c of coords) {
+        const R = 6371000;
+        const dLat = (c.lat - base.latitude) * Math.PI / 180;
+        const dLng = (c.lng - base.longitude) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(base.latitude * Math.PI / 180) * Math.cos(c.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        if (d > maxDist) maxDist = d;
+      }
+      base.radius = Math.ceil(maxDist + 20); // +20 m buffer
+    }
+  } else {
+    // Circular
+    base.latitude = config.center?.lat || null;
+    base.longitude = config.center?.lng || null;
+    base.radius = config.radius || 100;
+  }
+
+  return (base.latitude && base.longitude) ? base : null;
+}

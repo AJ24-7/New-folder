@@ -47,10 +47,11 @@ dependencies:
   universal_html: ^2.2.4
   share_plus: ^7.2.1
   
-  # Location
+  # Location & Background Service
   geolocator: ^11.0.0
   geocoding: ^2.1.1
   geofence_service: ^6.0.0
+  flutter_foreground_task: ^8.13.0
   
   # Permissions
   permission_handler: ^11.3.0

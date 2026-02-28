@@ -6,6 +6,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
+import '../providers/attendance_provider.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/geofencing_service.dart';
@@ -141,6 +142,24 @@ class _HomeScreenState extends State<HomeScreen> {
           
           if (!geofenceEnabled) {
             continue; // Geofence not enabled for this gym
+          }
+
+          // ── Auto-configure geofencing ─────────────────────────────────────
+          // If the geofence service is not yet running for this gym, set it
+          // up automatically so the user doesn't have to open AttendanceScreen
+          // and tap "Enable Tracking" manually.
+          if (!geofencingService.isServiceRunning ||
+              geofencingService.currentGymId != gymId) {
+            debugPrint('[HOME] Auto-configuring geofence for gym: $gymId ($gymName)');
+            try {
+              final attendanceProvider =
+                  Provider.of<AttendanceProvider>(context, listen: false);
+              // setupGeofencingWithSettings fetches coordinates from
+              // the attendance-settings API and registers the geofence.
+              await attendanceProvider.setupGeofencingWithSettings(gymId);
+            } catch (autoSetupErr) {
+              debugPrint('[HOME] Auto geofence setup failed: $autoSetupErr');
+            }
           }
 
           // Check if we need to show warning

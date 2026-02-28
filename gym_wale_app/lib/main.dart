@@ -1,5 +1,6 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
@@ -15,6 +16,7 @@ import 'providers/workout_provider.dart';
 import 'providers/attendance_provider.dart';
 import 'services/geofencing_service.dart';
 import 'services/local_notification_service.dart';
+import 'services/foreground_task_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -23,7 +25,22 @@ import 'services/location_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ── flutter_foreground_task: must be called before runApp ──────────────────
+  FlutterForegroundTask.initCommunicationPort();
+
   await dotenv.load(fileName: ".env");
+
+  // ── Configure & init the persistent foreground service ────────────────────
+  ForegroundTaskService().init();
+
+  // Persist the API base URL so the killed-app background isolate can call the
+  // backend directly (it has no access to dotenv or ApiConfig).
+  try {
+    final rawBase = dotenv.env['API_BASE_URL'] ?? '';
+    await ForegroundTaskService.persistApiBaseUrl(rawBase);
+  } catch (_) {}
+
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -60,21 +77,25 @@ class MyApp extends StatelessWidget {
       ],
       child: Consumer2<ThemeProvider, LocaleProvider>(
         builder: (context, themeProvider, localeProvider, _) {
-          return MaterialApp(
-            title: 'Gym-wale',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.lightTheme,
-            darkTheme: AppTheme.darkTheme,
-            themeMode: themeProvider.getThemeMode(),
-            locale: localeProvider.locale,
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: LocaleProvider.supportedLocales,
-            home: const SplashScreen(),
+          // WithForegroundTask ensures the foreground service communication
+          // port stays alive while the app is in the foreground.
+          return WithForegroundTask(
+            child: MaterialApp(
+              title: 'Gym-wale',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeProvider.getThemeMode(),
+              locale: localeProvider.locale,
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              supportedLocales: LocaleProvider.supportedLocales,
+              home: const SplashScreen(),
+            ),
           );
         },
       ),
@@ -111,7 +132,17 @@ class _SplashScreenState extends State<SplashScreen> {
     
     // Restore geofence if previously set up
     try {
-      await geofencingService.restoreGeofenceFromPreferences();
+      final restored = await geofencingService.restoreGeofenceFromPreferences();
+      // If the geofence was restored, also load attendance settings into the
+      // AttendanceProvider so that isAutoMarkEnabled() / shouldAutoMarkEntry()
+      // return the correct values for this session (fixes silent DWELL skip).
+      if (restored) {
+        final restoredGymId = geofencingService.currentGymId;
+        if (restoredGymId != null) {
+          debugPrint('[MAIN] Loading attendance settings after restore for gym: $restoredGymId');
+          await attendanceProvider.loadAttendanceSettings(restoredGymId);
+        }
+      }
     } catch (e) {
       print('[GEOFENCE] Error restoring geofence: $e');
     }

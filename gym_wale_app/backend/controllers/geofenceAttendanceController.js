@@ -3,6 +3,7 @@ const Gym = require('../models/gym');
 const Member = require('../models/Member');
 const Membership = require('../models/Membership');
 const Notification = require('../models/Notification');
+const GeofenceConfig = require('../models/GeofenceConfig');
 const { getFirebaseMessaging } = require('../config/firebase');
 
 // ─── FCM push helper ────────────────────────────────────────────────────────
@@ -113,15 +114,6 @@ exports.autoMarkEntry = async (req, res) => {
             });
         }
 
-        // Anti-fraud check: Reject mock locations
-        if (isMockLocation === true) {
-            console.log(`[GEOFENCE] Mock location detected for member ${memberId}`);
-            return res.status(403).json({
-                success: false,
-                message: 'Mock locations are not allowed for attendance marking'
-            });
-        }
-
         // Fetch gym details
         const gym = await Gym.findById(gymId);
         if (!gym) {
@@ -131,32 +123,100 @@ exports.autoMarkEntry = async (req, res) => {
             });
         }
 
-        // Check if gym has location set
-        if (!gym.location || !gym.location.lat || !gym.location.lng) {
-            return res.status(400).json({
-                success: false,
-                message: 'Gym location not configured for geofencing'
-            });
-        }
+        // ── Load GeofenceConfig (supports both circular AND polygon) ──────────
+        // Fall back to gym.location-based circular check only if no GeofenceConfig exists.
+        const geofenceConfig = await GeofenceConfig.findOne({ gym: gymId });
 
-        // Calculate distance from gym
-        const distance = calculateDistance(
-            latitude,
-            longitude,
-            gym.location.lat,
-            gym.location.lng
-        );
+        if (geofenceConfig) {
+            // Config exists — check enabled flag first
+            if (!geofenceConfig.enabled) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Geofencing is disabled for this gym'
+                });
+            }
 
-        const geofenceRadius = gym.location.geofenceRadius || 100;
+            // Check auto-mark permission from config
+            if (!geofenceConfig.autoMarkEntry) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Auto-mark entry is disabled for this gym'
+                });
+            }
 
-        // Verify user is within geofence
-        if (distance > geofenceRadius) {
-            return res.status(403).json({
-                success: false,
-                message: `You are ${Math.round(distance)}m away from the gym. Must be within ${geofenceRadius}m.`,
-                distance: Math.round(distance),
-                requiredRadius: geofenceRadius
-            });
+            // Anti-fraud: mock location check from config
+            if (isMockLocation === true && !geofenceConfig.allowMockLocation) {
+                console.log(`[GEOFENCE] Mock location detected for member ${memberId}`);
+                return res.status(403).json({
+                    success: false,
+                    message: 'Mock locations are not allowed for attendance marking'
+                });
+            }
+
+            // Operating hours check from config
+            if (!geofenceConfig.isWithinOperatingHours()) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Attendance can only be marked during gym operating hours',
+                    openingTime: geofenceConfig.operatingHoursStart,
+                    closingTime: geofenceConfig.operatingHoursEnd
+                });
+            }
+
+            // ── Containment check (polygon OR circular) ──────────────────────
+            const isInside = geofenceConfig.containsPoint(latitude, longitude);
+            if (!isInside) {
+                // Provide helpful distance info for circular mode
+                let distanceInfo = {};
+                if (geofenceConfig.type === 'circular' && geofenceConfig.center) {
+                    const dist = calculateDistance(latitude, longitude, geofenceConfig.center.lat, geofenceConfig.center.lng);
+                    distanceInfo = { distance: Math.round(dist), requiredRadius: geofenceConfig.radius };
+                }
+                return res.status(403).json({
+                    success: false,
+                    message: geofenceConfig.type === 'circular'
+                        ? `You are ${distanceInfo.distance}m away from the gym. Must be within ${distanceInfo.requiredRadius}m.`
+                        : 'You are outside the gym geofence area.',
+                    ...distanceInfo
+                });
+            }
+        } else {
+            // No GeofenceConfig — fall back to gym.location (legacy circular check)
+            if (!gym.location || !gym.location.lat || !gym.location.lng) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Gym location not configured for geofencing'
+                });
+            }
+
+            // Anti-fraud check: Reject mock locations
+            if (isMockLocation === true) {
+                console.log(`[GEOFENCE] Mock location detected for member ${memberId}`);
+                return res.status(403).json({
+                    success: false,
+                    message: 'Mock locations are not allowed for attendance marking'
+                });
+            }
+
+            const distance = calculateDistance(latitude, longitude, gym.location.lat, gym.location.lng);
+            const geofenceRadius = gym.location.geofenceRadius || 100;
+
+            if (distance > geofenceRadius) {
+                return res.status(403).json({
+                    success: false,
+                    message: `You are ${Math.round(distance)}m away from the gym. Must be within ${geofenceRadius}m.`,
+                    distance: Math.round(distance),
+                    requiredRadius: geofenceRadius
+                });
+            }
+
+            // Check time window (legacy)
+            if (!isWithinTimeWindow(gym.openingTime, gym.closingTime)) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'Attendance can only be marked during gym operating hours'
+                });
+            }
         }
 
         // Check if member exists and is active
@@ -180,14 +240,6 @@ exports.autoMarkEntry = async (req, res) => {
             return res.status(403).json({
                 success: false,
                 message: 'No active membership found. Please renew your membership.'
-            });
-        }
-
-        // Check time window
-        if (!isWithinTimeWindow(gym.openingTime, gym.closingTime)) {
-            return res.status(403).json({
-                success: false,
-                message: 'Attendance can only be marked during gym operating hours'
             });
         }
 
@@ -221,7 +273,9 @@ exports.autoMarkEntry = async (req, res) => {
                 longitude,
                 accuracy,
                 isMockLocation: isMockLocation || false,
-                distanceFromGym: Math.round(distance)
+                distanceFromGym: (geofenceConfig && geofenceConfig.type === 'circular' && geofenceConfig.center)
+                    ? Math.round(calculateDistance(latitude, longitude, geofenceConfig.center.lat, geofenceConfig.center.lng))
+                    : (gym.location ? Math.round(calculateDistance(latitude, longitude, gym.location.lat || 0, gym.location.lng || 0)) : 0)
             };
             existingAttendance.isGeofenceAttendance = true;
             existingAttendance.status = 'present';
@@ -289,7 +343,9 @@ exports.autoMarkEntry = async (req, res) => {
                 longitude,
                 accuracy,
                 isMockLocation: isMockLocation || false,
-                distanceFromGym: Math.round(distance)
+                distanceFromGym: (geofenceConfig && geofenceConfig.type === 'circular' && geofenceConfig.center)
+                    ? Math.round(calculateDistance(latitude, longitude, geofenceConfig.center.lat, geofenceConfig.center.lng))
+                    : (gym.location ? Math.round(calculateDistance(latitude, longitude, gym.location.lat || 0, gym.location.lng || 0)) : 0)
             },
             deviceInfo: {
                 deviceType: 'mobile',
@@ -378,6 +434,17 @@ exports.autoMarkExit = async (req, res) => {
             });
         }
 
+        // Check geofence config for autoMarkExit permission
+        const exitGeofenceConfig = await GeofenceConfig.findOne({ gym: gymId });
+        if (exitGeofenceConfig) {
+            if (!exitGeofenceConfig.enabled) {
+                return res.status(403).json({ success: false, message: 'Geofencing is disabled for this gym' });
+            }
+            if (!exitGeofenceConfig.autoMarkExit) {
+                return res.status(403).json({ success: false, message: 'Auto-mark exit is disabled for this gym' });
+            }
+        }
+
         // Get today's date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -410,7 +477,7 @@ exports.autoMarkExit = async (req, res) => {
         const durationInMinutes = Math.round((exitTime - entryTime) / (1000 * 60));
 
         // Minimum stay validation (prevent quick in/out fraud)
-        const minimumStayMinutes = 5;
+        const minimumStayMinutes = exitGeofenceConfig ? (exitGeofenceConfig.minimumStayDuration || 5) : 5;
         if (durationInMinutes < minimumStayMinutes) {
             return res.status(403).json({
                 success: false,

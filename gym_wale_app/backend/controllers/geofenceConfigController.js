@@ -1,5 +1,6 @@
 const GeofenceConfig = require('../models/GeofenceConfig');
 const Gym = require('../models/gym');
+const AttendanceSettings = require('../models/AttendanceSettings');
 
 /**
  * Get geofence configuration for a gym
@@ -187,6 +188,62 @@ exports.saveGeofenceConfig = async (req, res) => {
             gym.location.lng = center.lng;
             gym.location.geofenceRadius = radius;
             await gym.save();
+        }
+
+        // ── Sync GeofenceConfig → AttendanceSettings.geofenceSettings ─────────
+        // The member app reads geofence coordinates from AttendanceSettings.
+        // Keep it in sync every time the admin saves a GeofenceConfig.
+        try {
+            let attendanceSettings = await AttendanceSettings.findOne({ gym: gymId });
+            if (!attendanceSettings) {
+                attendanceSettings = new AttendanceSettings({
+                    gym: gymId,
+                    mode: 'geofence',
+                    autoMarkEnabled: autoMarkEntry !== false,
+                });
+            }
+            // Compute lat/lng/radius from config (centroid for polygon)
+            let syncLat, syncLng, syncRadius;
+            if (type === 'circular') {
+                syncLat = center.lat;
+                syncLng = center.lng;
+                syncRadius = radius;
+            } else {
+                // Polygon: derive centroid and bounding-circle radius
+                const coords = polygonCoordinates;
+                syncLat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+                syncLng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+                const R = 6371000;
+                let maxDist = 0;
+                for (const c of coords) {
+                    const dLat = (c.lat - syncLat) * Math.PI / 180;
+                    const dLng = (c.lng - syncLng) * Math.PI / 180;
+                    const a = Math.sin(dLat / 2) ** 2 + Math.cos(syncLat * Math.PI / 180) * Math.cos(c.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+                    const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    if (d > maxDist) maxDist = d;
+                }
+                syncRadius = Math.ceil(maxDist + 20);
+            }
+
+            attendanceSettings.geofenceSettings = {
+                enabled: enabled !== false,
+                latitude: syncLat,
+                longitude: syncLng,
+                radius: syncRadius,
+                autoMarkEntry: autoMarkEntry !== false,
+                autoMarkExit: autoMarkExit !== false,
+                allowMockLocation: allowMockLocation || false,
+                minAccuracyMeters: minimumAccuracy || 20,
+            };
+            if (enabled !== false) {
+                attendanceSettings.mode = 'geofence';
+                attendanceSettings.autoMarkEnabled = autoMarkEntry !== false;
+            }
+            await attendanceSettings.save();
+            console.log(`[GEOFENCE CONFIG] Synced geofence settings to AttendanceSettings for gym ${gymId}`);
+        } catch (syncErr) {
+            // Non-fatal: log but don't fail the main request
+            console.error('[GEOFENCE CONFIG] Failed to sync to AttendanceSettings:', syncErr.message);
         }
 
         res.json({

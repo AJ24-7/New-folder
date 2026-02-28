@@ -103,6 +103,10 @@ class GeofenceSettings {
   final bool autoMarkExit;
   final bool allowMockLocation;
   final int? minAccuracyMeters;
+  /// 'circular' or 'polygon' — matches GeofenceConfig.type on the backend.
+  final String type;
+  /// Non-empty only when [type] == 'polygon'. Each map has 'lat' & 'lng'.
+  final List<Map<String, double>> polygonCoordinates;
 
   GeofenceSettings({
     required this.enabled,
@@ -113,18 +117,35 @@ class GeofenceSettings {
     this.autoMarkExit = true,
     this.allowMockLocation = false,
     this.minAccuracyMeters,
+    this.type = 'circular',
+    this.polygonCoordinates = const [],
   });
 
   factory GeofenceSettings.fromJson(Map<String, dynamic> json) {
+    // Parse polygonCoordinates array (list of {lat, lng} maps)
+    List<Map<String, double>> polyCords = [];
+    if (json['polygonCoordinates'] is List) {
+      for (final c in (json['polygonCoordinates'] as List)) {
+        if (c is Map) {
+          final lat = (c['lat'] as num?)?.toDouble();
+          final lng = (c['lng'] as num?)?.toDouble();
+          if (lat != null && lng != null) {
+            polyCords.add({'lat': lat, 'lng': lng});
+          }
+        }
+      }
+    }
     return GeofenceSettings(
       enabled: json['enabled'] ?? false,
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
-      radius: json['radius']?.toDouble(),
+      latitude: (json['latitude'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble(),
+      radius: (json['radius'] as num?)?.toDouble(),
       autoMarkEntry: json['autoMarkEntry'] ?? true,
       autoMarkExit: json['autoMarkExit'] ?? true,
       allowMockLocation: json['allowMockLocation'] ?? false,
-      minAccuracyMeters: json['minAccuracyMeters'],
+      minAccuracyMeters: json['minAccuracyMeters'] as int?,
+      type: json['type'] as String? ?? 'circular',
+      polygonCoordinates: polyCords,
     );
   }
 
@@ -138,6 +159,8 @@ class GeofenceSettings {
       'autoMarkExit': autoMarkExit,
       'allowMockLocation': allowMockLocation,
       'minAccuracyMeters': minAccuracyMeters,
+      'type': type,
+      'polygonCoordinates': polygonCoordinates,
     };
   }
 
@@ -150,6 +173,8 @@ class GeofenceSettings {
     bool? autoMarkExit,
     bool? allowMockLocation,
     int? minAccuracyMeters,
+    String? type,
+    List<Map<String, double>>? polygonCoordinates,
   }) {
     return GeofenceSettings(
       enabled: enabled ?? this.enabled,
@@ -160,11 +185,15 @@ class GeofenceSettings {
       autoMarkExit: autoMarkExit ?? this.autoMarkExit,
       allowMockLocation: allowMockLocation ?? this.allowMockLocation,
       minAccuracyMeters: minAccuracyMeters ?? this.minAccuracyMeters,
+      type: type ?? this.type,
+      polygonCoordinates: polygonCoordinates ?? this.polygonCoordinates,
     );
   }
 
   bool get isConfigured =>
-      latitude != null && longitude != null && radius != null;
+      type == 'polygon'
+          ? polygonCoordinates.length >= 3
+          : (latitude != null && longitude != null && radius != null);
 
   bool get isValid => enabled && isConfigured;
 }

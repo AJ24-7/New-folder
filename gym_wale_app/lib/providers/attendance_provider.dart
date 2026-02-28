@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geofence_service/geofence_service.dart';
 import '../services/geofencing_service.dart';
 import '../services/api_service.dart';
@@ -54,6 +55,43 @@ class AttendanceProvider extends ChangeNotifier {
   void initializeGeofencingService(GeofencingService service) {
     _geofencingService = service;
     _initializeGeofenceListener();
+    _initializeBackgroundTaskListener();
+  }
+
+  /// Listen for data sent from the background (killed-app) isolate so the UI
+  /// refreshes automatically, e.g. after the foreground task marks attendance.
+  void _initializeBackgroundTaskListener() {
+    FlutterForegroundTask.addTaskDataCallback(_onBackgroundTaskData);
+  }
+
+  /// Called in the main isolate when the background isolate sends data via
+  /// FlutterForegroundTask.sendDataToMain(...).
+  void _onBackgroundTaskData(Object data) {
+    try {
+      if (data is Map) {
+        final event  = data['event'] as String?;
+        final gymId  = data['gymId']  as String?;
+        if (gymId == null) return;
+
+        debugPrint('[ATTENDANCE] Background task event: $event for gym: $gymId');
+
+        if (event == 'attendance_entry') {
+          _isAttendanceMarkedToday = true;
+          _checkInTime = DateTime.now();
+          _hasCheckedOut = false;
+          notifyListeners();
+          // Also re-fetch from backend to get the full attendance record
+          fetchTodayAttendance(gymId);
+        } else if (event == 'attendance_exit') {
+          _checkOutTime = DateTime.now();
+          _hasCheckedOut = true;
+          notifyListeners();
+          fetchTodayAttendance(gymId);
+        }
+      }
+    } catch (e) {
+      debugPrint('[ATTENDANCE] Error handling background task data: $e');
+    }
   }
 
   /// Initialize listener for geofence events
@@ -78,8 +116,21 @@ class AttendanceProvider extends ChangeNotifier {
     final gymId = _geofencingService!.currentGymId;
     if (gymId == null) return;
 
+    // ── Lazy-load attendance settings if not yet available ─────────────────
+    // This happens when the geofence was restored from SharedPreferences on
+    // app start: registerGymGeofence() reregisters the boundary, but
+    // _attendanceSettings is still null because loadAttendanceSettings() was
+    // never called for this session.  Load them now so isAutoMarkEnabled()
+    // and shouldAutoMarkEntry/Exit() return correct values.
+    if (_attendanceSettings == null) {
+      debugPrint('[ATTENDANCE] Settings not loaded – fetching before handling event…');
+      await loadAttendanceSettings(gymId);
+    }
+
     // Respect admin-configured auto-mark setting.
-    if (!isAutoMarkEnabled()) {
+    // If settings still could not be loaded (network error etc.), we default
+    // to ALLOWING auto-mark so the geofence service is not silently broken.
+    if (_attendanceSettings != null && !isAutoMarkEnabled()) {
       debugPrint('[ATTENDANCE] Auto-mark disabled by gym settings – skipping.');
       return;
     }
@@ -776,6 +827,7 @@ class AttendanceProvider extends ChangeNotifier {
   @override
   void dispose() {
     _geofenceSubscription?.cancel();
+    FlutterForegroundTask.removeTaskDataCallback(_onBackgroundTaskData);
     _settingsService.dispose();
     super.dispose();
   }

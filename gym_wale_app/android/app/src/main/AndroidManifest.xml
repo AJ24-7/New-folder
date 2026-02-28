@@ -95,6 +95,19 @@
             android:foregroundServiceType="location" />
 
         <!-- ─────────────────────────────────────────────────────────
+             FLUTTER FOREGROUND TASK — killed-app persistent service
+             stopWithTask="false" ensures the service SURVIVES app
+             force-kill (swipe from recents).  autoStart="true" means
+             the OS restarts it after being killed by resource pressure.
+             foregroundServiceType="location" grants GPS in background.
+        ──────────────────────────────────────────────────────────── -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="location"
+            android:stopWithTask="false"
+            android:exported="false" />
+
+        <!-- ─────────────────────────────────────────────────────────
              BOOT RECEIVER — re-registers geofences after device reboot
         ──────────────────────────────────────────────────────────── -->
         <receiver

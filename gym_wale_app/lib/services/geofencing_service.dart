@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/attendance_settings.dart';
 import './attendance_settings_service.dart';
 import './local_notification_service.dart';
+import './foreground_task_service.dart';
 
 class GeofencingService extends ChangeNotifier {
   late final GeofenceService _geofenceService;
@@ -30,6 +31,7 @@ class GeofencingService extends ChangeNotifier {
   AttendanceSettings? get attendanceSettings => _attendanceSettings;
 
   final AttendanceSettingsService _settingsService = AttendanceSettingsService();
+  final ForegroundTaskService _fgTaskService = ForegroundTaskService();
 
   // ── Dwell tracking (5-minute rule) ─────────────────────────────────────────
   // gymId → timestamp of first ENTER event (used to enforce 5-min dwell)
@@ -201,8 +203,22 @@ class GeofencingService extends ChangeNotifier {
         _isServiceRunning = true;
         notifyListeners();
 
+        // Show an ongoing notification so Android keeps the process alive
+        // when the app is sent to the background (screen off / locked).
+        await LocalNotificationService.instance.showGeofenceActiveNotification();
+
+        // ── Start the true killed-app foreground service ──────────────────────
+        // Persist auto-mark flags so the background isolate can read them.
+        await ForegroundTaskService.persistAutoMarkFlags(
+          autoMarkEntry: shouldAutoMarkEntry(),
+          autoMarkExit:  shouldAutoMarkExit(),
+        );
+        // Start the persistent Android foreground service (survives force-kill).
+        await _fgTaskService.startService();
+
         debugPrint('[GEOFENCE] Geofence registered for gym: $gymId');
         debugPrint('[GEOFENCE] Location: ($latitude, $longitude), Radius: $radius m');
+        debugPrint('[GEOFENCE] Foreground task service started for killed-app tracking');
 
         return true;
       } catch (startError) {
@@ -229,13 +245,21 @@ class GeofencingService extends ChangeNotifier {
       _geofenceList.clear();
       _currentGymId = null;
       _isServiceRunning = false;
-      
+
+      // Dismiss the ongoing background-tracking notification
+      await LocalNotificationService.instance.hideGeofenceActiveNotification();
+
+      // Stop the persistent foreground service
+      await _fgTaskService.stopService();
+
       // Clear from preferences
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('geofence_gym_id');
       await prefs.remove('geofence_latitude');
       await prefs.remove('geofence_longitude');
       await prefs.remove('geofence_radius');
+      await prefs.remove('geofence_type');
+      await prefs.remove('geofence_polygon_coordinates');
       
       notifyListeners();
       debugPrint('[GEOFENCE] All geofences removed');
@@ -255,20 +279,35 @@ class GeofencingService extends ChangeNotifier {
 
       if (gymId != null && latitude != null && longitude != null && radius != null) {
         debugPrint('[GEOFENCE] Restoring geofence for gym: $gymId');
-        
+
         // Check permissions before restoring
         final hasPermission = await checkAndRequestPermissions();
         if (!hasPermission) {
           debugPrint('[GEOFENCE] Cannot restore geofence: insufficient permissions');
           return false;
         }
-        
-        return await registerGymGeofence(
+
+        final registered = await registerGymGeofence(
           gymId: gymId,
           latitude: latitude,
           longitude: longitude,
           radius: radius,
         );
+
+        if (registered) {
+          // Reload attendance settings so that shouldAutoMarkEntry/Exit()
+          // and isGeofenceEnabledInSettings() return correct values for this
+          // session even though configureFromSettings() was not called.
+          debugPrint('[GEOFENCE] Reloading attendance settings after restore…');
+          _attendanceSettings = await _settingsService.loadSettings(gymId);
+          if (_attendanceSettings != null) {
+            debugPrint('[GEOFENCE] Settings restored – autoMarkEntry: '
+                '${_attendanceSettings!.geofenceSettings?.autoMarkEntry}, '
+                'autoMarkExit: ${_attendanceSettings!.geofenceSettings?.autoMarkExit}');
+          }
+        }
+
+        return registered;
       }
 
       debugPrint('[GEOFENCE] No saved geofence to restore');
@@ -319,6 +358,35 @@ class GeofencingService extends ChangeNotifier {
     await prefs.setDouble('geofence_latitude', latitude);
     await prefs.setDouble('geofence_longitude', longitude);
     await prefs.setDouble('geofence_radius', radius);
+    // Type defaults to circular when saved via this method
+    await prefs.setString('geofence_type', 'circular');
+    await prefs.remove('geofence_polygon_coordinates');
+  }
+
+  /// Save full geofence settings (including polygon) to preferences
+  Future<void> _saveFullGeofenceToPreferences({
+    required String gymId,
+    required double latitude,
+    required double longitude,
+    required double radius,
+    required String type,
+    List<Map<String, double>> polygonCoordinates = const [],
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('geofence_gym_id', gymId);
+    await prefs.setDouble('geofence_latitude', latitude);
+    await prefs.setDouble('geofence_longitude', longitude);
+    await prefs.setDouble('geofence_radius', radius);
+    await prefs.setString('geofence_type', type);
+    if (type == 'polygon' && polygonCoordinates.isNotEmpty) {
+      // Serialize as comma-separated "lat:lng" pairs
+      final encoded = polygonCoordinates
+          .map((c) => '${c['lat']!}:${c['lng']!}')
+          .join(',');
+      await prefs.setString('geofence_polygon_coordinates', encoded);
+    } else {
+      await prefs.remove('geofence_polygon_coordinates');
+    }
   }
 
   /// Callback when geofence status changes
@@ -484,8 +552,15 @@ class GeofencingService extends ChangeNotifier {
       }
 
       final geofenceSettings = _attendanceSettings!.geofenceSettings!;
-      
-      // Register geofence with the coordinates from settings
+      final isPolygon = geofenceSettings.type == 'polygon';
+
+      debugPrint('[GEOFENCE] Geofence type: ${geofenceSettings.type}');
+
+      // For both circular and polygon, the backend provides pre-computed
+      // centroid lat/lng and bounding-circle radius so geofence_service
+      // (which only supports circular) can do a broad-area check.
+      // For polygon, the exact containment check happens on the backend
+      // when the attendance API is called.
       final success = await registerGymGeofence(
         gymId: gymId,
         latitude: geofenceSettings.latitude!,
@@ -494,6 +569,18 @@ class GeofencingService extends ChangeNotifier {
       );
 
       if (success) {
+        // Persist full geofence data (including polygon coords) for the
+        // background isolate (foreground task service) that does its own
+        // containment check without a backend call.
+        await _saveFullGeofenceToPreferences(
+          gymId: gymId,
+          latitude: geofenceSettings.latitude!,
+          longitude: geofenceSettings.longitude!,
+          radius: geofenceSettings.radius!,
+          type: geofenceSettings.type,
+          polygonCoordinates: isPolygon ? geofenceSettings.polygonCoordinates : [],
+        );
+
         debugPrint('[GEOFENCE] Configured successfully from attendance settings');
         debugPrint('[GEOFENCE] Auto-mark entry: ${geofenceSettings.autoMarkEntry}');
         debugPrint('[GEOFENCE] Auto-mark exit: ${geofenceSettings.autoMarkExit}');
@@ -512,13 +599,17 @@ class GeofencingService extends ChangeNotifier {
   }
 
   /// Check if auto-mark entry is enabled
+  /// Defaults to true when settings have not been loaded yet so that a
+  /// restored geofence (from SharedPreferences) still triggers attendance
+  /// marking on the first DWELL event of the session.
   bool shouldAutoMarkEntry() {
-    return _attendanceSettings?.geofenceSettings?.autoMarkEntry ?? false;
+    return _attendanceSettings?.geofenceSettings?.autoMarkEntry ?? true;
   }
 
   /// Check if auto-mark exit is enabled
+  /// Same default-true rationale as shouldAutoMarkEntry().
   bool shouldAutoMarkExit() {
-    return _attendanceSettings?.geofenceSettings?.autoMarkExit ?? false;
+    return _attendanceSettings?.geofenceSettings?.autoMarkExit ?? true;
   }
 
   /// Check if mock locations are allowed
