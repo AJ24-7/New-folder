@@ -47,6 +47,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
   Future<void> _loadData() async {
     setState(() => _isRefreshing = true);
     final provider = context.read<AttendanceProvider>();
+    // Load settings if not already available (needed for off-day highlighting)
+    if (provider.attendanceSettings == null) {
+      provider.loadAttendanceSettings(widget.gymId);
+    }
     await Future.wait([
       provider.fetchAttendanceHistory(widget.gymId, limit: 60),
       provider.fetchAttendanceStats(
@@ -335,6 +339,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
 
   Widget _buildCalendarGrid(AttendanceProvider provider, bool isDark) {
     final history = provider.attendanceHistory;
+    final settings = provider.attendanceSettings;
     final presentDates = history
         .where((a) => a['status'] == 'present')
         .map((a) {
@@ -347,10 +352,18 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
         })
         .toSet();
 
+    // Active days for off-day highlighting
+    final activeDays =
+        settings?.geofenceSettings?.activeDays ?? settings?.activeDays ?? [];
+
     final firstDay = DateTime(_selectedMonth.year, _selectedMonth.month, 1);
     final daysInMonth =
         DateTime(_selectedMonth.year, _selectedMonth.month + 1, 0).day;
     final startWeekday = firstDay.weekday % 7; // Sunday = 0
+
+    const dayNames = [
+      'sunday','monday','tuesday','wednesday','thursday','friday','saturday'
+    ];
 
     return Container(
       padding: const EdgeInsets.all(12),
@@ -397,45 +410,86 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
             itemBuilder: (context, index) {
               if (index < startWeekday) return const SizedBox();
               final day = index - startWeekday + 1;
-              final dateStr = DateFormat('yyyy-MM-dd').format(
-                  DateTime(_selectedMonth.year, _selectedMonth.month, day));
+              final dateObj = DateTime(
+                  _selectedMonth.year, _selectedMonth.month, day);
+              final dateStr = DateFormat('yyyy-MM-dd').format(dateObj);
+
               final isPresent = presentDates.contains(dateStr);
               final isToday = dateStr ==
                   DateFormat('yyyy-MM-dd').format(DateTime.now());
-              final isFuture = DateTime(_selectedMonth.year,
-                      _selectedMonth.month, day)
-                  .isAfter(DateTime.now());
+              final isFuture = dateObj.isAfter(DateTime.now());
 
-              return Container(
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isPresent
-                      ? AppTheme.successColor
-                      : isToday
-                          ? AppTheme.primaryColor.withValues(alpha: 0.15)
-                          : Colors.transparent,
-                  border: isToday && !isPresent
-                      ? Border.all(
-                          color: AppTheme.primaryColor, width: 1.5)
-                      : null,
-                ),
-                child: Center(
-                  child: Text(
-                    '$day',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: isPresent
-                          ? Colors.white
-                          : isFuture
-                              ? (isDark
-                                  ? Colors.grey.shade600
-                                  : Colors.grey.shade300)
-                              : Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
-                                  ?.color,
-                    ),
+              // Determine if this day is an "off day" for the gym
+              // dayNames[0]=sunday, matches startWeekday=0 logic from firstDay.weekday%7
+              final weekdayIdx = dateObj.weekday % 7; // 0=Sun,1=Mon,...6=Sat
+              final dayName = dayNames[weekdayIdx];
+              final isOffDay = activeDays.isNotEmpty &&
+                  !activeDays.map((d) => d.toLowerCase()).contains(dayName);
+
+              Color bgColor;
+              Color textColor;
+              BoxBorder? border;
+
+              if (isPresent) {
+                bgColor = AppTheme.successColor;
+                textColor = Colors.white;
+              } else if (isOffDay && !isFuture) {
+                bgColor = (isDark ? Colors.grey.shade800 : Colors.grey.shade200);
+                textColor = Colors.grey.shade500;
+              } else if (isToday && !isPresent) {
+                bgColor = AppTheme.primaryColor.withValues(alpha: 0.15);
+                textColor = Theme.of(context).textTheme.bodyMedium?.color ??
+                    Colors.black;
+                border = Border.all(color: AppTheme.primaryColor, width: 1.5);
+              } else {
+                bgColor = Colors.transparent;
+                textColor = isFuture
+                    ? (isDark
+                        ? Colors.grey.shade600
+                        : Colors.grey.shade300)
+                    : Theme.of(context).textTheme.bodyMedium?.color ??
+                        Colors.black;
+              }
+
+              return Tooltip(
+                message: isOffDay && !isFuture ? 'Off day' : '',
+                child: Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: bgColor,
+                    border: border,
+                  ),
+                  child: Center(
+                    child: isOffDay && !isFuture && !isPresent
+                        ? Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '$day',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: textColor,
+                                ),
+                              ),
+                              Container(
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Text(
+                            '$day',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textColor,
+                            ),
+                          ),
                   ),
                 ),
               );
@@ -447,8 +501,10 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _legendDot(AppTheme.successColor, 'Present'),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               _legendDot(Colors.grey.shade300, 'Absent'),
+              const SizedBox(width: 12),
+              _legendDot(Colors.grey.shade400, 'Off day'),
             ],
           ),
         ],

@@ -111,6 +111,12 @@ class AttendanceProvider extends ChangeNotifier {
   ///          "Gym detected – stay 5 min" local notification. Nothing to do here.
   /// DWELL  → user has been inside for loiteringDelayMs (5 minutes) → AUTO MARK
   /// EXIT   → user left the geofence → auto-mark exit
+  ///
+  /// Gates (checked in order):
+  ///   1. geofenceEnabled  – if false, tear down the geofence entirely.
+  ///   2. autoMarkEnabled  – if false, skip (but keep monitoring).
+  ///   3. Operating hours  – if outside hours, skip this event.
+  ///   4. Hard server error after marking → tear down geofence.
   Future<void> _onGeofenceStatusChanged(GeofenceStatus status) async {
     if (_geofencingService == null) return;
     final gymId = _geofencingService!.currentGymId;
@@ -120,19 +126,37 @@ class AttendanceProvider extends ChangeNotifier {
     // This happens when the geofence was restored from SharedPreferences on
     // app start: registerGymGeofence() reregisters the boundary, but
     // _attendanceSettings is still null because loadAttendanceSettings() was
-    // never called for this session.  Load them now so isAutoMarkEnabled()
-    // and shouldAutoMarkEntry/Exit() return correct values.
+    // never called for this session.  Load them now so all gate checks work.
     if (_attendanceSettings == null) {
       debugPrint('[ATTENDANCE] Settings not loaded – fetching before handling event…');
       await loadAttendanceSettings(gymId);
     }
 
-    // Respect admin-configured auto-mark setting.
-    // If settings still could not be loaded (network error etc.), we default
-    // to ALLOWING auto-mark so the geofence service is not silently broken.
+    // ── Gate 1: Geofence enabled ────────────────────────────────────────────
+    // If the gym has disabled geofence entirely, tear down the service so we
+    // stop consuming battery for location tracking altogether.
+    if (_attendanceSettings != null && !_attendanceSettings!.geofenceEnabled) {
+      debugPrint('[ATTENDANCE] Geofence disabled by gym settings – stopping geofence service.');
+      await _geofencingService!.removeAllGeofences();
+      return;
+    }
+
+    // ── Gate 2: Auto-mark setting ───────────────────────────────────────────
+    // If settings were loaded but auto-mark is explicitly disabled, skip.
+    // Default is TRUE (allow) so a network failure never silently blocks.
     if (_attendanceSettings != null && !isAutoMarkEnabled()) {
       debugPrint('[ATTENDANCE] Auto-mark disabled by gym settings – skipping.');
       return;
+    }
+
+    // ── Gate 3: Operating hours ─────────────────────────────────────────────
+    // Skip (but do NOT stop the service) when outside configured hours.
+    // The geofence stays active so it fires again at next re-entry.
+    if (status == GeofenceStatus.DWELL || status == GeofenceStatus.EXIT) {
+      if (!_isWithinOperatingHours()) {
+        debugPrint('[ATTENDANCE] Outside gym operating hours – skipping auto-mark.');
+        return;
+      }
     }
 
     if (status == GeofenceStatus.ENTER) {
@@ -142,7 +166,14 @@ class AttendanceProvider extends ChangeNotifier {
       // 5 minutes elapsed inside the geofence → mark entry
       if (_geofencingService!.shouldAutoMarkEntry()) {
         debugPrint('[ATTENDANCE] Geofence DWELL (5 min) – auto-marking attendance entry.');
-        await markAttendanceEntry(gymId);
+        final success = await markAttendanceEntry(gymId);
+        // ── Gate 4: Hard server errors ──────────────────────────────────────
+        // Stop geofence tracking on permanent errors (expired membership,
+        // geofence disabled server-side) to avoid repeated failed calls.
+        if (!success && _isHardBlockError(_errorMessage)) {
+          debugPrint('[ATTENDANCE] Hard block – stopping geofence: $_errorMessage');
+          await _geofencingService!.removeAllGeofences();
+        }
       } else {
         debugPrint('[ATTENDANCE] Auto-mark entry disabled in settings.');
       }
@@ -154,6 +185,34 @@ class AttendanceProvider extends ChangeNotifier {
         debugPrint('[ATTENDANCE] Auto-mark exit disabled in settings.');
       }
     }
+  }
+
+  /// Returns true when the current wall-clock time is within the gym's
+  /// configured operating hours. If hours are not configured, returns true
+  /// (no restriction).
+  bool _isWithinOperatingHours() {
+    final geo = _attendanceSettings?.geofenceSettings;
+    if (geo == null) return true;
+    final start = geo.operatingHoursStart;
+    final end   = geo.operatingHoursEnd;
+    if (start == null || end == null || start.isEmpty || end.isEmpty) return true;
+
+    final now     = DateTime.now();
+    final current = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+    return current.compareTo(start) >= 0 && current.compareTo(end) <= 0;
+  }
+
+  /// Returns true when the server-returned error should permanently stop
+  /// geofence tracking (i.e. retrying will never help).
+  bool _isHardBlockError(String? message) {
+    if (message == null) return false;
+    const hardBlocks = [
+      'No active membership',
+      'Geofencing is disabled',
+      'Auto-mark entry is disabled',
+      'Member not found',
+    ];
+    return hardBlocks.any((e) => message.contains(e));
   }
 
   /// Mark attendance entry when entering gym geofence
@@ -291,13 +350,17 @@ class AttendanceProvider extends ChangeNotifier {
   bool _shouldRetry(String? errorMessage) {
     if (errorMessage == null) return true;
     
-    // Don't retry for these specific errors
-    final noRetryErrors = [
+    // Don't retry for these permanent / logic errors
+    const noRetryErrors = [
       'Mock locations are not allowed',
       'No active membership',
-      'You are',  // Distance-related errors
+      'You are',           // Distance-related
       'Minimum stay time',
       'already marked',
+      'Geofencing is disabled',
+      'Auto-mark entry is disabled',
+      'operating hours',   // Outside operating hours
+      'Member not found',
     ];
     
     for (final error in noRetryErrors) {
@@ -306,7 +369,7 @@ class AttendanceProvider extends ChangeNotifier {
       }
     }
     
-    return true; // Retry for network errors, server errors, etc.
+    return true; // Retry for network / server transient errors
   }
 
   /// Mark attendance entry when entering gym geofence (legacy method - kept for compatibility)
@@ -737,9 +800,11 @@ class AttendanceProvider extends ChangeNotifier {
     return _attendanceSettings?.geofenceEnabled ?? false;
   }
 
-  /// Check if auto-mark is enabled
+  /// Check if auto-mark is enabled.
+  /// Defaults to TRUE so a restored geofence (with settings not yet loaded)
+  /// does not silently block attendance marking.
   bool isAutoMarkEnabled() {
-    return _attendanceSettings?.autoMarkEnabled ?? false;
+    return _attendanceSettings?.autoMarkEnabled ?? true;
   }
 
   /// Get attendance mode

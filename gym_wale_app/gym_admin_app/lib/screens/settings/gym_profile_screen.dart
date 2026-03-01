@@ -44,6 +44,13 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   // Evening slot times
   TimeOfDay? _eveningOpening;
   TimeOfDay? _eveningClosing;
+
+  // Active days of the week
+  static const List<String> _allDays = [
+    'monday', 'tuesday', 'wednesday', 'thursday',
+    'friday', 'saturday', 'sunday',
+  ];
+  late List<String> _activeDays;
   
   XFile? _logoFile;
   Uint8List? _logoBytes;
@@ -51,6 +58,7 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   @override
   void initState() {
     super.initState();
+    _activeDays = List<String>.from(_allDays); // default: all days
     _loadProfile();
   }
   
@@ -127,6 +135,9 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
       final parts = _gymProfile!.operatingHours!.evening!.closing!.split(':');
       _eveningClosing = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
     }
+
+    // Active days
+    _activeDays = List<String>.from(_gymProfile!.activeDays);
   }
   
   Future<void> _pickLogo() async {
@@ -185,6 +196,7 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
         eveningClosing: _eveningClosing != null
           ? '${_eveningClosing!.hour.toString().padLeft(2, '0')}:${_eveningClosing!.minute.toString().padLeft(2, '0')}'
           : null,
+        activeDays: _activeDays,
         logoFile: _logoFile,
       );
       
@@ -456,9 +468,37 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   
   Widget _buildTimingsSection() {
     return _buildSection(
-      title: 'Operating Hours',
+      title: 'Operating Hours & Days',
       icon: Icons.access_time,
       children: [
+        // ── Active days ──────────────────────────────────────────────────────
+        const Text(
+          'Open Days',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: _allDays.map((day) {
+            final selected = _activeDays.contains(day);
+            return FilterChip(
+              label: Text(day[0].toUpperCase() + day.substring(1, 3)),
+              selected: selected,
+              onSelected: _isEditing
+                  ? (val) {
+                      setState(() {
+                        if (val) {
+                          _activeDays.add(day);
+                        } else {
+                          _activeDays.remove(day);
+                        }
+                      });
+                    }
+                  : null,
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 20),
         // Morning slot
         const Text(
           'Morning Slot',

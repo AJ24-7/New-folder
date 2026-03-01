@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/notification.dart';
@@ -359,40 +360,64 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
 
     switch (type) {
       case 'offer':
-        iconData = Icons.local_offer;
+        iconData = FontAwesomeIcons.tag;
         backgroundColor = Colors.orange;
         break;
       case 'membership_expiry':
-        iconData = Icons.warning_amber;
+        iconData = FontAwesomeIcons.idCard;
         backgroundColor = Colors.red;
         break;
       case 'trial_booking':
-        iconData = Icons.event_available;
+        iconData = FontAwesomeIcons.calendarCheck;
         backgroundColor = Colors.green;
         break;
       case 'reminder':
-        iconData = Icons.alarm;
+        iconData = FontAwesomeIcons.bell;
         backgroundColor = AppTheme.accentColor;
         break;
       case 'payment':
-        iconData = Icons.payment;
+        iconData = FontAwesomeIcons.creditCard;
         backgroundColor = AppTheme.secondaryColor;
         break;
       case 'achievement':
-        iconData = Icons.emoji_events;
+        iconData = FontAwesomeIcons.trophy;
         backgroundColor = AppTheme.warningColor;
         break;
       case 'ticket_update':
       case 'ticket_reply':
-        iconData = Icons.support_agent;
+        iconData = FontAwesomeIcons.headset;
         backgroundColor = AppTheme.accentColor;
         break;
       case 'ticket_resolved':
-        iconData = Icons.check_circle;
+        iconData = FontAwesomeIcons.circleCheck;
         backgroundColor = AppTheme.successColor;
         break;
+      // ── New types ────────────────────────────────────────────────────────
+      case 'chat':
+      case 'chat-message':
+        iconData = FontAwesomeIcons.comments;
+        backgroundColor = const Color(0xFF4CAF50);
+        break;
+      case 'notice':
+      case 'announcement':
+      case 'holiday-notice':
+        iconData = FontAwesomeIcons.bullhorn;
+        backgroundColor = const Color(0xFF2196F3);
+        break;
+      case 'problem-report-response':
+      case 'report_reply':
+      case 'grievance':
+        iconData = FontAwesomeIcons.clipboardQuestion;
+        backgroundColor = const Color(0xFFFF5722);
+        break;
+      case 'attendance':
+      case 'attendance_entry':
+      case 'attendance_exit':
+        iconData = FontAwesomeIcons.dumbbell;
+        backgroundColor = AppTheme.primaryColor;
+        break;
       default:
-        iconData = Icons.notifications;
+        iconData = FontAwesomeIcons.bell;
         backgroundColor = AppTheme.primaryColor;
     }
 
@@ -402,9 +427,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
         color: backgroundColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(
+      child: FaIcon(
         iconData,
-        size: 24,
+        size: 22,
         color: backgroundColor,
       ),
     );
@@ -429,6 +454,21 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
         return AppTheme.accentColor;
       case 'ticket_resolved':
         return AppTheme.successColor;
+      case 'chat':
+      case 'chat-message':
+        return const Color(0xFF4CAF50);
+      case 'notice':
+      case 'announcement':
+      case 'holiday-notice':
+        return const Color(0xFF2196F3);
+      case 'problem-report-response':
+      case 'report_reply':
+      case 'grievance':
+        return const Color(0xFFFF5722);
+      case 'attendance':
+      case 'attendance_entry':
+      case 'attendance_exit':
+        return AppTheme.primaryColor;
       default:
         return AppTheme.secondaryColor;
     }

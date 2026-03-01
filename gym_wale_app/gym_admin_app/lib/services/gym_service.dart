@@ -211,6 +211,7 @@ class GymService {
     String? morningClosing,
     String? eveningOpening,
     String? eveningClosing,
+    List<String>? activeDays,
     XFile? logoFile,
   }) async {
     try {
@@ -247,7 +248,10 @@ class GymService {
       if (morningClosing != null) data['morningClosing'] = morningClosing;
       if (eveningOpening != null) data['eveningOpening'] = eveningOpening;
       if (eveningClosing != null) data['eveningClosing'] = eveningClosing;
-      
+
+      // Active days
+      if (activeDays != null) data['activeDays'] = activeDays;
+
       // Cloudinary logo URL
       if (cloudinaryLogoUrl != null) data['gymLogo'] = cloudinaryLogoUrl;
 

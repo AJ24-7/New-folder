@@ -7,6 +7,7 @@ const Gym = require('../models/gym');
 const Notification = require('../models/Notification');
 const authMiddleware = require('../middleware/authMiddleware');
 const gymadminAuth = require('../middleware/gymadminAuth');
+const fcmService = require('../services/fcmService');
 
 console.log('💬 Chat Routes loading...');
 
@@ -466,6 +467,28 @@ router.post('/gym/reply/:chatId', gymadminAuth, async (req, res) => {
 
             await notification.save();
             console.log('✅ User notification created for gym reply');
+
+            // FCM push to user device
+            try {
+                const userDoc = await User.findById(chatTicket.userId._id || chatTicket.userId)
+                    .select('fcmToken').lean();
+                const userFcmToken = userDoc?.fcmToken?.token;
+                if (userFcmToken) {
+                    await fcmService.sendToDevice(
+                        userFcmToken,
+                        { title: 'New message from gym', body: message.substring(0, 100) },
+                        {
+                            type: 'chat-message',
+                            chatId: chatTicket._id.toString(),
+                            ticketId: chatTicket.ticketId,
+                            gymId: gymId?.toString() || '',
+                        }
+                    );
+                    console.log('📲 FCM push sent to user for chat reply');
+                }
+            } catch (fcmErr) {
+                console.error('⚠️ FCM push failed for chat reply:', fcmErr.message);
+            }
         } catch (notificationError) {
             console.error('Error creating user notification:', notificationError);
         }

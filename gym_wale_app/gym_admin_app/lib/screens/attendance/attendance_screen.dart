@@ -343,6 +343,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             // Quick Actions & Calendar Row
             _buildQuickActionsAndCalendar(l10n, isDesktop),
             const SizedBox(height: 24),
+
+            // ── Auto-Marked Members Section ─────────────────────────────────
+            _buildAutoMarkedSection(isDesktop),
+            const SizedBox(height: 16),
+
+            // ── Location Services Off Section ───────────────────────────────
+            _buildLocationOffSection(isDesktop),
+            const SizedBox(height: 16),
             
             // Rush Hour Analysis (if available)
             if (_rushHourData != null) ...[
@@ -513,6 +521,284 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Auto-Marked Members ─────────────────────────────────────────────────────
+
+  /// Members whose attendance was recorded automatically via geofence today.
+  Widget _buildAutoMarkedSection(bool isDesktop) {
+    final autoMarked = _attendanceRecords
+        .where((r) =>
+            r.status == 'present' &&
+            (r.attendanceType == 'geofence' ||
+                (r.geofenceEntry != null)))
+        .toList();
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Card(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: autoMarked.isNotEmpty,
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.green.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(FontAwesomeIcons.locationDot,
+                color: Colors.green, size: 18),
+          ),
+          title: Text(
+            'Auto-Marked via Geofence',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+          subtitle: Text(
+            autoMarked.isEmpty
+                ? 'No auto-marked attendance yet today'
+                : '${autoMarked.length} member${autoMarked.length == 1 ? "" : "s"} auto-checked in today',
+            style: TextStyle(
+              fontSize: 13,
+              color: autoMarked.isEmpty ? Colors.grey : Colors.green.shade700,
+            ),
+          ),
+          children: [
+            if (autoMarked.isEmpty)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline,
+                        color: Colors.grey.shade400, size: 18),
+                    const SizedBox(width: 10),
+                    Text(
+                      'Members will appear here once geofence-based\nauto-attendance is recorded.',
+                      style: TextStyle(
+                          color: Colors.grey.shade500, fontSize: 13),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                itemCount: autoMarked.length,
+                separatorBuilder: (_, __) =>
+                    const Divider(height: 1),
+                itemBuilder: (context, i) {
+                  final r = autoMarked[i];
+                  final checkIn = r.checkInTime ?? '--:--';
+                  final dur = r.durationInMinutes ?? 0;
+                  final checkedOut = r.checkOutTime != null;
+                  return ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor:
+                          Colors.green.withValues(alpha: 0.15),
+                      backgroundImage: r.memberPhoto != null &&
+                              r.memberPhoto!.isNotEmpty
+                          ? NetworkImage(r.memberPhoto!)
+                          : null,
+                      child: r.memberPhoto == null || r.memberPhoto!.isEmpty
+                          ? Text(
+                              r.memberName.isNotEmpty
+                                  ? r.memberName[0].toUpperCase()
+                                  : '?',
+                              style: const TextStyle(
+                                  color: Colors.green,
+                                  fontWeight: FontWeight.bold),
+                            )
+                          : null,
+                    ),
+                    title: Text(r.memberName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w600, fontSize: 14)),
+                    subtitle: Row(
+                      children: [
+                        const Icon(Icons.login,
+                            size: 12, color: Colors.grey),
+                        const SizedBox(width: 4),
+                        Text(checkIn,
+                            style: const TextStyle(
+                                fontSize: 12, color: Colors.grey)),
+                        if (dur > 0) ...[
+                          const SizedBox(width: 10),
+                          const Icon(Icons.timer_outlined,
+                              size: 12, color: Colors.grey),
+                          const SizedBox(width: 3),
+                          Text(_fmtDur(dur),
+                              style: const TextStyle(
+                                  fontSize: 12, color: Colors.grey)),
+                        ],
+                      ],
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: checkedOut
+                            ? Colors.blue.withValues(alpha: 0.1)
+                            : Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: checkedOut
+                              ? Colors.blue.withValues(alpha: 0.4)
+                              : Colors.green.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        checkedOut ? 'Checked Out' : '✓ Present',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: checkedOut ? Colors.blue : Colors.green,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _fmtDur(int minutes) {
+    if (minutes < 60) return '${minutes}m';
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m > 0 ? '${h}h ${m}m' : '${h}h';
+  }
+
+  // ── Location Services Off ────────────────────────────────────────────────────
+
+  /// Members whose location services or permissions are turned off.
+  /// We only report the flag — we do NOT track or display the user's
+  /// current coordinates.
+  Widget _buildLocationOffSection(bool isDesktop) {
+    // Only relevant in geofence / hybrid mode
+    final isGeofenceMode = _settings?.mode == AttendanceMode.geofence ||
+        _settings?.mode == AttendanceMode.hybrid;
+
+    if (!isGeofenceMode || _memberLocationStatuses.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final locationOffMembers = _memberLocationStatuses.values
+        .map((s) => MemberLocationStatus.fromJson(s as Map<String, dynamic>))
+        .where((s) => !s.locationEnabled || s.locationPermission != 'granted')
+        .toList()
+      ..sort((a, b) =>
+          a.memberName.compareTo(b.memberName));
+
+    if (locationOffMembers.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: true,
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(FontAwesomeIcons.locationArrow,
+                color: Colors.orange, size: 18),
+          ),
+          title: const Text(
+            'Location Services Off',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
+          subtitle: Text(
+            '${locationOffMembers.length} member${locationOffMembers.length == 1 ? "" : "s"} '
+            'with location off — auto-attendance unavailable',
+            style:
+                const TextStyle(fontSize: 13, color: Colors.orange),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline,
+                      size: 14, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'These members have location services disabled. '
+                      'Geofence auto-attendance will not work for them.',
+                      style: TextStyle(
+                          fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemCount: locationOffMembers.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final s = locationOffMembers[i];
+                final label = !s.locationEnabled
+                    ? 'Location Off'
+                    : 'Permission Denied';
+                final color = !s.locationEnabled
+                    ? Colors.red
+                    : Colors.orange;
+                return ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 2),
+                  leading: CircleAvatar(
+                    backgroundColor: color.withValues(alpha: 0.12),
+                    child: Icon(Icons.location_off,
+                        color: color, size: 18),
+                  ),
+                  title: Text(
+                    s.memberName.isNotEmpty ? s.memberName : s.memberId,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 14),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: color.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),

@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -22,32 +23,41 @@ import 'screens/home_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'l10n/app_localizations.dart';
 import 'services/location_service.dart';
+import 'services/firebase_notification_service.dart';
+import 'services/api_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // ── flutter_foreground_task: must be called before runApp ──────────────────
-  FlutterForegroundTask.initCommunicationPort();
+  if (!kIsWeb) {
+    FlutterForegroundTask.initCommunicationPort();
+  }
 
   await dotenv.load(fileName: ".env");
 
-  // ── Configure & init the persistent foreground service ────────────────────
-  ForegroundTaskService().init();
+  if (!kIsWeb) {
+    // ── Configure & init the persistent foreground service ──────────────────
+    ForegroundTaskService().init();
 
-  // Persist the API base URL so the killed-app background isolate can call the
-  // backend directly (it has no access to dotenv or ApiConfig).
-  try {
-    final rawBase = dotenv.env['API_BASE_URL'] ?? '';
-    await ForegroundTaskService.persistApiBaseUrl(rawBase);
-  } catch (_) {}
+    // Persist the API base URL so the killed-app background isolate can call
+    // the backend directly (it has no access to dotenv or ApiConfig).
+    try {
+      final rawBase = dotenv.env['API_BASE_URL'] ?? '';
+      await ForegroundTaskService.persistApiBaseUrl(rawBase);
+    } catch (_) {}
+  }
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
-    print('✅ Firebase initialized successfully');
+    print('Firebase initialized successfully');
+    if (!kIsWeb) {
+      await FirebaseNotificationService.instance.initialize();
+    }
   } catch (e) {
-    print('❌ Error initializing Firebase: $e');
+    print('Error initializing Firebase: $e');
   }
   runApp(const MyApp());
 }
@@ -79,8 +89,8 @@ class MyApp extends StatelessWidget {
         builder: (context, themeProvider, localeProvider, _) {
           // WithForegroundTask ensures the foreground service communication
           // port stays alive while the app is in the foreground.
-          return WithForegroundTask(
-            child: MaterialApp(
+          // Not supported on web (dart:isolate unavailable).
+          final app = MaterialApp(
               title: 'Gym-wale',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,
@@ -95,8 +105,8 @@ class MyApp extends StatelessWidget {
               ],
               supportedLocales: LocaleProvider.supportedLocales,
               home: const SplashScreen(),
-            ),
-          );
+            );
+          return kIsWeb ? app : WithForegroundTask(child: app);
         },
       ),
     );
@@ -123,6 +133,16 @@ class _SplashScreenState extends State<SplashScreen> {
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
     
     await authProvider.init();
+
+    // Register FCM token with backend now that auth token is available.
+    if (!kIsWeb) {
+      final fcmToken = FirebaseNotificationService.instance.fcmToken;
+      if (fcmToken != null && authProvider.isAuthenticated) {
+        try {
+          await ApiService.registerFcmToken(fcmToken);
+        } catch (_) {}
+      }
+    }
 
     // Initialize local notification service
     await LocalNotificationService.instance.initialize();

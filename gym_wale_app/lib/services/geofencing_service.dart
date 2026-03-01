@@ -213,6 +213,20 @@ class GeofencingService extends ChangeNotifier {
           autoMarkEntry: shouldAutoMarkEntry(),
           autoMarkExit:  shouldAutoMarkExit(),
         );
+        // Persist operating schedule so the background isolate can gate events.
+        // (Full persist happens in configureFromSettings; this is a quick refresh
+        //  in case registerGymGeofence is called independently.)
+        if (_attendanceSettings != null) {
+          final gs = _attendanceSettings!.geofenceSettings;
+          final hours = _attendanceSettings!.operatingHours;
+          await ForegroundTaskService.persistOperatingSchedule(
+            morningOpening: gs?.morningShift?.opening ?? hours?.morning?.opening,
+            morningClosing: gs?.morningShift?.closing ?? hours?.morning?.closing,
+            eveningOpening: gs?.eveningShift?.opening ?? hours?.evening?.opening,
+            eveningClosing: gs?.eveningShift?.closing ?? hours?.evening?.closing,
+            activeDays: gs?.activeDays ?? _attendanceSettings!.activeDays,
+          );
+        }
         // Start the persistent Android foreground service (survives force-kill).
         await _fgTaskService.startService();
 
@@ -449,6 +463,11 @@ class GeofencingService extends ChangeNotifier {
   Future<void> _handleGeofenceEntry(String gymId, dynamic location) async {
     debugPrint('[GEOFENCE] ENTER event for gym: $gymId (5-min dwell timer started)');
     try {
+      // Guard: only notify when inside an active operating period
+      if (!_isCurrentlyWithinOperatingHours()) {
+        debugPrint('[GEOFENCE] ENTER suppressed — outside operating hours or non-working day');
+        return;
+      }
       // Notify user that we detected the gym — attendance will be marked at DWELL
       await LocalNotificationService.instance.showGeofenceEnteredNotification(
         gymName: _attendanceSettings?.gymId ?? 'your gym',
@@ -462,7 +481,13 @@ class GeofencingService extends ChangeNotifier {
   /// This is the actual trigger for auto attendance marking.
   /// AttendanceProvider listens to the stream and will call the backend API.
   Future<void> _handleGeofenceDwell(String gymId, dynamic location) async {
-    debugPrint('[GEOFENCE] DWELL event (5 min inside) for gym: $gymId – triggering attendance mark');
+    debugPrint('[GEOFENCE] DWELL event (5 min inside) for gym: $gymId – checking operating hours');
+    // Guard: only proceed to attendance marking when inside an active period
+    if (!_isCurrentlyWithinOperatingHours()) {
+      debugPrint('[GEOFENCE] DWELL suppressed — outside operating hours or non-working day');
+      return;
+    }
+    debugPrint('[GEOFENCE] DWELL confirmed — triggering attendance mark');
     // The stream event (DWELL) is already emitted above; AttendanceProvider
     // will detect it and call markAttendanceEntry().
   }
@@ -581,6 +606,23 @@ class GeofencingService extends ChangeNotifier {
           polygonCoordinates: isPolygon ? geofenceSettings.polygonCoordinates : [],
         );
 
+        // Persist operating schedule (morning/evening shifts + active days)
+        // so the background isolate can gate notifications correctly.
+        final hours = _attendanceSettings!.operatingHours;
+        await ForegroundTaskService.persistOperatingSchedule(
+          morningOpening: geofenceSettings.morningShift?.opening ?? hours?.morning?.opening,
+          morningClosing: geofenceSettings.morningShift?.closing ?? hours?.morning?.closing,
+          eveningOpening: geofenceSettings.eveningShift?.opening ?? hours?.evening?.opening,
+          eveningClosing: geofenceSettings.eveningShift?.closing ?? hours?.evening?.closing,
+          activeDays: geofenceSettings.activeDays ?? _attendanceSettings!.activeDays,
+        );
+
+        // Persist auto-mark flags.
+        await ForegroundTaskService.persistAutoMarkFlags(
+          autoMarkEntry: shouldAutoMarkEntry(),
+          autoMarkExit:  shouldAutoMarkExit(),
+        );
+
         debugPrint('[GEOFENCE] Configured successfully from attendance settings');
         debugPrint('[GEOFENCE] Auto-mark entry: ${geofenceSettings.autoMarkEntry}');
         debugPrint('[GEOFENCE] Auto-mark exit: ${geofenceSettings.autoMarkExit}');
@@ -645,6 +687,41 @@ class GeofencingService extends ChangeNotifier {
     final minAccuracy = getMinAccuracyRequirement();
     if (minAccuracy == null) return true;
     return accuracy <= minAccuracy;
+  }
+
+  // ── Operating hours / active-days guard ────────────────────────────────────
+
+  /// Returns true if the current time falls within the gym's active operating
+  /// period (day-of-week check + morning/evening slot check).
+  ///
+  /// Falls back to true (no restriction) when settings haven't been loaded yet
+  /// so the service doesn't silently suppress events for a restored geofence.
+  bool _isCurrentlyWithinOperatingHours() {
+    if (_attendanceSettings == null) return true; // no settings yet → allow
+
+    final now = DateTime.now();
+
+    // Active days check
+    final active = _attendanceSettings!.activeDays;
+    if (!isActiveDay(now: now, activeDays: active)) return false;
+
+    // Operating hours check using top-level operatingHours field from gym profile
+    final hours = _attendanceSettings!.operatingHours;
+    // Also check geofenceSettings shifts (may be more granular)
+    final gs = _attendanceSettings!.geofenceSettings;
+    final morning = gs?.morningShift ?? hours?.morning;
+    final evening = gs?.eveningShift ?? hours?.evening;
+
+    // Convert TimeShift (from attendance_settings.dart) to TimeShift type
+    return isWithinOperatingHours(
+      now: now,
+      morningShift: morning != null
+          ? TimeShift(opening: morning.opening, closing: morning.closing)
+          : null,
+      eveningShift: evening != null
+          ? TimeShift(opening: evening.opening, closing: evening.closing)
+          : null,
+    );
   }
 
   @override

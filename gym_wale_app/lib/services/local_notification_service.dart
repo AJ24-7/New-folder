@@ -34,12 +34,21 @@ class LocalNotificationService {
   static const int _idAttendanceExit  = 2003;
   static const int _idGeneral         = 2000;
   static const int _idLocationWarning = 2010;
+  static const int _idChat            = 2011;
+  static const int _idNotice          = 2012;
+  static const int _idReportReply     = 2013;
 
   // ── Android channel IDs ────────────────────────────────────────────────────
   static const String _channelAttendanceId    = 'gym_wale_attendance';
   static const String _channelAttendanceName  = 'Attendance Notifications';
   static const String _channelForegroundId    = 'gym_wale_geofence_service';
   static const String _channelForegroundName  = 'Geofence Background Service';
+  static const String _channelChatId          = 'gym_wale_chat';
+  static const String _channelChatName        = 'Chat Messages';
+  static const String _channelNoticeId        = 'gym_wale_notice';
+  static const String _channelNoticeName      = 'Gym Notices';
+  static const String _channelReportId        = 'gym_wale_reports';
+  static const String _channelReportName      = 'Report Replies';
 
   // ────────────────────────────────────────────────────────────────────────────
   // INITIALIZE
@@ -102,6 +111,33 @@ class LocalNotificationService {
       enableVibration: false,
       showBadge: false,
     ));
+    await android.createNotificationChannel(const AndroidNotificationChannel(
+      _channelChatId,
+      _channelChatName,
+      description: 'Messages from gym admin',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ));
+    await android.createNotificationChannel(const AndroidNotificationChannel(
+      _channelNoticeId,
+      _channelNoticeName,
+      description: 'Notices and announcements from your gym',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ));
+    await android.createNotificationChannel(const AndroidNotificationChannel(
+      _channelReportId,
+      _channelReportName,
+      description: 'Responses to your problem reports',
+      importance: Importance.high,
+      playSound: true,
+      enableVibration: true,
+      showBadge: true,
+    ));
     debugPrint('[LOCAL_NOTIF] Android channels created.');
   }
 
@@ -148,9 +184,9 @@ class LocalNotificationService {
   Future<void> showGeofenceEnteredNotification({required String gymName}) async {
     await _show(
       id: _idGeofenceEnter,
-      title: '📍 Gym Detected – $gymName',
+      title: 'Gym Detected – $gymName',
       body:
-          'You\'re near $gymName. Stay for 5 minutes to auto-mark your attendance.',
+          'You are near $gymName. Stay for 5 minutes to auto-mark your attendance.',
       payload: 'geofence_enter',
     );
   }
@@ -162,11 +198,11 @@ class LocalNotificationService {
     int? sessionsRemaining,
   }) async {
     final body = (sessionsRemaining != null && sessionsRemaining > 0)
-        ? 'Welcome to $gymName! ✅ Checked in at $time. Sessions left: $sessionsRemaining'
-        : 'Welcome to $gymName! ✅ Attendance marked at $time.';
+        ? 'Welcome to $gymName! Checked in at $time. Sessions left: $sessionsRemaining'
+        : 'Welcome to $gymName! Attendance marked at $time.';
     await _show(
       id: _idAttendanceEntry,
-      title: '✅ Attendance Marked',
+      title: 'Attendance Marked',
       body: body,
       payload: 'attendance_entry',
     );
@@ -180,9 +216,9 @@ class LocalNotificationService {
   }) async {
     await _show(
       id: _idAttendanceExit,
-      title: '👋 Gym Exit Recorded',
+      title: 'Gym Exit Recorded',
       body:
-          'Checked out from $gymName at $time. Duration: ${_fmt(durationMinutes)}. Great session! 💪',
+          'Checked out from $gymName at $time. Duration: ${_fmt(durationMinutes)}. Great session!',
       payload: 'attendance_exit',
     );
   }
@@ -200,10 +236,74 @@ class LocalNotificationService {
   Future<void> showLocationPermissionWarning() async {
     await _show(
       id: _idLocationWarning,
-      title: '⚠️ Background Location Required',
+      title: 'Background Location Required',
       body:
           'Enable "Always" location permission so Gym Wale can auto-mark your gym attendance.',
       payload: 'location_warning',
+    );
+  }
+
+  // ── Chat / Notice / Report reply ────────────────────────────────────────────
+
+  /// Shown when the gym admin sends a chat message.
+  Future<void> showChatNotification({
+    required String title,
+    required String message,
+    String gymName = '',
+  }) async {
+    await _showOnChannel(
+      id: _idChat,
+      channelId: _channelChatId,
+      channelName: _channelChatName,
+      channelDescription: 'Messages from gym admin',
+      title: title,
+      body: message,
+      payload: 'chat',
+    );
+  }
+
+  /// Shown when a gym publishes a notice or announcement.
+  Future<void> showNoticeNotification({
+    required String title,
+    required String message,
+  }) async {
+    await _showOnChannel(
+      id: _idNotice,
+      channelId: _channelNoticeId,
+      channelName: _channelNoticeName,
+      channelDescription: 'Notices and announcements from your gym',
+      title: title,
+      body: message,
+      payload: 'notice',
+    );
+  }
+
+  /// Shown when the gym admin responds to a problem report.
+  Future<void> showReportReplyNotification({
+    required String title,
+    required String message,
+  }) async {
+    await _showOnChannel(
+      id: _idReportReply,
+      channelId: _channelReportId,
+      channelName: _channelReportName,
+      channelDescription: 'Responses to your problem reports',
+      title: title,
+      body: message,
+      payload: 'report_reply',
+    );
+  }
+
+  /// Generic notification for other FCM-delivered types.
+  Future<void> showGeneralNotification({
+    required String title,
+    required String message,
+  }) async {
+    await _show(
+      id: _idGeneral,
+      title: title,
+      body: message,
+      payload: 'general',
     );
   }
 
@@ -234,8 +334,9 @@ class LocalNotificationService {
       const iosDetails = DarwinNotificationDetails();
       await _plugin.show(
         _idGeofenceActive,
-        '📍 Gym Attendance Tracking Active',
+        'Gym Attendance Tracking Active',
         'Monitoring location near $gymName.',
+
         NotificationDetails(android: androidDetails, iOS: iosDetails),
         payload: 'geofence_active',
       );
@@ -286,6 +387,28 @@ class LocalNotificationService {
     String? payload,
     bool ongoing = false,
   }) async {
+    await _showOnChannel(
+      id: id,
+      channelId: _channelAttendanceId,
+      channelName: _channelAttendanceName,
+      channelDescription: 'Automatic attendance marking notifications',
+      title: title,
+      body: body,
+      payload: payload,
+      ongoing: ongoing,
+    );
+  }
+
+  Future<void> _showOnChannel({
+    required int id,
+    required String channelId,
+    required String channelName,
+    required String channelDescription,
+    required String title,
+    required String body,
+    String? payload,
+    bool ongoing = false,
+  }) async {
     if (!_initialized) {
       debugPrint('[LOCAL_NOTIF] Not initialized – skipping "$title"');
       return;
@@ -293,9 +416,9 @@ class LocalNotificationService {
     if (kIsWeb) return;
     try {
       final androidDetails = AndroidNotificationDetails(
-        _channelAttendanceId,
-        _channelAttendanceName,
-        channelDescription: 'Automatic attendance marking notifications',
+        channelId,
+        channelName,
+        channelDescription: channelDescription,
         importance: Importance.high,
         priority: Priority.high,
         ongoing: ongoing,
@@ -317,7 +440,7 @@ class LocalNotificationService {
       );
       debugPrint('[LOCAL_NOTIF] Shown: "$title"');
     } catch (e) {
-      debugPrint('[LOCAL_NOTIF] _show error: $e');
+      debugPrint('[LOCAL_NOTIF] _showOnChannel error: $e');
     }
   }
 

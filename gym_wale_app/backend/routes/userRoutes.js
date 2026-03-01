@@ -119,7 +119,39 @@ router.put('/update-profile', authMiddleware, upload.single('profileImage'), upd
 router.put('/change-password', authMiddleware, changePassword);
 
 // ======================
-// ✅ User Coupons Routes
+// ✅ FCM Token Route
+// ======================
+/**
+ * POST /api/users/fcm-token
+ * Register or refresh the FCM device token for the authenticated user.
+ * Body: { fcmToken: string, platform: string }
+ */
+router.post('/fcm-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const { fcmToken, platform = 'user_app' } = req.body;
+
+    if (!fcmToken) {
+      return res.status(400).json({ success: false, message: 'fcmToken is required' });
+    }
+
+    const User = require('../models/User');
+    await User.findByIdAndUpdate(userId, {
+      fcmToken: {
+        token: fcmToken,
+        platform,
+        registeredAt: new Date(),
+        lastUsed: new Date(),
+      },
+    });
+
+    console.log(`✅ FCM token registered for user ${userId}`);
+    res.json({ success: true, message: 'FCM token registered' });
+  } catch (error) {
+    console.error('❌ Error registering FCM token:', error);
+    res.status(500).json({ success: false, message: 'Failed to register FCM token' });
+  }
+});
 // ======================
 router.get('/:userId/coupons', authMiddleware, getUserCoupons);
 router.post('/:userId/coupons', authMiddleware, saveOfferToProfile);

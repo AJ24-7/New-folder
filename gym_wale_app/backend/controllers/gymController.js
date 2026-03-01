@@ -1227,6 +1227,7 @@ exports.updateMyProfile = async (req, res) => {
     gymName, email, phone, address, city, state, pincode, landmark, 
     description, contactPerson, supportEmail, supportPhone, 
     morningOpening, morningClosing, eveningOpening, eveningClosing,
+    activeDays,
     openingTime, closingTime, // Legacy support
     status, currentPassword, newPassword, gymLogo 
   } = req.body;
@@ -1250,12 +1251,22 @@ exports.updateMyProfile = async (req, res) => {
     // Handle operating hours (morning and evening slots)
     if (morningOpening || morningClosing || eveningOpening || eveningClosing) {
       if (!gym.operatingHours) gym.operatingHours = { morning: {}, evening: {} };
+      if (!gym.operatingHours.morning) gym.operatingHours.morning = {};
+      if (!gym.operatingHours.evening) gym.operatingHours.evening = {};
       if (morningOpening) gym.operatingHours.morning.opening = morningOpening;
       if (morningClosing) gym.operatingHours.morning.closing = morningClosing;
       if (eveningOpening) gym.operatingHours.evening.opening = eveningOpening;
       if (eveningClosing) gym.operatingHours.evening.closing = eveningClosing;
     }
-    
+
+    // Handle active days (days of week the gym is open)
+    if (activeDays !== undefined) {
+      const validDays = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      if (Array.isArray(activeDays)) {
+        gym.activeDays = activeDays.filter(d => validDays.includes(d.toLowerCase())).map(d => d.toLowerCase());
+      }
+    }
+
     // Legacy support for old single time slot
     if (openingTime) gym.openingTime = openingTime;
     if (closingTime) gym.closingTime = closingTime;

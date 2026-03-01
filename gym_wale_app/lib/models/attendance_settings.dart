@@ -7,6 +7,10 @@ class AttendanceSettings {
   final bool requiresBackgroundLocation;
   final bool autoMarkEnabled;
   final GeofenceSettings? geofenceSettings;
+  /// Active days of the week this gym is open (e.g. ['monday','tuesday',...])
+  final List<String> activeDays;
+  /// Top-level operating hours mirrors from gym profile
+  final OperatingHoursInfo? operatingHours;
 
   AttendanceSettings({
     required this.gymId,
@@ -15,7 +19,10 @@ class AttendanceSettings {
     this.requiresBackgroundLocation = false,
     this.autoMarkEnabled = false,
     this.geofenceSettings,
-  });
+    List<String>? activeDays,
+    this.operatingHours,
+  }) : activeDays = activeDays ??
+            ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
   factory AttendanceSettings.fromJson(Map<String, dynamic> json) {
     return AttendanceSettings(
@@ -26,6 +33,12 @@ class AttendanceSettings {
       autoMarkEnabled: json['autoMarkEnabled'] ?? false,
       geofenceSettings: json['geofenceSettings'] != null
           ? GeofenceSettings.fromJson(json['geofenceSettings'])
+          : null,
+      activeDays: json['activeDays'] != null
+          ? List<String>.from(json['activeDays'])
+          : null,
+      operatingHours: json['operatingHours'] != null
+          ? OperatingHoursInfo.fromJson(json['operatingHours'])
           : null,
     );
   }
@@ -56,6 +69,8 @@ class AttendanceSettings {
       'requiresBackgroundLocation': requiresBackgroundLocation,
       'autoMarkEnabled': autoMarkEnabled,
       'geofenceSettings': geofenceSettings?.toJson(),
+      'activeDays': activeDays,
+      'operatingHours': operatingHours?.toJson(),
     };
   }
 
@@ -66,6 +81,8 @@ class AttendanceSettings {
     bool? requiresBackgroundLocation,
     bool? autoMarkEnabled,
     GeofenceSettings? geofenceSettings,
+    List<String>? activeDays,
+    OperatingHoursInfo? operatingHours,
   }) {
     return AttendanceSettings(
       gymId: gymId ?? this.gymId,
@@ -75,6 +92,8 @@ class AttendanceSettings {
           requiresBackgroundLocation ?? this.requiresBackgroundLocation,
       autoMarkEnabled: autoMarkEnabled ?? this.autoMarkEnabled,
       geofenceSettings: geofenceSettings ?? this.geofenceSettings,
+      activeDays: activeDays ?? this.activeDays,
+      operatingHours: operatingHours ?? this.operatingHours,
     );
   }
 
@@ -107,8 +126,16 @@ class GeofenceSettings {
   final String type;
   /// Non-empty only when [type] == 'polygon'. Each map has 'lat' & 'lng'.
   final List<Map<String, double>> polygonCoordinates;
-
-  GeofenceSettings({
+  /// Morning operating shift (opening/closing in "HH:mm" format).
+  final TimeShift? morningShift;
+  /// Evening operating shift (opening/closing in "HH:mm" format).
+  final TimeShift? eveningShift;
+  /// Active days of the week. Null falls back to AttendanceSettings.activeDays.
+  final List<String>? activeDays;
+  /// Legacy single-window fields (kept for backward compat).
+  final String? operatingHoursStart;
+  final String? operatingHoursEnd;
+GeofenceSettings({
     required this.enabled,
     this.latitude,
     this.longitude,
@@ -119,6 +146,11 @@ class GeofenceSettings {
     this.minAccuracyMeters,
     this.type = 'circular',
     this.polygonCoordinates = const [],
+    this.morningShift,
+    this.eveningShift,
+    this.activeDays,
+    this.operatingHoursStart,
+    this.operatingHoursEnd,
   });
 
   factory GeofenceSettings.fromJson(Map<String, dynamic> json) {
@@ -146,6 +178,17 @@ class GeofenceSettings {
       minAccuracyMeters: json['minAccuracyMeters'] as int?,
       type: json['type'] as String? ?? 'circular',
       polygonCoordinates: polyCords,
+      morningShift: json['morningShift'] != null
+          ? TimeShift.fromJson(json['morningShift'])
+          : null,
+      eveningShift: json['eveningShift'] != null
+          ? TimeShift.fromJson(json['eveningShift'])
+          : null,
+      activeDays: json['activeDays'] != null
+          ? List<String>.from(json['activeDays'])
+          : null,
+      operatingHoursStart: json['operatingHoursStart'] as String?,
+      operatingHoursEnd: json['operatingHoursEnd'] as String?,
     );
   }
 
@@ -161,6 +204,11 @@ class GeofenceSettings {
       'minAccuracyMeters': minAccuracyMeters,
       'type': type,
       'polygonCoordinates': polygonCoordinates,
+      'morningShift': morningShift?.toJson(),
+      'eveningShift': eveningShift?.toJson(),
+      'activeDays': activeDays,
+      'operatingHoursStart': operatingHoursStart,
+      'operatingHoursEnd': operatingHoursEnd,
     };
   }
 
@@ -175,6 +223,11 @@ class GeofenceSettings {
     int? minAccuracyMeters,
     String? type,
     List<Map<String, double>>? polygonCoordinates,
+    TimeShift? morningShift,
+    TimeShift? eveningShift,
+    List<String>? activeDays,
+    String? operatingHoursStart,
+    String? operatingHoursEnd,
   }) {
     return GeofenceSettings(
       enabled: enabled ?? this.enabled,
@@ -187,6 +240,11 @@ class GeofenceSettings {
       minAccuracyMeters: minAccuracyMeters ?? this.minAccuracyMeters,
       type: type ?? this.type,
       polygonCoordinates: polygonCoordinates ?? this.polygonCoordinates,
+      morningShift: morningShift ?? this.morningShift,
+      eveningShift: eveningShift ?? this.eveningShift,
+      activeDays: activeDays ?? this.activeDays,
+      operatingHoursStart: operatingHoursStart ?? this.operatingHoursStart,
+      operatingHoursEnd: operatingHoursEnd ?? this.operatingHoursEnd,
     );
   }
 
@@ -196,4 +254,104 @@ class GeofenceSettings {
           : (latitude != null && longitude != null && radius != null);
 
   bool get isValid => enabled && isConfigured;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Supporting classes
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A single opening/closing time slot in "HH:mm" format.
+class TimeShift {
+  final String? opening;
+  final String? closing;
+
+  const TimeShift({this.opening, this.closing});
+
+  factory TimeShift.fromJson(Map<String, dynamic> json) {
+    return TimeShift(
+      opening: json['opening'] as String?,
+      closing: json['closing'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'opening': opening, 'closing': closing};
+}
+
+/// Top-level operating hours (mirrors gym profile morning + evening slots).
+class OperatingHoursInfo {
+  final TimeShift? morning;
+  final TimeShift? evening;
+
+  const OperatingHoursInfo({this.morning, this.evening});
+
+  factory OperatingHoursInfo.fromJson(Map<String, dynamic> json) {
+    return OperatingHoursInfo(
+      morning: json['morning'] != null ? TimeShift.fromJson(json['morning']) : null,
+      evening: json['evening'] != null ? TimeShift.fromJson(json['evening']) : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'morning': morning?.toJson(),
+    'evening': evening?.toJson(),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Operating-hours / active-days helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Returns the lowercase day-of-week name for [now] (e.g. "monday").
+String _dayName(DateTime now) {
+  const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+  return days[now.weekday - 1]; // DateTime.weekday: 1=Mon … 7=Sun
+}
+
+/// Parses "HH:mm" → minutes-since-midnight, returns null on error.
+int? _parseMinutes(String? hmm) {
+  if (hmm == null) return null;
+  final parts = hmm.split(':');
+  if (parts.length < 2) return null;
+  final h = int.tryParse(parts[0]);
+  final m = int.tryParse(parts[1]);
+  if (h == null || m == null) return null;
+  return h * 60 + m;
+}
+
+/// Returns true if [now] falls within at least one of the configured shifts
+/// (morning or evening).  If neither shift is configured the function returns
+/// true (no restriction).
+bool isWithinOperatingHours({
+  required DateTime now,
+  TimeShift? morningShift,
+  TimeShift? eveningShift,
+}) {
+  final nowMinutes = now.hour * 60 + now.minute;
+
+  final morningOpen  = _parseMinutes(morningShift?.opening);
+  final morningClose = _parseMinutes(morningShift?.closing);
+  final eveningOpen  = _parseMinutes(eveningShift?.opening);
+  final eveningClose = _parseMinutes(eveningShift?.closing);
+
+  // If no shifts configured at all → no restriction
+  if (morningOpen == null && eveningOpen == null) return true;
+
+  bool inMorning = false;
+  if (morningOpen != null && morningClose != null) {
+    inMorning = nowMinutes >= morningOpen && nowMinutes <= morningClose;
+  }
+
+  bool inEvening = false;
+  if (eveningOpen != null && eveningClose != null) {
+    inEvening = nowMinutes >= eveningOpen && nowMinutes <= eveningClose;
+  }
+
+  return inMorning || inEvening;
+}
+
+/// Returns true if [now]'s day-of-week is in [activeDays].
+/// If [activeDays] is empty the function returns true (open every day).
+bool isActiveDay({required DateTime now, required List<String> activeDays}) {
+  if (activeDays.isEmpty) return true;
+  return activeDays.contains(_dayName(now));
 }

@@ -85,6 +85,23 @@ class AppNotification {
         return 'Admin Reply';
       case 'ticket_resolved':
         return 'Ticket Resolved';
+      case 'chat':
+      case 'chat-message':
+        return 'Chat Message';
+      case 'notice':
+      case 'announcement':
+        return 'Gym Notice';
+      case 'holiday-notice':
+        return 'Holiday Notice';
+      case 'problem-report-response':
+      case 'report_reply':
+        return 'Report Reply';
+      case 'attendance':
+      case 'attendance_entry':
+      case 'attendance_exit':
+        return 'Attendance';
+      case 'grievance':
+        return 'Grievance';
       default:
         return 'Notification';
     }

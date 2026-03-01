@@ -230,9 +230,15 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
     // ── Also load GeofenceConfig (the source-of-truth for geofence geometry) ──
     const geofenceConfig = await GeofenceConfig.findOne({ gym: gymId });
 
+    // ── Build gym operating hours & active days for member app ──────────────
+    const gymOperatingHours = gym.operatingHours || {};
+    const gymActiveDays = (gym.activeDays && gym.activeDays.length > 0)
+      ? gym.activeDays
+      : ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+
     if (!settings) {
       // Return default settings, but still include GeofenceConfig data if present
-      const fallbackGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig);
+      const fallbackGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig, gymOperatingHours);
       return res.json({
         success: true,
         settings: {
@@ -241,14 +247,19 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
           geofenceEnabled: geofenceConfig?.enabled || false,
           requiresBackgroundLocation: geofenceConfig?.enabled || false,
           autoMarkEnabled: geofenceConfig?.autoMarkEntry || false,
-          geofenceSettings: fallbackGeoSettings
+          geofenceSettings: fallbackGeoSettings,
+          activeDays: gymActiveDays,
+          operatingHours: {
+            morning: gymOperatingHours.morning || null,
+            evening: gymOperatingHours.evening || null,
+          },
         }
       });
     }
 
     // ── Build geofenceSettings: prefer GeofenceConfig (covers polygon+circular),
     //    fall back to AttendanceSettings.geofenceSettings if no GeofenceConfig ──
-    const resolvedGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig)
+    const resolvedGeoSettings = _buildGeofenceSettingsFromConfig(geofenceConfig, gymOperatingHours)
       || (settings.geofenceSettings?.enabled ? {
           enabled: settings.geofenceSettings.enabled,
           latitude: settings.geofenceSettings.latitude,
@@ -259,7 +270,9 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
           allowMockLocation: settings.geofenceSettings.allowMockLocation,
           minAccuracyMeters: settings.geofenceSettings.minAccuracyMeters,
           type: 'circular',
-          polygonCoordinates: []
+          polygonCoordinates: [],
+          morningShift: gymOperatingHours.morning || null,
+          eveningShift: gymOperatingHours.evening || null,
         } : null);
 
     // Return only necessary fields for member app
@@ -269,7 +282,12 @@ exports.getAttendanceSettingsForMember = async (req, res) => {
       geofenceEnabled: resolvedGeoSettings?.enabled || false,
       requiresBackgroundLocation: resolvedGeoSettings?.enabled || false,
       autoMarkEnabled: settings.autoMarkEnabled || resolvedGeoSettings?.autoMarkEntry || false,
-      geofenceSettings: resolvedGeoSettings
+      geofenceSettings: resolvedGeoSettings,
+      activeDays: gymActiveDays,
+      operatingHours: {
+        morning: gymOperatingHours.morning || null,
+        evening: gymOperatingHours.evening || null,
+      },
     };
 
     res.json({
@@ -414,8 +432,12 @@ exports.getAttendanceSettingsStatus = async (req, res) => {
 
 // ── Helper: build member-facing geofenceSettings object from a GeofenceConfig doc
 // Returns null when no config exists or config is disabled.
-function _buildGeofenceSettingsFromConfig(config) {
+// gymOperatingHours is the gym.operatingHours object with morning and evening slots.
+function _buildGeofenceSettingsFromConfig(config, gymOperatingHours = {}) {
   if (!config || !config.enabled) return null;
+
+  const morningShift = gymOperatingHours?.morning || null;
+  const eveningShift = gymOperatingHours?.evening || null;
 
   const base = {
     enabled: true,
@@ -424,7 +446,13 @@ function _buildGeofenceSettingsFromConfig(config) {
     allowMockLocation: config.allowMockLocation || false,
     minAccuracyMeters: config.minimumAccuracy || 20,
     type: config.type || 'circular',
-    polygonCoordinates: config.polygonCoordinates || []
+    polygonCoordinates: config.polygonCoordinates || [],
+    // Morning & evening operating slots from the gym profile
+    morningShift: morningShift,
+    eveningShift: eveningShift,
+    // Legacy single-window fields (keep for backward compat)
+    operatingHoursStart: config.operatingHoursStart || (morningShift?.opening) || null,
+    operatingHoursEnd: config.operatingHoursEnd || (eveningShift?.closing) || null,
   };
 
   if (config.type === 'polygon') {

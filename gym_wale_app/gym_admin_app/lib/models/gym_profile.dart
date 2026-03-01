@@ -16,6 +16,8 @@ class GymProfile {
   final int? membersCount;
   final List<String>? amenities;
   final List<String>? services;
+  /// Days of the week the gym is open (lowercase), e.g. ['monday','tuesday',...]
+  final List<String> activeDays;
   final bool isActive;
   final String? subscriptionPlan;
   final DateTime? subscriptionExpiresAt;
@@ -37,10 +39,12 @@ class GymProfile {
     this.membersCount,
     this.amenities,
     this.services,
+    List<String>? activeDays,
     this.isActive = true,
     this.subscriptionPlan,
     this.subscriptionExpiresAt,
-  });
+  }) : activeDays = activeDays ??
+            ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
   factory GymProfile.fromJson(Map<String, dynamic> json) {
     return GymProfile(
@@ -68,6 +72,9 @@ class GymProfile {
       services: json['services'] != null 
           ? List<String>.from(json['services']) 
           : null,
+      activeDays: json['activeDays'] != null
+          ? List<String>.from(json['activeDays'])
+          : null,
       isActive: json['isActive'] ?? true,
       subscriptionPlan: json['subscriptionPlan'],
       subscriptionExpiresAt: json['subscriptionExpiresAt'] != null
@@ -94,6 +101,7 @@ class GymProfile {
       'membersCount': membersCount,
       'amenities': amenities,
       'services': services,
+      'activeDays': activeDays,
       'isActive': isActive,
       'subscriptionPlan': subscriptionPlan,
       'subscriptionExpiresAt': subscriptionExpiresAt?.toIso8601String(),

@@ -51,6 +51,23 @@ class ApiService {
   static bool get isAuthenticated => _token != null;
   static String? get token => _token;
 
+  /// Register or update the FCM device token on the backend.
+  static Future<void> registerFcmToken(String fcmToken) async {
+    try {
+      final url = Uri.parse(ApiConfig.baseUrl + ApiConfig.fcmToken);
+      await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode({
+          'fcmToken': fcmToken,
+          'platform': 'user_app',
+        }),
+      );
+    } catch (e) {
+      debugPrint('[API] registerFcmToken error: $e');
+    }
+  }
+
   // ========== Authentication APIs ==========
   
   /// Login user with email and password

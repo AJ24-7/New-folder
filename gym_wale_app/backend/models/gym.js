@@ -108,6 +108,13 @@ const gymSchema = new mongoose.Schema({
     }
   },
   
+  // Active days of the week (e.g. ['monday', 'tuesday', ..., 'sunday'])
+  // Empty array = open every day (default behaviour)
+  activeDays: {
+    type: [{ type: String, enum: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'] }],
+    default: ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']
+  },
+
   // Legacy fields for backward compatibility
   openingTime: { type: String },
   closingTime: { type: String },

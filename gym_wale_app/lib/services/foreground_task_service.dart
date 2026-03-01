@@ -42,6 +42,16 @@ class _GeofenceTaskHandler extends TaskHandler {
   bool _entryMarkedToday = false;
   String? _lastMarkedDateKey; // 'yyyy-MM-dd'
 
+  /// GPS jitter protection: require this many consecutive outside-boundary
+  /// readings before we consider the user to have truly exited the geofence.
+  /// At a 30-second poll interval this means ~60 s outside before EXIT fires.
+  static const int _exitGraceTicks = 2;
+  int _consecutiveOutsideCount = 0;
+
+  /// Incremental attempt counter for the DWELL mark — resets on success.
+  int _dwellMarkAttempts = 0;
+  static const int _maxDwellMarkAttempts = 5;
+
   // Local notification plugin for the background isolate
   final FlutterLocalNotificationsPlugin _notifPlugin =
       FlutterLocalNotificationsPlugin();
@@ -185,9 +195,21 @@ class _GeofenceTaskHandler extends TaskHandler {
       // ── state machine ────────────────────────────────────────────────────
       if (isInside && !_wasInsideGeofence) {
         // ── ENTER ──────────────────────────────────────────────────────────
+        // Reset jitter counter — user is genuinely inside now.
+        _consecutiveOutsideCount = 0;
+
+        // Check operating hours and active days before triggering anything
+        final withinPeriod = await _isWithinActivePeriod(prefs);
+        if (!withinPeriod) {
+          debugPrint('[BGTask] ENTER ignored — outside operating hours or non-working day');
+          return;
+        }
+
         _wasInsideGeofence = true;
         _enterTime = DateTime.now();
-        debugPrint('[BGTask] ENTER — 5-min dwell timer started');
+        _dwellMarkAttempts = 0;
+        await _saveDailyState(); // Persist timer so service-restart restores it
+        debugPrint('[BGTask] ENTER — 5-min dwell timer started at $_enterTime');
 
         _updateFgNotif(
           title: '🏋️ Gym Detected',
@@ -201,9 +223,33 @@ class _GeofenceTaskHandler extends TaskHandler {
         );
 
       } else if (!isInside && _wasInsideGeofence) {
-        // ── EXIT ───────────────────────────────────────────────────────────
+        // ── EXIT (with GPS jitter protection) ──────────────────────────────
+        // Require _exitGraceTicks consecutive outside-boundary readings before
+        // treating this as a real EXIT. This prevents the 5-min timer from
+        // resetting due to momentary GPS drift while the user is still inside.
+        _consecutiveOutsideCount++;
+        debugPrint('[BGTask] Outside reading ${_consecutiveOutsideCount}/$_exitGraceTicks (grace-period check)');
+        if (_consecutiveOutsideCount < _exitGraceTicks) {
+          // Not confirmed yet — keep current state, show countdown if applicable
+          if (_enterTime != null && !_entryMarkedToday) {
+            final elapsed = DateTime.now().difference(_enterTime!);
+            final remainSec = 300 - elapsed.inSeconds;
+            if (remainSec > 0) {
+              _updateFgNotif(
+                title: '🏋️ Inside Gym',
+                text: remainSec > 60
+                    ? 'Auto-attendance in ~${(remainSec / 60).ceil()} min…'
+                    : 'Auto-attendance in ~${remainSec}s…',
+              );
+            }
+          }
+          return;
+        }
+
+        // EXIT confirmed
+        _consecutiveOutsideCount = 0;
         _wasInsideGeofence = false;
-        debugPrint('[BGTask] EXIT');
+        debugPrint('[BGTask] EXIT confirmed after grace period');
 
         _updateFgNotif(
           title: '📍 Gym Attendance Tracking',
@@ -227,16 +273,38 @@ class _GeofenceTaskHandler extends TaskHandler {
           }
         }
         _enterTime = null;
+        _dwellMarkAttempts = 0;
+        await _saveDailyState();
 
       } else if (isInside && _wasInsideGeofence && !_entryMarkedToday) {
         // ── DWELL check ────────────────────────────────────────────────────
+        // Reset jitter counter — user is confirmed inside.
+        _consecutiveOutsideCount = 0;
+
         if (_enterTime != null) {
           final elapsed = DateTime.now().difference(_enterTime!);
-          if (elapsed.inMinutes >= 5) {
-            debugPrint('[BGTask] DWELL reached — marking entry');
+          // Use seconds precision to avoid the minute-truncation leading to
+          // a 59-second window where 1-min-remaining is shown but never fires.
+          if (elapsed.inSeconds >= 300) {
+            // Re-check operating hours at dwell time before marking.
+            // IMPORTANT: do NOT reset _wasInsideGeofence / _enterTime when
+            // outside hours — just skip this tick so marking happens as soon
+            // as operating hours start instead of restarting the 5-min timer.
+            final withinPeriod = await _isWithinActivePeriod(prefs);
+            if (!withinPeriod) {
+              debugPrint('[BGTask] DWELL skipped — outside operating hours (timer kept, will mark when hours start)');
+              _updateFgNotif(
+                title: '🏋️ Inside Gym',
+                text: 'Attendance will mark when gym opens.',
+              );
+              return;
+            }
+
+            debugPrint('[BGTask] DWELL reached (${elapsed.inSeconds}s elapsed) — marking entry');
             final autoMarkEntry =
                 prefs.getBool('geofence_auto_mark_entry') ?? true;
             if (autoMarkEntry) {
+              _dwellMarkAttempts++;
               final ok = await _callBackend(
                 prefs: prefs,
                 gymId: gymId,
@@ -245,6 +313,7 @@ class _GeofenceTaskHandler extends TaskHandler {
               );
               if (ok) {
                 _entryMarkedToday = true;
+                _dwellMarkAttempts = 0;
                 await _saveDailyState();
 
                 _updateFgNotif(
@@ -257,20 +326,34 @@ class _GeofenceTaskHandler extends TaskHandler {
                   body:
                       'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout! 💪',
                 );
+              } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
+                // Backend call failed — will retry next tick (30 s) without
+                // resetting the timer. The elapsed will still be >= 300 s
+                // so we immediately retry on next tick.
+                debugPrint('[BGTask] Backend call failed (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry');
               } else {
-                // Retry next tick
-                _enterTime = DateTime.now().subtract(const Duration(minutes: 4, seconds: 30));
+                // Max retries exceeded — push the enter time forward by 30 s
+                // so the next retry window opens after a short pause.
+                debugPrint('[BGTask] Max retry attempts reached — backing off 30 s');
+                _dwellMarkAttempts = 0;
+                _enterTime = DateTime.now().subtract(const Duration(seconds: 270));
+                await _saveDailyState();
               }
             }
           } else {
-            // Show countdown in the persistent notification
-            final remaining = 5 - elapsed.inMinutes;
+            // Show precise countdown in the persistent notification
+            final remainSec = 300 - elapsed.inSeconds;
             _updateFgNotif(
               title: '🏋️ Inside Gym',
-              text: 'Auto-attendance in ~$remaining min…',
+              text: remainSec > 60
+                  ? 'Auto-attendance in ~${(remainSec / 60).ceil()} min…'
+                  : 'Auto-attendance in ~${remainSec}s…',
             );
           }
         }
+      } else if (isInside && _wasInsideGeofence && _entryMarkedToday) {
+        // Already marked today — just keep the notification clean.
+        _consecutiveOutsideCount = 0;
       }
     } catch (e) {
       debugPrint('[BGTask] tick error: $e');
@@ -338,6 +421,60 @@ class _GeofenceTaskHandler extends TaskHandler {
     }
   }
 
+  // ─── operating hours / active-days guard ──────────────────────────────────
+
+  /// Parses an "HH:mm" string → minutes since midnight.  Returns null on error.
+  int? _hmm2min(String? s) {
+    if (s == null) return null;
+    final p = s.split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    return (h != null && m != null) ? h * 60 + m : null;
+  }
+
+  /// Returns false if [now] is outside all configured operating shifts or is a
+  /// non-working day.  Returns true when no restrictions are stored.
+  Future<bool> _isWithinActivePeriod(SharedPreferences prefs) async {
+    final now = DateTime.now();
+
+    // ── Active days check ──────────────────────────────────────────────────
+    final activeDaysRaw = prefs.getString('gym_active_days') ?? '';
+    if (activeDaysRaw.isNotEmpty) {
+      const dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      final today = dayNames[now.weekday - 1]; // weekday 1=Mon … 7=Sun
+      final activeDays = activeDaysRaw.split(',');
+      if (!activeDays.contains(today)) {
+        debugPrint('[BGTask] Today ($today) is not in active days: $activeDays');
+        return false;
+      }
+    }
+
+    // ── Operating hours check ──────────────────────────────────────────────
+    final nowMin = now.hour * 60 + now.minute;
+
+    final morningOpen  = _hmm2min(prefs.getString('gym_morning_opening'));
+    final morningClose = _hmm2min(prefs.getString('gym_morning_closing'));
+    final eveningOpen  = _hmm2min(prefs.getString('gym_evening_opening'));
+    final eveningClose = _hmm2min(prefs.getString('gym_evening_closing'));
+
+    // If no shift times stored at all → no restriction
+    if (morningOpen == null && eveningOpen == null) return true;
+
+    final inMorning = (morningOpen != null && morningClose != null)
+        ? (nowMin >= morningOpen && nowMin <= morningClose)
+        : false;
+    final inEvening = (eveningOpen != null && eveningClose != null)
+        ? (nowMin >= eveningOpen && nowMin <= eveningClose)
+        : false;
+
+    if (!inMorning && !inEvening) {
+      debugPrint('[BGTask] Current time ${now.hour}:${now.minute.toString().padLeft(2,'0')} is outside all operating shifts.');
+      return false;
+    }
+    return true;
+  }
+
   // ─── helpers ───────────────────────────────────────────────────────────────
   void _updateFgNotif({required String title, required String text}) {
     try {
@@ -395,10 +532,30 @@ class _GeofenceTaskHandler extends TaskHandler {
       final prefs = await SharedPreferences.getInstance();
       _lastMarkedDateKey = prefs.getString('bg_task_last_date');
       final today = _todayStr();
-      _entryMarkedToday = (_lastMarkedDateKey == today)
-          ? (prefs.getBool('bg_task_entry_marked') ?? false)
-          : false;
-      debugPrint('[BGTask] Loaded daily state: marked=$_entryMarkedToday');
+      if (_lastMarkedDateKey == today) {
+        _entryMarkedToday = prefs.getBool('bg_task_entry_marked') ?? false;
+        // ── Restore timer state so a service restart doesn't reset the 5-min
+        //    dwell countdown (the root cause of the "stuck 1-min" bug).
+        if (!_entryMarkedToday) {
+          final wasInside = prefs.getBool('bg_task_was_inside') ?? false;
+          final enterTimeStr = prefs.getString('bg_task_enter_time');
+          if (wasInside && enterTimeStr != null) {
+            final restored = DateTime.tryParse(enterTimeStr);
+            if (restored != null) {
+              _wasInsideGeofence = true;
+              _enterTime = restored;
+              debugPrint('[BGTask] Restored enter time from prefs: $restored');
+            }
+          }
+        }
+      } else {
+        // New day — clear everything
+        _entryMarkedToday = false;
+        _lastMarkedDateKey = today;
+        await prefs.remove('bg_task_was_inside');
+        await prefs.remove('bg_task_enter_time');
+      }
+      debugPrint('[BGTask] Loaded daily state: marked=$_entryMarkedToday wasInside=$_wasInsideGeofence');
     } catch (_) {}
   }
 
@@ -407,6 +564,14 @@ class _GeofenceTaskHandler extends TaskHandler {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('bg_task_last_date', _todayStr());
       await prefs.setBool('bg_task_entry_marked', _entryMarkedToday);
+      // Persist the dwell timer so service-restart restores it
+      if (_wasInsideGeofence && _enterTime != null && !_entryMarkedToday) {
+        await prefs.setBool('bg_task_was_inside', true);
+        await prefs.setString('bg_task_enter_time', _enterTime!.toIso8601String());
+      } else {
+        await prefs.remove('bg_task_was_inside');
+        await prefs.remove('bg_task_enter_time');
+      }
     } catch (_) {}
   }
 }
@@ -511,5 +676,51 @@ class ForegroundTaskService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('geofence_auto_mark_entry', autoMarkEntry);
     await prefs.setBool('geofence_auto_mark_exit', autoMarkExit);
+  }
+
+  /// Persist gym operating hours and active days so the background isolate can
+  /// gate notifications/attendance marking to the gym's working schedule.
+  ///
+  /// [morningOpening]/[morningClosing] and [eveningOpening]/[eveningClosing]
+  /// must be in "HH:mm" format (e.g. "06:00", "12:00").
+  /// [activeDays] is a list of lowercase day names
+  /// (e.g. ['monday','tuesday','wednesday','thursday','friday','saturday','sunday']).
+  static Future<void> persistOperatingSchedule({
+    String? morningOpening,
+    String? morningClosing,
+    String? eveningOpening,
+    String? eveningClosing,
+    List<String>? activeDays,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (morningOpening != null) {
+      await prefs.setString('gym_morning_opening', morningOpening);
+    } else {
+      await prefs.remove('gym_morning_opening');
+    }
+    if (morningClosing != null) {
+      await prefs.setString('gym_morning_closing', morningClosing);
+    } else {
+      await prefs.remove('gym_morning_closing');
+    }
+    if (eveningOpening != null) {
+      await prefs.setString('gym_evening_opening', eveningOpening);
+    } else {
+      await prefs.remove('gym_evening_opening');
+    }
+    if (eveningClosing != null) {
+      await prefs.setString('gym_evening_closing', eveningClosing);
+    } else {
+      await prefs.remove('gym_evening_closing');
+    }
+    if (activeDays != null && activeDays.isNotEmpty) {
+      await prefs.setString('gym_active_days', activeDays.join(','));
+    } else {
+      await prefs.remove('gym_active_days');
+    }
+    debugPrint('[FGTask] Operating schedule persisted: '
+        'morning=$morningOpening-$morningClosing '
+        'evening=$eveningOpening-$eveningClosing '
+        'activeDays=$activeDays');
   }
 }

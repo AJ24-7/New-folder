@@ -19,6 +19,7 @@ class ApiConfig {
   static const String changePassword = '/users/change-password';
   static const String requestPasswordReset = '/users/request-password-reset-otp';
   static const String verifyPasswordReset = '/users/verify-password-reset-otp';
+  static const String fcmToken = '/users/fcm-token';
   
   // ========== Gym Endpoints ==========
   static const String gyms = '/gyms';

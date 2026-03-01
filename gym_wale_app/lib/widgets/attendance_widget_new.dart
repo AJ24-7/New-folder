@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
+import '../models/attendance_settings.dart';
 import '../providers/attendance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -49,6 +50,10 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
 
   Future<void> _loadAttendanceData() async {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
+    // Load attendance settings (needed for schedule / off-day banners)
+    if (provider.attendanceSettings == null) {
+      await provider.loadAttendanceSettings(widget.gymId);
+    }
     await provider.fetchTodayAttendance(widget.gymId);
     await provider.fetchAttendanceStats(
       widget.gymId,
@@ -174,8 +179,11 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
           return _buildErrorState(l10n, provider.errorMessage!);
         }
 
+        final scheduleBanner = _buildScheduleBanner(provider.attendanceSettings);
         return Column(
           children: [
+            // Show "off day" / "outside operating hours" banner
+            if (scheduleBanner != null) scheduleBanner,
             // Show location warning banner if geofence is enabled but location is not set up
             // On web, show info message if geofence is enabled
             // On mobile, show warning if location requirements not met
@@ -299,6 +307,113 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
             child: Text(
               error,
               style: const TextStyle(color: AppTheme.errorColor),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Schedule awareness helpers ─────────────────────────────────────────────
+
+  /// Returns true when today's weekday is in the gym's active-days list.
+  bool _isActiveDayToday(AttendanceSettings? settings) {
+    if (settings == null) return true;
+    // Check geofenceSettings.activeDays first, fall back to top-level activeDays
+    final days = settings.geofenceSettings?.activeDays ?? settings.activeDays;
+    if (days.isEmpty) return true;
+    const dayNames = [
+      'monday','tuesday','wednesday','thursday','friday','saturday','sunday'
+    ];
+    final today = dayNames[DateTime.now().weekday - 1];
+    return days.map((d) => d.toLowerCase()).contains(today);
+  }
+
+  /// Returns true when the current time is inside one of the gym's operating shifts.
+  bool _isWithinOperatingHours(AttendanceSettings? settings) {
+    if (settings == null) return true;
+    final geo = settings.geofenceSettings;
+    final now = DateTime.now();
+    final cur = now.hour * 60 + now.minute;
+
+    if (geo != null) {
+      // Dual-shift from geofence settings
+      final ms = _hhmm2min(geo.morningShift?.opening);
+      final me = _hhmm2min(geo.morningShift?.closing);
+      if (ms != null && me != null && cur >= ms && cur <= me) return true;
+
+      final es = _hhmm2min(geo.eveningShift?.opening);
+      final ee = _hhmm2min(geo.eveningShift?.closing);
+      if (es != null && ee != null && cur >= es && cur <= ee) return true;
+
+      // Legacy single window
+      final ls = _hhmm2min(geo.operatingHoursStart);
+      final le = _hhmm2min(geo.operatingHoursEnd);
+      if (ms == null && es == null && ls == null) return true; // no restriction
+      if (ls != null && le != null && cur >= ls && cur <= le) return true;
+
+      return false;
+    }
+
+    // Fall back to top-level operatingHours (OperatingHoursInfo)
+    final oh = settings.operatingHours;
+    if (oh == null) return true;
+
+    final ms = _hhmm2min(oh.morning?.opening);
+    final me = _hhmm2min(oh.morning?.closing);
+    if (ms != null && me != null && cur >= ms && cur <= me) return true;
+
+    final es = _hhmm2min(oh.evening?.opening);
+    final ee = _hhmm2min(oh.evening?.closing);
+    if (es != null && ee != null && cur >= es && cur <= ee) return true;
+
+    if (ms == null && es == null) return true; // no restriction configured
+    return false;
+  }
+
+  int? _hhmm2min(String? s) {
+    if (s == null || s.isEmpty) return null;
+    final p = s.split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    return (h != null && m != null) ? h * 60 + m : null;
+  }
+
+  /// Build a banner shown when the gym is closed today or outside hours.
+  Widget? _buildScheduleBanner(AttendanceSettings? settings) {
+    if (settings == null) return null;
+    final isOffDay = !_isActiveDayToday(settings);
+    final isOutsideHours = isOffDay ? false : !_isWithinOperatingHours(settings);
+
+    if (!isOffDay && !isOutsideHours) return null;
+
+    final message = isOffDay
+        ? 'Off day today — gym is closed'
+        : 'Visit during active hours to record attendance';
+    final icon = isOffDay ? Icons.weekend_outlined : Icons.schedule_outlined;
+    final color = isOffDay ? Colors.deepPurple : Colors.indigo;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

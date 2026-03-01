@@ -244,7 +244,7 @@ exports.respondToMemberProblem = async (req, res) => {
     const adminId = req.admin._id || req.admin.id;
 
     const report = await MemberProblemReport.findById(reportId)
-      .populate('userId', 'name email');
+      .populate('userId', 'name email fcmToken');
 
     if (!report) {
       return res.status(404).json({
@@ -294,6 +294,26 @@ exports.respondToMemberProblem = async (req, res) => {
       await report.save();
 
       console.log('✅ User notification created for admin response');
+
+      // FCM push to user device
+      try {
+        const userFcmToken = report.userId?.fcmToken?.token;
+        if (userFcmToken) {
+          await fcmService.sendToDevice(
+            userFcmToken,
+            { title: 'Response to Your Problem Report', body: message.substring(0, 100) },
+            {
+              type: 'problem-report-response',
+              reportId: report.reportId,
+              category: report.category,
+              status: report.status,
+            }
+          );
+          console.log('📲 FCM push sent to user for report reply');
+        }
+      } catch (fcmErr) {
+        console.error('⚠️ FCM push failed for report reply:', fcmErr.message);
+      }
     } catch (notifError) {
       console.error('⚠️ Error creating user notification:', notifError);
     }
