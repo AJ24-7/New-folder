@@ -18,7 +18,7 @@ exports.getMembershipPlans = async (req, res) => {
     if (!gym) return res.status(404).json({ message: 'Gym not found' });
     
     let plan = gym.membershipPlan;
-    if (!plan || !plan.monthlyOptions || plan.monthlyOptions.length === 0) {
+    if (!plan || (!plan.monthlyOptions?.length && !plan.tiers?.length)) {
       // Fallback: create default plan if not present
       plan = {
         name: 'Standard',
