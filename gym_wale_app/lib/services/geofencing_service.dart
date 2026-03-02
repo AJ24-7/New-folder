@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:geofence_service/geofence_service.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -282,50 +283,105 @@ class GeofencingService extends ChangeNotifier {
     }
   }
 
-  /// Restore geofence from saved preferences (called on app start)
+  /// Restore geofence from saved preferences (called on app start).
+  ///
+  /// Unlike [registerGymGeofence], this method does **not** stop the
+  /// persistent foreground task if it is already running — the background
+  /// isolate keeps polling GPS without interruption while the app
+  /// re-attaches to its in-app geofence listener.
   Future<bool> restoreGeofenceFromPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final gymId = prefs.getString('geofence_gym_id');
+      final gymId    = prefs.getString('geofence_gym_id');
       final latitude = prefs.getDouble('geofence_latitude');
       final longitude = prefs.getDouble('geofence_longitude');
-      final radius = prefs.getDouble('geofence_radius');
+      final radius   = prefs.getDouble('geofence_radius');
 
-      if (gymId != null && latitude != null && longitude != null && radius != null) {
-        debugPrint('[GEOFENCE] Restoring geofence for gym: $gymId');
-
-        // Check permissions before restoring
-        final hasPermission = await checkAndRequestPermissions();
-        if (!hasPermission) {
-          debugPrint('[GEOFENCE] Cannot restore geofence: insufficient permissions');
-          return false;
-        }
-
-        final registered = await registerGymGeofence(
-          gymId: gymId,
-          latitude: latitude,
-          longitude: longitude,
-          radius: radius,
-        );
-
-        if (registered) {
-          // Reload attendance settings so that shouldAutoMarkEntry/Exit()
-          // and isGeofenceEnabledInSettings() return correct values for this
-          // session even though configureFromSettings() was not called.
-          debugPrint('[GEOFENCE] Reloading attendance settings after restore…');
-          _attendanceSettings = await _settingsService.loadSettings(gymId);
-          if (_attendanceSettings != null) {
-            debugPrint('[GEOFENCE] Settings restored – autoMarkEntry: '
-                '${_attendanceSettings!.geofenceSettings?.autoMarkEntry}, '
-                'autoMarkExit: ${_attendanceSettings!.geofenceSettings?.autoMarkExit}');
-          }
-        }
-
-        return registered;
+      if (gymId == null || latitude == null || longitude == null || radius == null) {
+        debugPrint('[GEOFENCE] No saved geofence to restore');
+        return false;
       }
 
-      debugPrint('[GEOFENCE] No saved geofence to restore');
-      return false;
+      debugPrint('[GEOFENCE] Restoring geofence for gym: $gymId');
+
+      // Check permissions before restoring
+      final hasPermission = await checkAndRequestPermissions();
+      if (!hasPermission) {
+        debugPrint('[GEOFENCE] Cannot restore geofence: insufficient permissions');
+        return false;
+      }
+
+      // ── Stop only the in-app listener (NOT the foreground task) ──────────
+      // The background isolate must keep running so GPS polling is never
+      // interrupted when the user opens the app.
+      if (_isServiceRunning) {
+        try { await _geofenceService.stop(); } catch (_) {}
+        _isServiceRunning = false;
+      }
+
+      // ── Reconstruct and start the in-app geofence listener ───────────────
+      final geofence = Geofence(
+        id: gymId,
+        latitude: latitude,
+        longitude: longitude,
+        radius: [GeofenceRadius(id: 'radius_$radius', length: radius)],
+      );
+      _geofenceList = [geofence];
+      _currentGymId = gymId;
+
+      try {
+        await _geofenceService.start(_geofenceList);
+        _isServiceRunning = true;
+        notifyListeners();
+        await LocalNotificationService.instance.showGeofenceActiveNotification();
+      } catch (startError) {
+        debugPrint('[GEOFENCE] Error starting geofence service on restore: $startError');
+        _geofenceList.clear();
+        _currentGymId = null;
+        notifyListeners();
+        return false;
+      }
+
+      // ── Foreground task: keep alive if running, else restart ─────────────
+      // IMPORTANT: never call stopService() during restore — that would kill
+      // the background isolate and lose the in-progress dwell timer.
+      final fgRunning = await _fgTaskService.isRunning;
+      if (fgRunning) {
+        debugPrint('[GEOFENCE] Foreground task already running — keeping alive on restore');
+        // Just refresh the notification text; the isolate state is untouched.
+        await FlutterForegroundTask.updateService(
+          notificationTitle: '📍 Gym Attendance Tracking',
+          notificationText: 'Monitoring your location…',
+        );
+      } else {
+        debugPrint('[GEOFENCE] Foreground task not running — starting after restore');
+        await _fgTaskService.startService();
+      }
+
+      // ── Reload attendance settings ────────────────────────────────────────
+      debugPrint('[GEOFENCE] Reloading attendance settings after restore…');
+      _attendanceSettings = await _settingsService.loadSettings(gymId);
+      if (_attendanceSettings != null) {
+        debugPrint('[GEOFENCE] Settings restored – autoMarkEntry: '
+            '${_attendanceSettings!.geofenceSettings?.autoMarkEntry}, '
+            'autoMarkExit: ${_attendanceSettings!.geofenceSettings?.autoMarkExit}');
+        // Keep the background isolate in sync with the latest settings.
+        await ForegroundTaskService.persistAutoMarkFlags(
+          autoMarkEntry: shouldAutoMarkEntry(),
+          autoMarkExit:  shouldAutoMarkExit(),
+        );
+        final gs    = _attendanceSettings!.geofenceSettings;
+        final hours = _attendanceSettings!.operatingHours;
+        await ForegroundTaskService.persistOperatingSchedule(
+          morningOpening: gs?.morningShift?.opening ?? hours?.morning?.opening,
+          morningClosing: gs?.morningShift?.closing ?? hours?.morning?.closing,
+          eveningOpening: gs?.eveningShift?.opening ?? hours?.evening?.opening,
+          eveningClosing: gs?.eveningShift?.closing ?? hours?.evening?.closing,
+          activeDays: gs?.activeDays ?? _attendanceSettings!.activeDays,
+        );
+      }
+
+      return true;
     } catch (e) {
       debugPrint('[GEOFENCE] Error restoring geofence: $e');
       return false;

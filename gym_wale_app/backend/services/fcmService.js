@@ -320,6 +320,17 @@ class FCMService {
   _buildMessage(target, notification, data = {}, options = {}) {
     const stringData = this._stringifyValues(data);
 
+    // Resolve the Android channel ID using (in priority order):
+    //   1. Explicit options.android.channelId override
+    //   2. data.channel string already set by caller
+    //   3. type-based mapping → channels registered in the Flutter user app
+    // This prevents notifications being silently dropped on Android 8+ when
+    // the channelId doesn't exist on the device.
+    const resolvedChannelId =
+      options.android?.channelId ||
+      stringData.channel ||
+      this._mapTypeToChannel(stringData.type);
+
     const message = {
       ...target,
       notification: {
@@ -330,7 +341,7 @@ class FCMService {
       android: {
         priority: 'high',
         notification: {
-          channelId: stringData.channel || 'default_channel',
+          channelId: resolvedChannelId,
           sound: 'default',
           priority: 'high',
           defaultVibrateTimings: true,
@@ -365,19 +376,31 @@ class FCMService {
     return result;
   }
 
+  // Map notification type → Android channel ID registered in the Flutter user app.
+  // Channel IDs MUST match the ones created in LocalNotificationService._createAndroidChannels.
   _mapTypeToChannel(type) {
     switch (type) {
+      case 'chat':
+      case 'chat-message':
+        return 'gym_wale_chat';
+      case 'problem-report-response':
+      case 'report_reply':
+        return 'gym_wale_reports';
       case 'check-in':
+      case 'attendance':
+        return 'gym_wale_attendance';
+      // All admin-to-user broadcast types → notice channel
+      case 'notice':
+      case 'announcement':
+      case 'holiday-notice':
+      case 'general':
       case 'payment':
       case 'renewal':
-      case 'member-activity':
-        return 'member_activity_channel';
+      case 'membership-renewal':
       case 'alert':
       case 'warning':
-      case 'system':
-        return 'system_alerts_channel';
       default:
-        return 'default_channel';
+        return 'gym_wale_notice';
     }
   }
 

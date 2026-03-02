@@ -13,6 +13,10 @@ class AttendanceProvider extends ChangeNotifier {
   final AttendanceSettingsService _settingsService = AttendanceSettingsService();
   
   StreamSubscription<GeofenceStatus>? _geofenceSubscription;
+  bool _bgListenerRegistered = false;
+  // Guards against the same DWELL event triggering concurrent markAttendanceEntry
+  // calls (geofence_service fires DWELL every poll tick once loiteringDelayMs is hit).
+  bool _isDwellMarkInProgress = false;
 
   bool _isAttendanceMarkedToday = false;
   bool get isAttendanceMarkedToday => _isAttendanceMarkedToday;
@@ -60,8 +64,12 @@ class AttendanceProvider extends ChangeNotifier {
 
   /// Listen for data sent from the background (killed-app) isolate so the UI
   /// refreshes automatically, e.g. after the foreground task marks attendance.
+  /// Guard: only register once — ChangeNotifierProxyProvider may call
+  /// initializeGeofencingService repeatedly whenever GeofencingService notifies.
   void _initializeBackgroundTaskListener() {
+    if (_bgListenerRegistered) return;
     FlutterForegroundTask.addTaskDataCallback(_onBackgroundTaskData);
+    _bgListenerRegistered = true;
   }
 
   /// Called in the main isolate when the background isolate sends data via
@@ -94,9 +102,14 @@ class AttendanceProvider extends ChangeNotifier {
     }
   }
 
-  /// Initialize listener for geofence events
+  /// Initialize listener for geofence events.
+  /// Always cancels any existing subscription first so that repeated calls from
+  /// ChangeNotifierProxyProvider.update do not pile up duplicate listeners on
+  /// the broadcast stream (which would trigger multiple concurrent
+  /// markAttendanceEntry calls per DWELL event).
   void _initializeGeofenceListener() {
     if (_geofencingService == null) return;
+    _geofenceSubscription?.cancel();
     _geofenceSubscription = _geofencingService!.geofenceStream.listen(
       _onGeofenceStatusChanged,
       onError: (error) {
@@ -163,10 +176,19 @@ class AttendanceProvider extends ChangeNotifier {
       // Notification shown by GeofencingService; no API call yet.
       debugPrint('[ATTENDANCE] Geofence ENTER – waiting for 5-min DWELL before marking.');
     } else if (status == GeofenceStatus.DWELL) {
-      // 5 minutes elapsed inside the geofence → mark entry
-      if (_geofencingService!.shouldAutoMarkEntry()) {
+      // 5 minutes elapsed inside the geofence → mark entry.
+      // geofence_service fires DWELL on EVERY poll tick (~5 s) once the
+      // loiteringDelayMs threshold is crossed, so gate with a flag to prevent
+      // concurrent / duplicate markAttendanceEntry calls.
+      if (_isAttendanceMarkedToday) {
+        debugPrint('[ATTENDANCE] Geofence DWELL – attendance already marked today, skipping.');
+      } else if (_isDwellMarkInProgress) {
+        debugPrint('[ATTENDANCE] Geofence DWELL – mark already in progress, skipping duplicate.');
+      } else if (_geofencingService!.shouldAutoMarkEntry()) {
         debugPrint('[ATTENDANCE] Geofence DWELL (5 min) – auto-marking attendance entry.');
+        _isDwellMarkInProgress = true;
         final success = await markAttendanceEntry(gymId);
+        _isDwellMarkInProgress = false;
         // ── Gate 4: Hard server errors ──────────────────────────────────────
         // Stop geofence tracking on permanent errors (expired membership,
         // geofence disabled server-side) to avoid repeated failed calls.
@@ -178,6 +200,7 @@ class AttendanceProvider extends ChangeNotifier {
         debugPrint('[ATTENDANCE] Auto-mark entry disabled in settings.');
       }
     } else if (status == GeofenceStatus.EXIT) {
+      _isDwellMarkInProgress = false; // Allow fresh mark on next entry
       if (_geofencingService!.shouldAutoMarkExit()) {
         debugPrint('[ATTENDANCE] Geofence EXIT – auto-marking attendance exit.');
         await markAttendanceExit(gymId);
@@ -740,6 +763,7 @@ class AttendanceProvider extends ChangeNotifier {
     _checkInTime = null;
     _checkOutTime = null;
     _todayAttendance = null;
+    _isDwellMarkInProgress = false;
     notifyListeners();
   }
 

@@ -469,14 +469,28 @@ class NotificationController {
                         'fcmToken.token': { $ne: null, $exists: true },
                     }).select('fcmToken').lean();
 
-                    const fcmTokens = usersWithTokens.map(u => u.fcmToken?.token).filter(Boolean);
-                    if (fcmTokens.length > 0) {
-                        const fcmResult = await fcmService.sendToMultipleDevices(fcmTokens, { title, body: message }, {
-                            type,
-                            priority,
-                            gymId: gymId?.toString(),
-                            source: 'gym-admin',
-                        });
+                    // Deduplicate tokens — same device can appear twice if
+                    // user re-logged-in without deleting the previous token.
+                    const uniqueTokens = [
+                        ...new Set(
+                            usersWithTokens.map(u => u.fcmToken?.token).filter(Boolean)
+                        ),
+                    ];
+                    if (uniqueTokens.length > 0) {
+                        // Use notifyUser() so the correct Android channel ID
+                        // (matching LocalNotificationService channels in the
+                        // Flutter user app) is resolved from the message type.
+                        const fcmResult = await fcmService.notifyUser(
+                            uniqueTokens,
+                            title,
+                            message,
+                            {
+                                type,
+                                priority,
+                                gymId: gymId?.toString(),
+                                source: 'gym-admin',
+                            }
+                        );
                         // Clean up stale tokens
                         if (fcmResult?.invalidTokens?.length) {
                             await User.updateMany(
@@ -484,7 +498,7 @@ class NotificationController {
                                 { $set: { 'fcmToken.token': null } }
                             );
                         }
-                        console.log(`📲 FCM pushed to ${fcmTokens.length} devices (${fcmResult?.successCount || 0} succeeded)`);
+                        console.log(`📲 FCM pushed to ${uniqueTokens.length} devices (${fcmResult?.successCount || 0} succeeded)`);
                     }
                 } catch (fcmErr) {
                     console.error('⚠️ FCM push failed (non-blocking):', fcmErr.message);

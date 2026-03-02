@@ -54,10 +54,15 @@ class FirebaseNotificationService {
       );
       debugPrint('[FCM] Permission: ${settings.authorizationStatus}');
 
+      // Disable OS-level foreground banner so the system does NOT auto-show
+      // a notification while the app is open.  _handleForeground (below) will
+      // display a local notification via LocalNotificationService instead.
+      // Keeping alert/badge/sound = true causes a DUPLICATE on iOS:
+      //   iOS system banner  +  local notification from _handleForeground.
       await messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
+        alert: false,
+        badge: false,
+        sound: false,
       );
 
       _fcmToken = await messaging.getToken();

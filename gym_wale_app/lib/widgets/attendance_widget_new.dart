@@ -98,20 +98,10 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
         }
 
         if (geofenceEnabled) {
-          // Initialize location monitoring (mobile only)
-          final authProvider = Provider.of<AuthProvider>(context, listen: false);
-          final user = authProvider.user;
-          final token = ApiService.token;
-          
-          if (user != null && token != null) {
-            await _locationMonitoring.initialize(
-              gymId: widget.gymId,
-              memberId: user.id,
-              authToken: token,
-            );
-          }
-
-          // Check current location status
+          // Check current location status (one-shot permission/service check).
+          // Do NOT call _locationMonitoring.initialize() here — it starts a
+          // periodic polling timer that conflicts with the geofence attendance
+          // foreground task.
           final status = await _locationMonitoring.getCurrentLocationStatus();
           setState(() {
             _locationStatus = status;
@@ -634,13 +624,40 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
     );
   }
 
+  /// Safely parse a time value from the attendance map.
+  /// Handles both full ISO-8601 datetime strings (from geofenceEntry.timestamp)
+  /// and the backend's "HH:MM" shorthand stored in checkInTime / checkOutTime.
+  /// Returns null on any parse failure instead of throwing.
+  DateTime? _parseAttendanceTime(dynamic value) {
+    if (value == null) return null;
+    final str = value.toString().trim();
+    if (str.isEmpty) return null;
+    // Try full ISO-8601 first (e.g. "2025-06-01T14:30:00.000Z")
+    try {
+      return DateTime.parse(str);
+    } catch (_) {}
+    // Try "HH:MM" or "HH:MM:SS" format (stored by the Node.js backend as
+    // new Date().toTimeString().split(' ')[0].substring(0,5))
+    try {
+      final parts = str.split(':');
+      if (parts.length >= 2) {
+        final h = int.parse(parts[0]);
+        final m = int.parse(parts[1]);
+        final s = parts.length >= 3 ? int.tryParse(parts[2]) ?? 0 : 0;
+        final now = DateTime.now();
+        return DateTime(now.year, now.month, now.day, h, m, s);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Widget _buildCheckedInStatus(AppLocalizations l10n, Map<String, dynamic> attendance) {
-    final checkInTime = attendance['checkInTime'] != null
-        ? DateTime.parse(attendance['checkInTime'])
-        : null;
-    final checkOutTime = attendance['checkOutTime'] != null
-        ? DateTime.parse(attendance['checkOutTime'])
-        : null;
+    // Prefer the full ISO timestamp from geofenceEntry for accuracy; fall back
+    // to the "HH:MM" shorthand stored in checkInTime / checkOutTime.
+    final checkInTime = _parseAttendanceTime(
+          attendance['geofenceEntry']?['timestamp'] ?? attendance['checkInTime']);
+    final checkOutTime = _parseAttendanceTime(
+          attendance['geofenceExit']?['timestamp'] ?? attendance['checkOutTime']);
     final duration = attendance['durationInMinutes'] ?? 0;
 
     return Container(

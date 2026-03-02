@@ -42,6 +42,10 @@ class _GeofenceTaskHandler extends TaskHandler {
   bool _entryMarkedToday = false;
   String? _lastMarkedDateKey; // 'yyyy-MM-dd'
 
+  static const int _kBackendOk        = 0; // success — stop trying
+  static const int _kBackendSoftFail  = 1; // transient error — retry later
+  static const int _kBackendHardBlock = 2; // permanent block — stop today
+
   /// GPS jitter protection: require this many consecutive outside-boundary
   /// readings before we consider the user to have truly exited the geofence.
   /// At a 30-second poll interval this means ~60 s outside before EXIT fires.
@@ -258,13 +262,13 @@ class _GeofenceTaskHandler extends TaskHandler {
 
         final autoMarkExit = prefs.getBool('geofence_auto_mark_exit') ?? true;
         if (autoMarkExit && _entryMarkedToday) {
-          final ok = await _callBackend(
+          final result = await _callBackend(
             prefs: prefs,
             gymId: gymId,
             position: position,
             isEntry: false,
           );
-          if (ok) {
+          if (result == _kBackendOk) {
             await _showLocalNotif(
               id: 3003,
               title: '✅ Gym Exit Recorded',
@@ -305,13 +309,13 @@ class _GeofenceTaskHandler extends TaskHandler {
                 prefs.getBool('geofence_auto_mark_entry') ?? true;
             if (autoMarkEntry) {
               _dwellMarkAttempts++;
-              final ok = await _callBackend(
+              final result = await _callBackend(
                 prefs: prefs,
                 gymId: gymId,
                 position: position,
                 isEntry: true,
               );
-              if (ok) {
+              if (result == _kBackendOk) {
                 _entryMarkedToday = true;
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
@@ -326,17 +330,29 @@ class _GeofenceTaskHandler extends TaskHandler {
                   body:
                       'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout! 💪',
                 );
-              } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
-                // Backend call failed — will retry next tick (30 s) without
-                // resetting the timer. The elapsed will still be >= 300 s
-                // so we immediately retry on next tick.
-                debugPrint('[BGTask] Backend call failed (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry');
-              } else {
-                // Max retries exceeded — push the enter time forward by 30 s
-                // so the next retry window opens after a short pause.
-                debugPrint('[BGTask] Max retry attempts reached — backing off 30 s');
+              } else if (result == _kBackendHardBlock) {
+                // Permanent error (no membership, geofence disabled, mock
+                // location fraud). Mark as done for today so the task stops
+                // cycling and burning battery.
+                debugPrint('[BGTask] Hard-block from backend — stopping for today');
+                _entryMarkedToday = true;
                 _dwellMarkAttempts = 0;
-                _enterTime = DateTime.now().subtract(const Duration(seconds: 270));
+                await _saveDailyState();
+                _updateFgNotif(
+                  title: '⚠️ Attendance Blocked',
+                  text: 'Check membership or gym settings.',
+                );
+              } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
+                // Soft transient failure (GPS, network, operating-hours edge).
+                // Retry on next tick without the aggressive backoff that was
+                // causing the "stuck 30 s / 2 s" notification loop.
+                debugPrint('[BGTask] Soft-fail (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry next tick');
+              } else {
+                // Max soft retries exceeded — back off 60 s (2 ticks) to give
+                // GPS / network time to recover without hammering the backend.
+                debugPrint('[BGTask] Max retries reached — backing off 60 s');
+                _dwellMarkAttempts = 0;
+                _enterTime = DateTime.now().subtract(const Duration(seconds: 240));
                 await _saveDailyState();
               }
             }
@@ -361,7 +377,14 @@ class _GeofenceTaskHandler extends TaskHandler {
   }
 
   // ─── backend call (raw HTTP, no Flutter Provider) ───────────────────────────
-  Future<bool> _callBackend({
+  //
+  // Returns one of the _kBackend* constants:
+  //   _kBackendOk        (0) → request succeeded; mark attendance as done.
+  //   _kBackendSoftFail  (1) → transient failure (GPS, network, operating hours
+  //                            boundary); worth retrying.
+  //   _kBackendHardBlock (2) → permanent server block (no membership, geofence
+  //                            disabled, mock-location fraud); stop for today.
+  Future<int> _callBackend({
     required SharedPreferences prefs,
     required String gymId,
     required Position position,
@@ -373,7 +396,7 @@ class _GeofenceTaskHandler extends TaskHandler {
 
       if (token == null || baseUrl == null) {
         debugPrint('[BGTask] No auth token or base URL — cannot call backend');
-        return false;
+        return _kBackendSoftFail;
       }
 
       final endpoint = isEntry
@@ -411,13 +434,34 @@ class _GeofenceTaskHandler extends TaskHandler {
           });
         } catch (_) {}
 
-        return true;
+        return _kBackendOk;
       }
+
+      // ── Classify non-2xx responses ─────────────────────────────────────────
       debugPrint('[BGTask] Backend ${resp.statusCode}: ${resp.body}');
-      return false;
+      try {
+        final body = (jsonDecode(resp.body) as Map<String, dynamic>);
+        final msg  = (body['message'] as String? ?? '').toLowerCase();
+        // Hard-block: retrying will never help today.
+        const hardBlocks = [
+          'no active membership',
+          'geofencing is disabled',
+          'auto-mark entry is disabled',
+          'auto-mark exit is disabled',
+          'member not found',
+          'mock locations are not allowed',
+        ];
+        if (hardBlocks.any(msg.contains)) {
+          debugPrint('[BGTask] Hard-block: $msg');
+          return _kBackendHardBlock;
+        }
+      } catch (_) {}
+
+      // All other 4xx / 5xx → soft fail (distance check, GPS accuracy, etc.)
+      return _kBackendSoftFail;
     } catch (e) {
       debugPrint('[BGTask] HTTP error: $e');
-      return false;
+      return _kBackendSoftFail;
     }
   }
 
