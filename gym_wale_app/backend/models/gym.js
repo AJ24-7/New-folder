@@ -82,12 +82,32 @@ const gymSchema = new mongoose.Schema({
     color: { type: String, default: '#3a86ff' },
     benefits: [{ type: String }],
     note: { type: String, default: 'Flexible membership options' },
+    // 'single' = one plan with multiple durations; 'multi' = Basic/Standard/Premium tiers
+    planMode: { type: String, enum: ['single', 'multi'], default: 'single' },
     monthlyOptions: [
       {
         months: { type: Number, required: true },
         price: { type: Number, required: true },
         discount: { type: Number, default: 0 },
         isPopular: { type: Boolean, default: false }
+      }
+    ],
+    // Multi-tier plan tiers (used when planMode === 'multi')
+    tiers: [
+      {
+        name: { type: String, required: true },
+        icon: { type: String, default: 'fa-star' },
+        color: { type: String, default: '#3a86ff' },
+        benefits: [{ type: String }],
+        note: { type: String, default: '' },
+        monthlyOptions: [
+          {
+            months: { type: Number, required: true },
+            price: { type: Number, required: true },
+            discount: { type: Number, default: 0 },
+            isPopular: { type: Boolean, default: false }
+          }
+        ]
       }
     ]
   },

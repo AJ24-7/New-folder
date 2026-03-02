@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../config/app_theme.dart';
 import 'register_screen.dart';
@@ -55,12 +57,17 @@ class _LoginScreenState extends State<LoginScreen> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     
     try {
-      // Import google_sign_in at the top of this file:
-      // import 'package:google_sign_in/google_sign_in.dart';
-      
+      // On web, clientId must be set (Google Identity Services reads it).
+      // On Android, serverClientId is needed to receive an idToken for backend verification.
+      // Both use the same Web OAuth 2.0 client (type 3) from google-services.json.
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
-        clientId: '905615420032-7lun3p0t94s3f9sah5a3v5tbhgm4r485.apps.googleusercontent.com',
+        clientId: kIsWeb
+            ? '12577918948-crvmkn4j2dcfpcai33vegoq7f9u7839q.apps.googleusercontent.com'
+            : null,
+        serverClientId: kIsWeb
+            ? null
+            : '12577918948-crvmkn4j2dcfpcai33vegoq7f9u7839q.apps.googleusercontent.com',
       );
       
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
@@ -298,25 +305,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    icon: Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Image.network(
-                        'https://www.google.com/favicon.ico',
-                        width: 20,
-                        height: 20,
-                        errorBuilder: (context, error, stackTrace) {
-                          return const Icon(
-                            Icons.mail,
-                            size: 20,
-                            color: AppTheme.primaryColor,
-                          );
-                        },
-                      ),
+                    icon: const FaIcon(
+                      FontAwesomeIcons.google,
+                      size: 20,
                     ),
                     label: const Text(
                       'Continue with Google',

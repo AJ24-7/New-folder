@@ -18,7 +18,9 @@ import '../../providers/notification_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/gym_service.dart';
 import '../../services/equipment_service.dart';
+import '../../services/member_service.dart';
 import '../../models/dashboard_stats.dart';
+import '../../models/member.dart';
 import '../../models/gym_photo.dart';
 import '../../models/membership_plan.dart';
 import '../../models/gym_activity.dart';
@@ -49,7 +51,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final ApiService _apiService = ApiService();
   final GymService _gymService = GymService();
   final EquipmentService _equipmentService = EquipmentService();
+  final MemberService _memberService = MemberService();
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
+  final _dateFormat = DateFormat('dd MMM yyyy');
   
   DashboardStats? _stats;
   List<GymPhoto> _gymPhotos = [];
@@ -59,6 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<GymActivity> _gymActivities = [];
   List<TrialBooking> _trialBookings = [];
   List<Equipment> _equipmentGallery = [];
+  List<Member> _recentMembers = [];
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -141,6 +146,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       
       // Load equipment gallery independently (non-critical)
       _loadEquipmentGallery();
+      
+      // Load recent members independently (non-critical)
+      _loadRecentMembers();
       
       // TODO: Load additional dashboard data (implement these methods in ApiService)
       // _newMembers = await _apiService.getNewMembers(limit: 5);
@@ -299,6 +307,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (mounted) {
         setState(() {
           _equipmentGallery = [];
+        });
+      }
+    }
+  }
+
+  Future<void> _loadRecentMembers() async {
+    try {
+      final members = await _memberService.getMembers();
+      // Sort by joinDate descending, take latest 5
+      members.sort((a, b) => b.joinDate.compareTo(a.joinDate));
+      final recent = members.take(5).toList();
+      if (mounted) {
+        setState(() {
+          _recentMembers = recent;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading recent members: $e');
+      if (mounted) {
+        setState(() {
+          _recentMembers = [];
         });
       }
     }
@@ -1270,7 +1299,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (_membershipPlan != null && _membershipPlan!.monthlyOptions.isNotEmpty)
+                if (_membershipPlan != null && (_membershipPlan!.monthlyOptions.isNotEmpty || _membershipPlan!.tiers.isNotEmpty))
                   isMobile
                       ? IconButton(
                           onPressed: _showEditMembershipPlansDialog,
@@ -1285,7 +1314,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            if (_membershipPlan == null || _membershipPlan!.monthlyOptions.isEmpty)
+            if (_membershipPlan == null || (_membershipPlan!.monthlyOptions.isEmpty && _membershipPlan!.tiers.isEmpty))
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(40),
@@ -1313,156 +1342,190 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               )
             else
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Color(int.parse(_membershipPlan!.color.replaceFirst('#', '0xFF'))).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: FaIcon(
-                          _getIconData(_membershipPlan!.icon),
-                          color: Color(int.parse(_membershipPlan!.color.replaceFirst('#', '0xFF'))),
-                          size: 20,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _membershipPlan!.name,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (_membershipPlan!.note.isNotEmpty) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                _membershipPlan!.note,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: _membershipPlan!.monthlyOptions.map((option) {
-                      final Color planColor = Color(int.parse(_membershipPlan!.color.replaceFirst('#', '0xFF')));
-                      return SizedBox(
-                        width: 180,
-                        child: Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      '${option.months} months',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    if (option.isPopular) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: planColor.withValues(alpha: 0.15),
-                                          borderRadius: BorderRadius.circular(999),
-                                        ),
-                                        child: const Text(
-                                          'POPULAR',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  _currencyFormat.format(option.finalPrice),
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                ),
-                                if (option.discount > 0) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${option.discount}% OFF • ${_currencyFormat.format(option.price)}',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.successColor,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  if (_membershipPlan!.benefits.isNotEmpty) ...[
-                    const SizedBox(height: 20),
-                    const Text(
-                      'Benefits Included',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _membershipPlan!.benefits
-                          .map(
-                            (benefit) => Chip(
-                              avatar: const Icon(
-                                Icons.check_circle,
-                                size: 14,
-                                color: AppTheme.successColor,
-                              ),
-                              label: Text(benefit),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ],
-                ],
-              ),
+              _membershipPlan!.isMultiTier
+                  ? _buildMultiTierDisplay()
+                  : _buildSingleTierDisplay(),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildSingleTierDisplay() {
+    final plan = _membershipPlan!;
+    Color planColor;
+    try {
+      planColor = Color(int.parse(plan.color.replaceFirst('#', '0xFF')));
+    } catch (_) {
+      planColor = AppTheme.primaryColor;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: planColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: FaIcon(_getIconData(plan.icon), color: planColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(plan.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            if (plan.note.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(plan.note, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+            ],
+          ])),
+        ]),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: plan.monthlyOptions.map((option) => SizedBox(
+            width: 180,
+            child: Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Text('${option.months} month${option.months > 1 ? 's' : ''}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                    if (option.isPopular) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: planColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
+                        child: const Text('POPULAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                      ),
+                    ],
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(_currencyFormat.format(option.finalPrice), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+                  if (option.discount > 0) ...[
+                    const SizedBox(height: 2),
+                    Text('${option.discount}% OFF • ${_currencyFormat.format(option.price)}', style: const TextStyle(fontSize: 11, color: AppTheme.successColor)),
+                  ],
+                ]),
+              ),
+            ),
+          )).toList(),
+        ),
+        if (plan.benefits.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          const Text('Benefits Included', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8, runSpacing: 8,
+            children: plan.benefits.map((b) => Chip(
+              avatar: const Icon(Icons.check_circle, size: 14, color: AppTheme.successColor),
+              label: Text(b),
+            )).toList(),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMultiTierDisplay() {
+    final plan = _membershipPlan!;
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
+    final isTablet = size.width > 600 && size.width <= 900;
+
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const FaIcon(FontAwesomeIcons.layerGroup, size: 14, color: AppTheme.primaryColor),
+        const SizedBox(width: 8),
+        Text('${plan.tiers.length} Tier Plans', style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
+      ]),
+      const SizedBox(height: 16),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: plan.tiers.map((tier) {
+            Color tierColor;
+            try { tierColor = Color(int.parse(tier.color.replaceFirst('#', '0xFF'))); } catch (_) { tierColor = AppTheme.primaryColor; }
+
+            final popularOpt = tier.monthlyOptions.isNotEmpty
+                ? (tier.monthlyOptions.firstWhere((o) => o.isPopular, orElse: () => tier.monthlyOptions.first))
+                : null;
+
+            return Container(
+              width: isDesktop ? 220 : (isTablet ? 200 : 180),
+              margin: const EdgeInsets.only(right: 16),
+              child: Card(
+                elevation: 3,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: tierColor.withValues(alpha: 0.35), width: 1.5),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(color: tierColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                        child: FaIcon(_getIconData(tier.icon), color: tierColor, size: 16),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(tier.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: tierColor), overflow: TextOverflow.ellipsis)),
+                    ]),
+                    if (tier.note.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(tier.note, style: TextStyle(fontSize: 11, color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    ],
+                    const SizedBox(height: 12),
+                    if (popularOpt != null) ...[
+                      Text('From', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
+                      const SizedBox(height: 2),
+                      Text(_currencyFormat.format(popularOpt.finalPrice), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: tierColor)),
+                      Text('/ ${popularOpt.durationLabel}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                      const Divider(height: 14),
+                    ],
+                    ...tier.monthlyOptions.map((opt) => Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                        Text(opt.durationLabel, style: const TextStyle(fontSize: 12)),
+                        Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (opt.isPopular)
+                            Container(
+                              margin: const EdgeInsets.only(right: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(color: tierColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                              child: Text('★', style: TextStyle(fontSize: 9, color: tierColor)),
+                            ),
+                          Text(_currencyFormat.format(opt.finalPrice), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tierColor)),
+                        ]),
+                      ]),
+                    )),
+                    if (tier.benefits.isNotEmpty) ...[
+                      const Divider(height: 14),
+                      ...tier.benefits.take(4).map((b) => Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: Row(children: [
+                          Icon(Icons.check_circle, size: 12, color: tierColor),
+                          const SizedBox(width: 6),
+                          Expanded(child: Text(b, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
+                        ]),
+                      )),
+                      if (tier.benefits.length > 4)
+                        Text('+${tier.benefits.length - 4} more', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+                    ],
+                  ]),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    ]);
   }
 
   IconData _getIconData(String iconName) {
@@ -1479,21 +1542,124 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   Widget _buildNewMembersCard(AppLocalizations l10n) {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                FaIcon(FontAwesomeIcons.users, color: AppTheme.primaryColor, size: 18),
-                SizedBox(width: 12),
-                Text('New Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const FaIcon(FontAwesomeIcons.users, color: AppTheme.primaryColor, size: 18),
+                const SizedBox(width: 12),
+                const Text('New Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/members'),
+                  icon: const Icon(Icons.arrow_forward, size: 16),
+                  label: const Text('View All'),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.primaryColor),
+                ),
               ],
             ),
-            const SizedBox(height: 20),
-            const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No new members'))),
+            const SizedBox(height: 16),
+            if (_recentMembers.isEmpty)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      Icon(Icons.people_outline, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      Text('No members yet', style: TextStyle(color: Colors.grey.shade600)),
+                      const SizedBox(height: 12),
+                      ElevatedButton.icon(
+                        onPressed: _showAddMemberDialog,
+                        icon: const FaIcon(FontAwesomeIcons.userPlus, size: 14),
+                        label: const Text('Add First Member'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _recentMembers.length,
+                separatorBuilder: (_, __) => const Divider(height: 16),
+                itemBuilder: (context, index) {
+                  final member = _recentMembers[index];
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      child: member.profileImage != null && member.profileImage!.isNotEmpty
+                          ? ClipOval(
+                              child: Image.network(
+                                member.profileImage!,
+                                width: 44,
+                                height: 44,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Text(
+                                  member.memberName[0].toUpperCase(),
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : Text(
+                              member.memberName[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                    ),
+                    title: Text(
+                      member.memberName,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    ),
+                    subtitle: Text(
+                      '${member.planSelected} • ${member.monthlyPlan}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          _currencyFormat.format(member.paymentAmount),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.successColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                        if (member.membershipValidUntil != null)
+                          Text(
+                            'Until ${_dateFormat.format(member.membershipValidUntil!)}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: member.isExpired ? AppTheme.errorColor : Colors.grey.shade600,
+                            ),
+                          ),
+                      ],
+                    ),
+                    onTap: () => Navigator.pushReplacementNamed(context, '/members'),
+                  );
+                },
+              ),
           ],
         ),
       ),
@@ -2183,105 +2349,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   // Quick Action: Add Member
   void _showAddMemberDialog() {
-    final nameController = TextEditingController();
-    final emailController = TextEditingController();
-    final phoneController = TextEditingController();
-    
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          constraints: const BoxConstraints(maxWidth: 500),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const FaIcon(FontAwesomeIcons.userPlus, color: AppTheme.primaryColor),
-                  const SizedBox(width: 12),
-                  const Text('Add New Member', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Full Name',
-                  prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  prefixIcon: Icon(Icons.email),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  prefixIcon: Icon(Icons.phone),
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (nameController.text.isEmpty || emailController.text.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please fill in all required fields')),
-                        );
-                        return;
-                      }
-                      
-                      final success = await _apiService.addMember({
-                        'name': nameController.text,
-                        'email': emailController.text,
-                        'phone': phoneController.text,
-                      });
-                      
-                      Navigator.pop(context);
-                      
-                      if (success) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Member added successfully!'), backgroundColor: AppTheme.successColor),
-                        );
-                        _loadDashboardData();
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Failed to add member'), backgroundColor: AppTheme.errorColor),
-                        );
-                      }
-                    },
-                    child: const Text('Add Member'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+      builder: (context) => _DashboardAddMemberDialog(
+        membershipPlan: _membershipPlan,
+        gymActivities: _gymActivities,
+        onMemberAdded: () {
+          _loadRecentMembers();
+          _loadDashboardData();
+        },
       ),
     );
   }
@@ -3380,428 +3456,431 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Membership Plan Create/Edit Operation
   Future<void> _showEditMembershipPlansDialog() async {
-    final bool isCreating = _membershipPlan == null || _membershipPlan!.monthlyOptions.isEmpty;
-    
+    final bool isCreating = _membershipPlan == null || _membershipPlan!.monthlyOptions.isEmpty && _membershipPlan!.tiers.isEmpty;
+
+    // ── Single-mode fields ──────────────────────────────────
     final nameController = TextEditingController(text: isCreating ? 'Standard' : _membershipPlan!.name);
     final noteController = TextEditingController(text: isCreating ? '' : _membershipPlan!.note);
     String selectedIcon = isCreating ? 'fa-star' : _membershipPlan!.icon;
     String selectedColor = isCreating ? '#3a86ff' : _membershipPlan!.color;
     List<String> selectedBenefits = isCreating ? [] : List.from(_membershipPlan!.benefits);
-    List<MonthlyOption> monthOptions = isCreating 
-      ? [MonthlyOption(months: 1, price: 1500), MonthlyOption(months: 3, price: 4000), MonthlyOption(months: 6, price: 7500)]
-      : _membershipPlan!.monthlyOptions.map((o) => MonthlyOption(
-          months: o.months,
-          price: o.price,
-          discount: o.discount,
-          isPopular: o.isPopular,
-        )).toList();
+    List<MonthlyOption> monthOptions = isCreating
+        ? [MonthlyOption(months: 1, price: 1500), MonthlyOption(months: 3, price: 4000), MonthlyOption(months: 6, price: 7500)]
+        : _membershipPlan!.monthlyOptions.map((o) => MonthlyOption(months: o.months, price: o.price, discount: o.discount, isPopular: o.isPopular)).toList();
+
+    // ── Plan-mode toggle ────────────────────────────────────
+    String planMode = isCreating ? 'single' : _membershipPlan!.planMode;
+
+    // ── Multi-tier default tiers ─────────────────────────────
+    List<PlanTier> tiers = (isCreating || _membershipPlan!.tiers.isEmpty)
+        ? [
+            PlanTier(name: 'Basic',    icon: 'fa-leaf',  color: '#38b000', note: 'Essential access', benefits: ['Gym Access', 'Locker Facility'],            monthlyOptions: [MonthlyOption(months: 1, price: 999), MonthlyOption(months: 3, price: 2700), MonthlyOption(months: 6, price: 5000)]),
+            PlanTier(name: 'Standard', icon: 'fa-star',  color: '#3a86ff', note: 'Most popular',      benefits: ['Gym Access', 'Group Classes', 'Locker Facility'], monthlyOptions: [MonthlyOption(months: 1, price: 1500, isPopular: true), MonthlyOption(months: 3, price: 4000), MonthlyOption(months: 6, price: 7500)]),
+            PlanTier(name: 'Premium',  icon: 'fa-crown', color: '#8338ec', note: 'Full access',       benefits: ['Gym Access', 'Group Classes', 'Personal Trainer', 'Diet Plan', 'Locker Facility'], monthlyOptions: [MonthlyOption(months: 1, price: 2500), MonthlyOption(months: 3, price: 7000), MonthlyOption(months: 6, price: 13000)]),
+          ]
+        : _membershipPlan!.tiers.map((t) => PlanTier(name: t.name, icon: t.icon, color: t.color, note: t.note, benefits: List.from(t.benefits), monthlyOptions: t.monthlyOptions.map((o) => MonthlyOption(months: o.months, price: o.price, discount: o.discount, isPopular: o.isPopular)).toList())).toList();
 
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
-
-    // Capture the parent context before showing the dialog
     final parentContext = context;
+
+    // ── Helper Widgets ──────────────────────────────────────
+    List<DropdownMenuItem<String>> iconItems() => const [
+      DropdownMenuItem(value: 'fa-star',  child: Row(children: [FaIcon(FontAwesomeIcons.star,  size: 14), SizedBox(width: 8), Text('Star')])),
+      DropdownMenuItem(value: 'fa-gem',   child: Row(children: [FaIcon(FontAwesomeIcons.gem,   size: 14), SizedBox(width: 8), Text('Gem')])),
+      DropdownMenuItem(value: 'fa-crown', child: Row(children: [FaIcon(FontAwesomeIcons.crown, size: 14), SizedBox(width: 8), Text('Crown')])),
+      DropdownMenuItem(value: 'fa-leaf',  child: Row(children: [FaIcon(FontAwesomeIcons.leaf,  size: 14), SizedBox(width: 8), Text('Leaf')])),
+      DropdownMenuItem(value: 'fa-fire',  child: Row(children: [FaIcon(FontAwesomeIcons.fire,  size: 14), SizedBox(width: 8), Text('Fire')])),
+      DropdownMenuItem(value: 'fa-bolt',  child: Row(children: [FaIcon(FontAwesomeIcons.bolt,  size: 14), SizedBox(width: 8), Text('Bolt')])),
+    ];
+
+    List<DropdownMenuItem<String>> colorItems() => [
+      DropdownMenuItem(value: '#3a86ff', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF3a86ff)), const SizedBox(width: 8), const Text('Blue')])),
+      DropdownMenuItem(value: '#8338ec', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF8338ec)), const SizedBox(width: 8), const Text('Purple')])),
+      DropdownMenuItem(value: '#38b000', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF38b000)), const SizedBox(width: 8), const Text('Green')])),
+      DropdownMenuItem(value: '#ff006e', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFFff006e)), const SizedBox(width: 8), const Text('Pink')])),
+      DropdownMenuItem(value: '#fb5607', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFFfb5607)), const SizedBox(width: 8), const Text('Orange')])),
+    ];
 
     await showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: Row(
-            children: [
-              const FaIcon(FontAwesomeIcons.crown, size: 20),
-              const SizedBox(width: 12),
-              Flexible(
-                child: Text(
-                  isCreating ? 'Create Membership Plan' : 'Edit Membership Plan',
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          content: SizedBox(
-            width: isMobile ? size.width * 0.9 : (isTablet ? 600 : 900),
-            height: isMobile ? size.height * 0.6 : 600,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Plan Name and Icon
-                  if (isMobile) ...[
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Plan Name',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: selectedIcon,
-                            decoration: const InputDecoration(
-                              labelText: 'Icon',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: 'fa-star', child: Row(children: [FaIcon(FontAwesomeIcons.star, size: 16), SizedBox(width: 8), Text('Star')])),
-                              DropdownMenuItem(value: 'fa-gem', child: Row(children: [FaIcon(FontAwesomeIcons.gem, size: 16), SizedBox(width: 8), Text('Gem')])),
-                              DropdownMenuItem(value: 'fa-crown', child: Row(children: [FaIcon(FontAwesomeIcons.crown, size: 16), SizedBox(width: 8), Text('Crown')])),
-                              DropdownMenuItem(value: 'fa-leaf', child: Row(children: [FaIcon(FontAwesomeIcons.leaf, size: 16), SizedBox(width: 8), Text('Leaf')])),
-                              DropdownMenuItem(value: 'fa-fire', child: Row(children: [FaIcon(FontAwesomeIcons.fire, size: 16), SizedBox(width: 8), Text('Fire')])),
-                              DropdownMenuItem(value: 'fa-bolt', child: Row(children: [FaIcon(FontAwesomeIcons.bolt, size: 16), SizedBox(width: 8), Text('Bolt')])),
-                            ],
-                            onChanged: (value) => setState(() => selectedIcon = value!),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: selectedColor,
-                            decoration: const InputDecoration(
-                              labelText: 'Color',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: [
-                              DropdownMenuItem(value: '#3a86ff', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF3a86ff)), SizedBox(width: 8), Text('Blue')])),
-                              DropdownMenuItem(value: '#8338ec', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF8338ec)), SizedBox(width: 8), Text('Purple')])),
-                              DropdownMenuItem(value: '#38b000', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF38b000)), SizedBox(width: 8), Text('Green')])),
-                              DropdownMenuItem(value: '#ff006e', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFFff006e)), SizedBox(width: 8), Text('Pink')])),
-                              DropdownMenuItem(value: '#fb5607', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFFfb5607)), SizedBox(width: 8), Text('Orange')])),
-                            ],
-                            onChanged: (value) => setState(() => selectedColor = value!),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 2,
-                          child: TextField(
-                            controller: nameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Plan Name',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: selectedIcon,
-                            decoration: const InputDecoration(
-                              labelText: 'Icon',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: 'fa-star', child: Row(children: [FaIcon(FontAwesomeIcons.star, size: 16), SizedBox(width: 8), Text('Star')])),
-                              DropdownMenuItem(value: 'fa-gem', child: Row(children: [FaIcon(FontAwesomeIcons.gem, size: 16), SizedBox(width: 8), Text('Gem')])),
-                              DropdownMenuItem(value: 'fa-crown', child: Row(children: [FaIcon(FontAwesomeIcons.crown, size: 16), SizedBox(width: 8), Text('Crown')])),
-                              DropdownMenuItem(value: 'fa-leaf', child: Row(children: [FaIcon(FontAwesomeIcons.leaf, size: 16), SizedBox(width: 8), Text('Leaf')])),
-                              DropdownMenuItem(value: 'fa-fire', child: Row(children: [FaIcon(FontAwesomeIcons.fire, size: 16), SizedBox(width: 8), Text('Fire')])),
-                              DropdownMenuItem(value: 'fa-bolt', child: Row(children: [FaIcon(FontAwesomeIcons.bolt, size: 16), SizedBox(width: 8), Text('Bolt')])),
-                            ],
-                            onChanged: (value) => setState(() => selectedIcon = value!),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: selectedColor,
-                            decoration: const InputDecoration(
-                              labelText: 'Color',
-                              border: OutlineInputBorder(),
-                            ),
-                            items: [
-                              DropdownMenuItem(value: '#3a86ff', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF3a86ff)), SizedBox(width: 8), Text('Blue')])),
-                              DropdownMenuItem(value: '#8338ec', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF8338ec)), SizedBox(width: 8), Text('Purple')])),
-                              DropdownMenuItem(value: '#38b000', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFF38b000)), SizedBox(width: 8), Text('Green')])),
-                              DropdownMenuItem(value: '#ff006e', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFFff006e)), SizedBox(width: 8), Text('Pink')])),
-                              DropdownMenuItem(value: '#fb5607', child: Row(children: [Container(width: 20, height: 20, color: Color(0xFFfb5607)), SizedBox(width: 8), Text('Orange')])),
-                            ],
-                            onChanged: (value) => setState(() => selectedColor = value!),
-                          ),
-                        ),
-                      ],
-                    ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: noteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Plan Note',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  // Month Options
-                  const Text('Monthly Pricing Options:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ...monthOptions.asMap().entries.map((entry) {
-                    final idx = entry.key;
-                    final opt = entry.value;
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: isMobile
-                            ? Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: TextEditingController(text: opt.months.toString()),
-                                          decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder(), isDense: true),
-                                          keyboardType: TextInputType.number,
-                                          onChanged: (v) {
-                                            monthOptions[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months);
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: TextField(
-                                          controller: TextEditingController(text: opt.price.toString()),
-                                          decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true),
-                                          keyboardType: TextInputType.number,
-                                          onChanged: (v) {
-                                            monthOptions[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price);
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: TextField(
-                                          controller: TextEditingController(text: opt.discount.toString()),
-                                          decoration: const InputDecoration(labelText: 'Discount %', border: OutlineInputBorder(), isDense: true),
-                                          keyboardType: TextInputType.number,
-                                          onChanged: (v) {
-                                            monthOptions[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount);
-                                          },
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Checkbox(
-                                                  value: opt.isPopular,
-                                                  onChanged: (v) {
-                                                    setState(() {
-                                                      monthOptions = monthOptions.map((o) => o.copyWith(isPopular: false)).toList();
-                                                      monthOptions[idx] = monthOptions[idx].copyWith(isPopular: v ?? false);
-                                                    });
-                                                  },
-                                                ),
-                                                const Text('Popular', style: TextStyle(fontSize: 12)),
-                                              ],
-                                            ),
-                                            IconButton(
-                                              icon: const Icon(Icons.delete, color: Colors.red, size: 20),
-                                              onPressed: monthOptions.length > 1 ? () {
-                                                setState(() => monthOptions.removeAt(idx));
-                                              } : null,
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              )
-                            : Row(
-                          children: [
-                            SizedBox(
-                              width: 80,
-                              child: TextField(
-                                controller: TextEditingController(text: opt.months.toString()),
-                                decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder()),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) {
-                                  monthOptions[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: TextField(
-                                controller: TextEditingController(text: opt.price.toString()),
-                                decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) {
-                                  monthOptions[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 100,
-                              child: TextField(
-                                controller: TextEditingController(text: opt.discount.toString()),
-                                decoration: const InputDecoration(labelText: 'Discount %', border: OutlineInputBorder()),
-                                keyboardType: TextInputType.number,
-                                onChanged: (v) {
-                                  monthOptions[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount);
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Column(
-                              children: [
-                                const Text('Popular', style: TextStyle(fontSize: 11)),
-                                Checkbox(
-                                  value: opt.isPopular,
-                                  onChanged: (v) {
-                                    setState(() {
-                                      // Set all to false first
-                                      monthOptions = monthOptions.map((o) => o.copyWith(isPopular: false)).toList();
-                                      // Set this one to true
-                                      monthOptions[idx] = monthOptions[idx].copyWith(isPopular: v ?? false);
-                                    });
-                                  },
+        builder: (context, setState) {
+
+          // ── Monthly-option row builder (shared) ──────────────
+          Widget buildMonthRow(List<MonthlyOption> opts, void Function(List<MonthlyOption>) onUpdate) {
+            return Column(
+              children: [
+                ...opts.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final opt = entry.value;
+                  // Local controllers kept stable per index (recreated on rebuild but values are set)
+                  final mCtrl = TextEditingController(text: opt.months.toString());
+                  final pCtrl = TextEditingController(text: opt.price.toStringAsFixed(0));
+                  final dCtrl = TextEditingController(text: opt.discount.toString());
+                  mCtrl.selection = TextSelection.collapsed(offset: mCtrl.text.length);
+                  pCtrl.selection = TextSelection.collapsed(offset: pCtrl.text.length);
+                  dCtrl.selection = TextSelection.collapsed(offset: dCtrl.text.length);
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: isMobile
+                          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Row(children: [
+                                Expanded(
+                                  child: TextField(controller: mCtrl, decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
+                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months); onUpdate(updated); }),
                                 ),
-                              ],
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete, color: Colors.red),
-                              onPressed: monthOptions.length > 1 ? () {
-                                setState(() => monthOptions.removeAt(idx));
-                              } : null,
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
+                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price); onUpdate(updated); }),
+                                ),
+                              ]),
+                              const SizedBox(height: 8),
+                              Row(children: [
+                                Expanded(
+                                  child: TextField(controller: dCtrl, decoration: const InputDecoration(labelText: 'Discount %', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
+                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount); onUpdate(updated); }),
+                                ),
+                                const SizedBox(width: 8),
+                                Row(mainAxisSize: MainAxisSize.min, children: [
+                                  Checkbox(value: opt.isPopular, onChanged: (v) {
+                                    setState(() {
+                                      final updated = opts.map((o) => o.copyWith(isPopular: false)).toList();
+                                      updated[idx] = updated[idx].copyWith(isPopular: v ?? false);
+                                      onUpdate(updated);
+                                    });
+                                  }),
+                                  const Text('Popular', style: TextStyle(fontSize: 12)),
+                                ]),
+                                IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 18), onPressed: opts.length > 1 ? () { setState(() { final updated = List<MonthlyOption>.from(opts)..removeAt(idx); onUpdate(updated); }); } : null),
+                              ]),
+                            ])
+                          : Row(children: [
+                              SizedBox(width: 70, child: TextField(controller: mCtrl, decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder()), keyboardType: TextInputType.number,
+                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months); onUpdate(updated); })),
+                              const SizedBox(width: 8),
+                              Expanded(child: TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()), keyboardType: TextInputType.number,
+                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price); onUpdate(updated); })),
+                              const SizedBox(width: 8),
+                              SizedBox(width: 90, child: TextField(controller: dCtrl, decoration: const InputDecoration(labelText: 'Disc %', border: OutlineInputBorder()), keyboardType: TextInputType.number,
+                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount); onUpdate(updated); })),
+                              const SizedBox(width: 4),
+                              Column(children: [
+                                const Text('Popular', style: TextStyle(fontSize: 10)),
+                                Checkbox(value: opt.isPopular, onChanged: (v) {
+                                  setState(() {
+                                    final updated = opts.map((o) => o.copyWith(isPopular: false)).toList();
+                                    updated[idx] = updated[idx].copyWith(isPopular: v ?? false);
+                                    onUpdate(updated);
+                                  });
+                                }),
+                              ]),
+                              IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 18), onPressed: opts.length > 1 ? () { setState(() { final updated = List<MonthlyOption>.from(opts)..removeAt(idx); onUpdate(updated); }); } : null),
+                            ]),
+                    ),
+                  );
+                }),
+                OutlinedButton.icon(
+                  onPressed: () => setState(() { final updated = List<MonthlyOption>.from(opts)..add(MonthlyOption(months: 1, price: 1500)); onUpdate(updated); }),
+                  icon: const Icon(Icons.add, size: 16), label: const Text('Add Option'),
+                ),
+              ],
+            );
+          }
+
+          // ── Benefits chip builder (shared) ────────────────────
+          Widget buildBenefitsChips(List<String> selected, void Function(List<String>) onUpdate) {
+            return Wrap(
+              spacing: 8, runSpacing: 8,
+              children: PredefinedBenefits.all.map((benefit) {
+                final isSel = selected.contains(benefit);
+                return FilterChip(
+                  label: Text(benefit, style: const TextStyle(fontSize: 12)),
+                  selected: isSel,
+                  onSelected: (v) => setState(() {
+                    final updated = List<String>.from(selected);
+                    if (v) updated.add(benefit); else updated.remove(benefit);
+                    onUpdate(updated);
                   }),
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      setState(() {
-                        monthOptions.add(MonthlyOption(months: 1, price: 1500));
-                      });
-                    },
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Month Option'),
+                  selectedColor: AppTheme.primaryColor.withValues(alpha: 0.25),
+                );
+              }).toList(),
+            );
+          }
+
+          // ── Single tier editor ─────────────────────────────────
+          Widget buildSingleEditor() {
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              isMobile
+                  ? Column(children: [
+                      TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Plan Name', border: OutlineInputBorder())),
+                      const SizedBox(height: 10),
+                      Row(children: [
+                        Expanded(child: DropdownButtonFormField<String>(initialValue: selectedIcon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder()), items: iconItems(), onChanged: (v) => setState(() => selectedIcon = v!))),
+                        const SizedBox(width: 8),
+                        Expanded(child: DropdownButtonFormField<String>(initialValue: selectedColor, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder()), items: colorItems(), onChanged: (v) => setState(() => selectedColor = v!))),
+                      ]),
+                    ])
+                  : Row(children: [
+                      Expanded(flex: 2, child: TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Plan Name', border: OutlineInputBorder()))),
+                      const SizedBox(width: 10),
+                      Expanded(child: DropdownButtonFormField<String>(initialValue: selectedIcon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder()), items: iconItems(), onChanged: (v) => setState(() => selectedIcon = v!))),
+                      const SizedBox(width: 10),
+                      Expanded(child: DropdownButtonFormField<String>(initialValue: selectedColor, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder()), items: colorItems(), onChanged: (v) => setState(() => selectedColor = v!))),
+                    ]),
+              const SizedBox(height: 12),
+              TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Plan Note (optional)', border: OutlineInputBorder())),
+              const SizedBox(height: 20),
+              const Text('Pricing Options:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              buildMonthRow(monthOptions, (updated) => setState(() => monthOptions = updated)),
+              const SizedBox(height: 20),
+              const Text('Benefits:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 10),
+              buildBenefitsChips(selectedBenefits, (updated) => setState(() => selectedBenefits = updated)),
+            ]);
+          }
+
+          // ── Multi-tier editor ──────────────────────────────────
+          Widget buildMultiEditor() {
+            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              // Tier cards
+              ...tiers.asMap().entries.map((entry) {
+                final tIdx = entry.key;
+                final tier = entry.value;
+                final nameCtrl = TextEditingController(text: tier.name);
+                final noteCtrl = TextEditingController(text: tier.note);
+                nameCtrl.selection = TextSelection.collapsed(offset: nameCtrl.text.length);
+                noteCtrl.selection = TextSelection.collapsed(offset: noteCtrl.text.length);
+                final tierColor = (() { try { return Color(int.parse(tier.color.replaceFirst('#', '0xFF'))); } catch (_) { return AppTheme.primaryColor; } })();
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: tierColor.withValues(alpha: 0.4), width: 1.5),
+                  ),
+                  child: ExpansionTile(
+                    initiallyExpanded: tIdx == 0,
+                    leading: CircleAvatar(
+                      backgroundColor: tierColor.withValues(alpha: 0.15),
+                      child: FaIcon(_getIconData(tier.icon), color: tierColor, size: 16),
+                    ),
+                    title: Text(tier.name.isEmpty ? 'Tier ${tIdx + 1}' : tier.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    subtitle: tier.note.isNotEmpty ? Text(tier.note, style: const TextStyle(fontSize: 12)) : null,
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      if (tiers.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                          onPressed: () => setState(() => tiers.removeAt(tIdx)),
+                          tooltip: 'Remove tier',
+                        ),
+                      const Icon(Icons.expand_more),
+                    ]),
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          // Name / Icon / Color row
+                          isMobile
+                              ? Column(children: [
+                                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Tier Name', border: OutlineInputBorder(), isDense: true),
+                                    onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(name: v))),
+                                  const SizedBox(height: 8),
+                                  Row(children: [
+                                    Expanded(child: DropdownButtonFormField<String>(initialValue: tier.icon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder(), isDense: true), items: iconItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(icon: v!)))),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: DropdownButtonFormField<String>(initialValue: tier.color, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder(), isDense: true), items: colorItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(color: v!)))),
+                                  ]),
+                                ])
+                              : Row(children: [
+                                  Expanded(flex: 2, child: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Tier Name', border: OutlineInputBorder(), isDense: true),
+                                    onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(name: v)))),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: DropdownButtonFormField<String>(initialValue: tier.icon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder(), isDense: true), items: iconItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(icon: v!)))),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: DropdownButtonFormField<String>(initialValue: tier.color, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder(), isDense: true), items: colorItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(color: v!)))),
+                                ]),
+                          const SizedBox(height: 8),
+                          TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)', border: OutlineInputBorder(), isDense: true),
+                            onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(note: v))),
+                          const SizedBox(height: 14),
+                          const Text('Pricing Options:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          buildMonthRow(tier.monthlyOptions, (updated) => setState(() => tiers[tIdx] = tier.copyWith(monthlyOptions: updated))),
+                          const SizedBox(height: 14),
+                          const Text('Included Benefits:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          buildBenefitsChips(tier.benefits, (updated) => setState(() => tiers[tIdx] = tier.copyWith(benefits: updated))),
+                        ]),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+              // Add tier button
+              if (tiers.length < 5)
+                OutlinedButton.icon(
+                  onPressed: () => setState(() => tiers.add(PlanTier(
+                    name: 'Tier ${tiers.length + 1}',
+                    icon: 'fa-star', color: '#3a86ff', note: '',
+                    benefits: [], monthlyOptions: [MonthlyOption(months: 1, price: 1500)],
+                  ))),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Tier'),
+                ),
+            ]);
+          }
+
+          return AlertDialog(
+            title: Row(children: [
+              const FaIcon(FontAwesomeIcons.crown, size: 18, color: Color(0xFFFFBE0B)),
+              const SizedBox(width: 10),
+              Flexible(child: Text(isCreating ? 'Create Membership Plan' : 'Edit Membership Plan', overflow: TextOverflow.ellipsis)),
+            ]),
+            content: SizedBox(
+              width: isMobile ? size.width * 0.95 : (isTablet ? 620 : 900),
+              height: isMobile ? size.height * 0.75 : 640,
+              child: SingleChildScrollView(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // ── Plan Mode Toggle ─────────────────────────────
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.all(4),
+                    child: Row(children: [
+                      Expanded(child: GestureDetector(
+                        onTap: () => setState(() => planMode = 'single'),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: planMode == 'single' ? AppTheme.primaryColor : Colors.transparent,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            FaIcon(FontAwesomeIcons.layerGroup, size: 14, color: planMode == 'single' ? Colors.white : Colors.grey),
+                            const SizedBox(width: 8),
+                            Text('Single Plan', style: TextStyle(fontWeight: FontWeight.w600, color: planMode == 'single' ? Colors.white : Colors.grey, fontSize: 13)),
+                          ]),
+                        ),
+                      )),
+                      Expanded(child: GestureDetector(
+                        onTap: () => setState(() => planMode = 'multi'),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: planMode == 'multi' ? AppTheme.primaryColor : Colors.transparent,
+                            borderRadius: BorderRadius.circular(9),
+                          ),
+                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                            FaIcon(FontAwesomeIcons.tableList, size: 14, color: planMode == 'multi' ? Colors.white : Colors.grey),
+                            const SizedBox(width: 8),
+                            Text('Multi-Tier', style: TextStyle(fontWeight: FontWeight.w600, color: planMode == 'multi' ? Colors.white : Colors.grey, fontSize: 13)),
+                          ]),
+                        ),
+                      )),
+                    ]),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    planMode == 'single'
+                        ? 'One plan with multiple duration options (e.g., 1 month / 3 months / 6 months)'
+                        : 'Multiple tier plans (e.g., Basic / Standard / Premium), each with own pricing',
+                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                   ),
                   const SizedBox(height: 20),
-                  // Benefits
-                  const Text('Benefits:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: PredefinedBenefits.all.map((benefit) {
-                      final isSelected = selectedBenefits.contains(benefit);
-                      return FilterChip(
-                        label: Text(benefit),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          setState(() {
-                            if (selected) {
-                              selectedBenefits.add(benefit);
-                            } else {
-                              selectedBenefits.remove(benefit);
-                            }
-                          });
-                        },
-                        selectedColor: AppTheme.primaryColor.withValues(alpha: 0.3),
-                      );
-                    }).toList(),
-                  ),
-                ],
+
+                  // ── Mode-specific editor ─────────────────────────
+                  if (planMode == 'single') buildSingleEditor() else buildMultiEditor(),
+                ]),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                // Validate inputs
-                if (nameController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please enter a plan name')),
-                  );
-                  return;
-                }
-                if (monthOptions.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please add at least one pricing option')),
-                  );
-                  return;
-                }
-                
-                // Close the dialog first
-                Navigator.pop(dialogContext);
-                
-                // Show loading
-                showDialog(
-                  context: parentContext,
-                  barrierDismissible: false,
-                  builder: (loadingContext) => const Center(child: CircularProgressIndicator()),
-                );
-                
-                try {
-                  final updatedPlan = MembershipPlan(
-                    name: nameController.text,
-                    icon: selectedIcon,
-                    color: selectedColor,
-                    note: noteController.text,
-                    benefits: selectedBenefits,
-                    monthlyOptions: monthOptions,
-                  );
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  // Validate
+                  if (planMode == 'single') {
+                    if (nameController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a plan name'))); return;
+                    }
+                    if (monthOptions.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one pricing option'))); return;
+                    }
+                  } else {
+                    if (tiers.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one tier'))); return;
+                    }
+                    for (final t in tiers) {
+                      if (t.name.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All tiers must have a name'))); return;
+                      }
+                      if (t.monthlyOptions.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tier "${t.name}" needs at least one pricing option'))); return;
+                      }
+                    }
+                  }
 
-                  await _gymService.updateMembershipPlans(updatedPlan);
+                  Navigator.pop(dialogContext);
+                  showDialog(context: parentContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
-                  if (!mounted) return;
-                  
-                  // Close loading dialog
-                  Navigator.pop(parentContext);
+                  try {
+                    final MembershipPlan updatedPlan;
+                    if (planMode == 'single') {
+                      updatedPlan = MembershipPlan(
+                        name: nameController.text.trim(),
+                        icon: selectedIcon,
+                        color: selectedColor,
+                        note: noteController.text.trim(),
+                        benefits: selectedBenefits,
+                        planMode: 'single',
+                        monthlyOptions: monthOptions,
+                        tiers: [],
+                      );
+                    } else {
+                      updatedPlan = MembershipPlan(
+                        name: tiers.first.name,
+                        icon: tiers.first.icon,
+                        color: tiers.first.color,
+                        note: '',
+                        benefits: [],
+                        planMode: 'multi',
+                        monthlyOptions: [],
+                        tiers: tiers,
+                      );
+                    }
 
-                  // Show success message
-                  ScaffoldMessenger.of(parentContext).showSnackBar(
-                    SnackBar(
+                    await _gymService.updateMembershipPlans(updatedPlan);
+
+                    if (!mounted) return;
+                    Navigator.pop(parentContext);
+                    ScaffoldMessenger.of(parentContext).showSnackBar(SnackBar(
                       content: Text(isCreating ? 'Membership plan created successfully' : 'Membership plan updated successfully'),
                       backgroundColor: AppTheme.successColor,
-                    ),
-                  );
-
-                  // Reload data
-                  await _loadMembershipPlans();
-                  await _loadRecentActivities();
-                } catch (e) {
-                  if (!mounted) return;
-                  
-                  // Close loading dialog
-                  Navigator.pop(parentContext);
-                  
-                  // Show error message
-                  ScaffoldMessenger.of(parentContext).showSnackBar(
-                    SnackBar(
+                    ));
+                    await _loadMembershipPlans();
+                    await _loadRecentActivities();
+                  } catch (e) {
+                    if (!mounted) return;
+                    Navigator.pop(parentContext);
+                    ScaffoldMessenger.of(parentContext).showSnackBar(SnackBar(
                       content: Text(isCreating ? 'Failed to create plan: $e' : 'Failed to update plan: $e'),
                       backgroundColor: AppTheme.errorColor,
-                    ),
-                  );
-                }
-              },
-              child: Text(isCreating ? 'Create Plan' : 'Save Changes'),
-            ),
-          ],
-        ),
+                    ));
+                  }
+                },
+                child: Text(isCreating ? 'Create Plan' : 'Save Changes'),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -4282,5 +4361,605 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       );
     }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dashboard Add Member Dialog
+// Matches members_screen._AddMemberDialog exactly, with gym plan integration
+// ─────────────────────────────────────────────────────────────────────────────
+class _DashboardAddMemberDialog extends StatefulWidget {
+  final MembershipPlan? membershipPlan;
+  final List<GymActivity> gymActivities;
+  final VoidCallback onMemberAdded;
+
+  const _DashboardAddMemberDialog({
+    required this.onMemberAdded,
+    this.membershipPlan,
+    this.gymActivities = const [],
+  });
+
+  @override
+  State<_DashboardAddMemberDialog> createState() => _DashboardAddMemberDialogState();
+}
+
+class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
+  final _formKey = GlobalKey<FormState>();
+  final _memberService = MemberService();
+
+  // Form controllers
+  final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _phoneController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _addressController = TextEditingController();
+  final _amountController = TextEditingController(text: '0');
+
+  String _gender = 'Male';
+  String _paymentMode = 'Cash';
+  String _plan = 'Basic';
+  String _duration = '1 Month';
+  double _paymentAmount = 0;
+  XFile? _profileImage;
+  Uint8List? _profileImageBytes;
+  bool _isSubmitting = false;
+  Set<String> _selectedActivities = {};
+
+  bool get _isMultiTier => widget.membershipPlan?.isMultiTier ?? false;
+
+  List<GymActivity> get _activityOptions {
+    if (widget.gymActivities.isNotEmpty) return widget.gymActivities;
+    return PredefinedActivities.all;
+  }
+
+  // Duration options from gym's plan, fallback to hardcoded
+  List<Map<String, dynamic>> get _durationOptions {
+    final plan = widget.membershipPlan;
+    if (plan != null) {
+      // Multi-tier: use the selected tier's options
+      if (plan.isMultiTier && plan.tiers.isNotEmpty) {
+        final tier = plan.tiers.firstWhere((t) => t.name == _plan, orElse: () => plan.tiers.first);
+        if (tier.monthlyOptions.isNotEmpty) {
+          return tier.monthlyOptions.map((opt) {
+            final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
+            return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+          }).toList();
+        }
+      }
+      // Single-tier: use top-level monthlyOptions
+      if (plan.monthlyOptions.isNotEmpty) {
+        return plan.monthlyOptions.map((opt) {
+          final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
+          return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+        }).toList();
+      }
+    }
+    return <Map<String, dynamic>>[
+      <String, dynamic>{'value': '1 Month', 'months': 1, 'price': 0.0},
+      <String, dynamic>{'value': '3 Months', 'months': 3, 'price': 0.0},
+      <String, dynamic>{'value': '6 Months', 'months': 6, 'price': 0.0},
+      <String, dynamic>{'value': '12 Months', 'months': 12, 'price': 0.0},
+    ];
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Lock plan name in single-tier mode; use first tier name in multi-tier mode
+    if (widget.membershipPlan != null) {
+      if (_isMultiTier && widget.membershipPlan!.tiers.isNotEmpty) {
+        _plan = widget.membershipPlan!.tiers.first.name;
+      } else if (!_isMultiTier) {
+        _plan = widget.membershipPlan!.name;
+      }
+    }
+    // Pre-select first duration and auto-fill its price
+    if (_durationOptions.isNotEmpty) {
+      _duration = _durationOptions.first['value'] as String;
+      _autoFillAmount();
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _ageController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _addressController.dispose();
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _autoFillAmount() {
+    final selected = _durationOptions.firstWhere(
+      (opt) => opt['value'] == _duration,
+      orElse: () => <String, dynamic>{'price': 0.0},
+    );
+    final price = (selected['price'] as num).toDouble();
+    if (price > 0) {
+      setState(() {
+        _paymentAmount = price;
+        _amountController.text = price.toStringAsFixed(0);
+      });
+    }
+  }
+
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 85,
+    );
+    if (pickedFile != null) {
+      final bytes = await pickedFile.readAsBytes();
+      setState(() {
+        _profileImage = pickedFile;
+        _profileImageBytes = bytes;
+      });
+    }
+  }
+
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedActivities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select at least one activity'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+      return;
+    }
+    setState(() => _isSubmitting = true);
+
+    try {
+      await _memberService.addMember(
+        memberName: _nameController.text.trim(),
+        age: int.parse(_ageController.text.trim()),
+        gender: _gender,
+        phone: _phoneController.text.trim(),
+        email: _emailController.text.trim(),
+        paymentMode: _paymentMode,
+        paymentAmount: _paymentAmount,
+        planSelected: _plan,
+        monthlyPlan: _duration,
+        activityPreference: _selectedActivities.join(', '),
+        address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+        profileImage: _profileImage,
+      );
+
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Member added successfully!'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+        widget.onMemberAdded();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error adding member: $e'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPlanPricing = widget.membershipPlan != null &&
+        widget.membershipPlan!.monthlyOptions.isNotEmpty;
+
+    return AlertDialog(
+      title: const Row(
+        children: [
+          FaIcon(FontAwesomeIcons.userPlus, color: AppTheme.primaryColor),
+          SizedBox(width: 12),
+          Text('Add New Member'),
+        ],
+      ),
+      content: SizedBox(
+        width: 620,
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Profile image ──────────────────────────────
+                Center(
+                  child: GestureDetector(
+                    onTap: _pickImage,
+                    child: CircleAvatar(
+                      radius: 48,
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      backgroundImage:
+                          _profileImageBytes != null ? MemoryImage(_profileImageBytes!) : null,
+                      child: _profileImageBytes == null
+                          ? const FaIcon(FontAwesomeIcons.camera,
+                              size: 32, color: AppTheme.primaryColor)
+                          : null,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Center(
+                  child: Text('Tap to add profile photo',
+                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Name ──────────────────────────────────────
+                TextFormField(
+                  controller: _nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name *',
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                ),
+                const SizedBox(height: 14),
+
+                // ── Age & Gender ─────────────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _ageController,
+                        decoration: const InputDecoration(
+                          labelText: 'Age *',
+                          prefixIcon: Icon(Icons.cake_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: TextInputType.number,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          final age = int.tryParse(v.trim());
+                          if (age == null || age < 1 || age > 120) return 'Invalid age';
+                          return null;
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _gender,
+                        decoration: const InputDecoration(
+                          labelText: 'Gender *',
+                          prefixIcon: Icon(Icons.wc_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Male', child: Text('Male')),
+                          DropdownMenuItem(value: 'Female', child: Text('Female')),
+                          DropdownMenuItem(value: 'Other', child: Text('Other')),
+                        ],
+                        onChanged: (v) => setState(() => _gender = v!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // ── Phone ────────────────────────────────────
+                TextFormField(
+                  controller: _phoneController,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone *',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Phone is required' : null,
+                ),
+                const SizedBox(height: 14),
+
+                // ── Email ────────────────────────────────────
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email *',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Email is required';
+                    if (!v.contains('@')) return 'Invalid email';
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+
+                // ── Address ──────────────────────────────────
+                TextFormField(
+                  controller: _addressController,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 14),
+
+                // ── Plan section: locked chip (single) or dropdown (multi) ──
+                if (_isMultiTier) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _plan,
+                    decoration: const InputDecoration(
+                      labelText: 'Membership Plan *',
+                      prefixIcon: Icon(Icons.card_membership_outlined),
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Basic', child: Text('Basic')),
+                      DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                      DropdownMenuItem(value: 'Premium', child: Text('Premium')),
+                    ],
+                    onChanged: (v) => setState(() => _plan = v!),
+                  ),
+                ] else ...[
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Membership Plan',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FaIcon(FontAwesomeIcons.star, size: 12, color: AppTheme.primaryColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                _plan,
+                                style: TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4, left: 2),
+                    child: Text(
+                      'Single-plan gym — plan name is fixed',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // ── Duration ─────────────────────────────────
+                DropdownButtonFormField<String>(
+                  initialValue: _duration,
+                  decoration: const InputDecoration(
+                    labelText: 'Duration *',
+                    prefixIcon: Icon(Icons.calendar_month_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _durationOptions.map((opt) {
+                    final label = opt['value'] as String;
+                    final price = (opt['price'] as num).toDouble();
+                    final isPopular = opt['isPopular'] == true;
+                    final discount = (opt['discount'] ?? 0) as int;
+                    return DropdownMenuItem<String>(
+                      value: label,
+                      child: Row(
+                        children: [
+                          Text(label),
+                          if (price > 0) ...[
+                            const SizedBox(width: 8),
+                            Text(
+                              '– ₹${price.toStringAsFixed(0)}',
+                              style: const TextStyle(
+                                color: AppTheme.successColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                          if (discount > 0) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.successColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '$discount% off',
+                                style: const TextStyle(
+                                  color: AppTheme.successColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (isPopular) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                'Popular',
+                                style: TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) {
+                    setState(() => _duration = v!);
+                    _autoFillAmount();
+                  },
+                ),
+
+                // Plan pricing hint
+                if (hasPlanPricing)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Text(
+                      'Pricing from "${widget.membershipPlan!.name}" plan',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade600,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 14),
+
+                // ── Payment Mode & Amount ────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        initialValue: _paymentMode,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Mode *',
+                          prefixIcon: Icon(Icons.payment_outlined),
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Cash', child: Text('Cash')),
+                          DropdownMenuItem(value: 'Card', child: Text('Card')),
+                          DropdownMenuItem(value: 'UPI', child: Text('UPI')),
+                          DropdownMenuItem(value: 'Online', child: Text('Online')),
+                        ],
+                        onChanged: (v) => setState(() => _paymentMode = v!),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _amountController,
+                        decoration: const InputDecoration(
+                          labelText: 'Amount Paid (₹) *',
+                          prefixIcon: Icon(Icons.currency_rupee),
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (v) {
+                          setState(() {
+                            _paymentAmount = double.tryParse(v) ?? 0;
+                          });
+                        },
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          if (double.tryParse(v) == null) return 'Invalid amount';
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+
+                // ── Activity Preference chips ────────────────
+                InputDecorator(
+                  decoration: InputDecoration(
+                    labelText: 'Activity Preference *',
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    errorText: _selectedActivities.isEmpty ? 'Select at least one activity' : null,
+                  ),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: _activityOptions.map((activity) {
+                      final isSelected = _selectedActivities.contains(activity.name);
+                      return FilterChip(
+                        avatar: FaIcon(
+                          FontAwesomeIconMapper.getIcon(activity.icon),
+                          size: 12,
+                          color: isSelected ? Colors.white : AppTheme.primaryColor,
+                        ),
+                        label: Text(activity.name, style: const TextStyle(fontSize: 12)),
+                        selected: isSelected,
+                        selectedColor: AppTheme.primaryColor,
+                        checkmarkColor: Colors.white,
+                        labelStyle: TextStyle(
+                          color: isSelected ? Colors.white : null,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _selectedActivities.add(activity.name);
+                            } else {
+                              _selectedActivities.remove(activity.name);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting ? null : _submitForm,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Add Member'),
+        ),
+      ],
+    );
   }
 }

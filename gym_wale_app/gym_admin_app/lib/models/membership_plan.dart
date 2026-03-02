@@ -31,6 +31,12 @@ class MonthlyOption {
 
   double get finalPrice => price * (1 - discount / 100);
 
+  String get durationLabel {
+    if (months == 1) return '1 Month';
+    if (months == 12) return '1 Year';
+    return '$months Months';
+  }
+
   MonthlyOption copyWith({
     int? months,
     double? price,
@@ -46,13 +52,79 @@ class MonthlyOption {
   }
 }
 
+/// A single tier in a multi-tier membership plan (e.g., Basic / Standard / Premium).
+class PlanTier {
+  final String name;
+  final String icon;
+  final String color;
+  final String note;
+  final List<String> benefits;
+  final List<MonthlyOption> monthlyOptions;
+
+  PlanTier({
+    required this.name,
+    this.icon = 'fa-star',
+    this.color = '#3a86ff',
+    this.note = '',
+    this.benefits = const [],
+    this.monthlyOptions = const [],
+  });
+
+  factory PlanTier.fromJson(Map<String, dynamic> json) {
+    return PlanTier(
+      name: json['name'] ?? 'Plan',
+      icon: json['icon'] ?? 'fa-star',
+      color: json['color'] ?? '#3a86ff',
+      note: json['note'] ?? '',
+      benefits: (json['benefits'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      monthlyOptions: (json['monthlyOptions'] as List<dynamic>?)
+              ?.map((e) => MonthlyOption.fromJson(e as Map<String, dynamic>))
+              .toList() ?? [],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'icon': icon,
+      'color': color,
+      'note': note,
+      'benefits': benefits,
+      'monthlyOptions': monthlyOptions.map((e) => e.toJson()).toList(),
+    };
+  }
+
+  PlanTier copyWith({
+    String? name,
+    String? icon,
+    String? color,
+    String? note,
+    List<String>? benefits,
+    List<MonthlyOption>? monthlyOptions,
+  }) {
+    return PlanTier(
+      name: name ?? this.name,
+      icon: icon ?? this.icon,
+      color: color ?? this.color,
+      note: note ?? this.note,
+      benefits: benefits ?? this.benefits,
+      monthlyOptions: monthlyOptions ?? this.monthlyOptions,
+    );
+  }
+}
+
 class MembershipPlan {
   final String name;
   final List<String> benefits;
   final String note;
   final String icon;
   final String color;
+  /// 'single' = one plan name with multiple durations
+  /// 'multi'  = Basic / Standard / Premium tiers
+  final String planMode;
   final List<MonthlyOption> monthlyOptions;
+  /// Used only in multi-tier mode
+  final List<PlanTier> tiers;
 
   MembershipPlan({
     required this.name,
@@ -60,7 +132,9 @@ class MembershipPlan {
     this.note = '',
     this.icon = 'fa-star',
     this.color = '#3a86ff',
+    this.planMode = 'single',
     this.monthlyOptions = const [],
+    this.tiers = const [],
   });
 
   factory MembershipPlan.fromJson(Map<String, dynamic> json) {
@@ -70,8 +144,12 @@ class MembershipPlan {
       note: json['note'] ?? '',
       icon: json['icon'] ?? 'fa-star',
       color: json['color'] ?? '#3a86ff',
+      planMode: (json['planMode'] ?? 'single') == 'multi' ? 'multi' : 'single',
       monthlyOptions: (json['monthlyOptions'] as List<dynamic>?)
               ?.map((e) => MonthlyOption.fromJson(e as Map<String, dynamic>))
+              .toList() ?? [],
+      tiers: (json['tiers'] as List<dynamic>?)
+              ?.map((e) => PlanTier.fromJson(e as Map<String, dynamic>))
               .toList() ?? [],
     );
   }
@@ -83,9 +161,13 @@ class MembershipPlan {
       'note': note,
       'icon': icon,
       'color': color,
+      'planMode': planMode,
       'monthlyOptions': monthlyOptions.map((e) => e.toJson()).toList(),
+      'tiers': tiers.map((t) => t.toJson()).toList(),
     };
   }
+
+  bool get isMultiTier => planMode == 'multi';
 
   MembershipPlan copyWith({
     String? name,
@@ -93,7 +175,9 @@ class MembershipPlan {
     String? note,
     String? icon,
     String? color,
+    String? planMode,
     List<MonthlyOption>? monthlyOptions,
+    List<PlanTier>? tiers,
   }) {
     return MembershipPlan(
       name: name ?? this.name,
@@ -101,7 +185,9 @@ class MembershipPlan {
       note: note ?? this.note,
       icon: icon ?? this.icon,
       color: color ?? this.color,
+      planMode: planMode ?? this.planMode,
       monthlyOptions: monthlyOptions ?? this.monthlyOptions,
+      tiers: tiers ?? this.tiers,
     );
   }
 }

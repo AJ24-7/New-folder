@@ -9,13 +9,17 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import '../../config/app_theme.dart';
 import '../../models/member.dart';
+import '../../models/membership_plan.dart';
+import '../../models/gym_activity.dart';
 import '../../services/member_service.dart';
+import '../../services/gym_service.dart';
 import '../../services/cloudinary_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sidebar_menu.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../offers/offers_screen.dart';
+import '../../utils/icon_mapper.dart';
 
 class MembersScreen extends StatefulWidget {
   const MembersScreen({super.key});
@@ -26,6 +30,7 @@ class MembersScreen extends StatefulWidget {
 
 class _MembersScreenState extends State<MembersScreen> {
   final MemberService _memberService = MemberService();
+  final GymService _gymService = GymService();
   final CloudinaryService _cloudinaryService = CloudinaryService();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final TextEditingController _searchController = TextEditingController();
@@ -36,6 +41,8 @@ class _MembersScreenState extends State<MembersScreen> {
   List<Member> _filteredMembers = [];
   List<Member> _activeMembers = [];
   List<Member> _expiredMembers = [];
+  MembershipPlan? _membershipPlan;
+  List<GymActivity> _gymActivities = [];
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -46,12 +53,32 @@ class _MembersScreenState extends State<MembersScreen> {
   void initState() {
     super.initState();
     _loadMembers();
+    _loadMembershipPlan();
+    _loadGymActivities();
   }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadMembershipPlan() async {
+    try {
+      final plan = await _gymService.getMembershipPlans();
+      if (mounted && plan != null) {
+        setState(() => _membershipPlan = plan);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _loadGymActivities() async {
+    try {
+      final activities = await _gymService.getGymActivities();
+      if (mounted && activities.isNotEmpty) {
+        setState(() => _gymActivities = activities);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadMembers() async {
@@ -117,6 +144,8 @@ class _MembersScreenState extends State<MembersScreen> {
     showDialog(
       context: context,
       builder: (context) => _AddMemberDialog(
+        membershipPlan: _membershipPlan,
+        gymActivities: _gymActivities,
         onMemberAdded: () {
           _loadMembers();
         },
@@ -961,6 +990,8 @@ class _MembersScreenState extends State<MembersScreen> {
       context: context,
       builder: (context) => _RenewMembershipDialog(
         member: member,
+        membershipPlan: _membershipPlan,
+        gymActivities: _gymActivities,
         onRenewed: _loadMembers,
       ),
     );
@@ -970,8 +1001,14 @@ class _MembersScreenState extends State<MembersScreen> {
 // Add Member Dialog Widget
 class _AddMemberDialog extends StatefulWidget {
   final VoidCallback onMemberAdded;
+  final MembershipPlan? membershipPlan;
+  final List<GymActivity> gymActivities;
 
-  const _AddMemberDialog({required this.onMemberAdded});
+  const _AddMemberDialog({
+    required this.onMemberAdded,
+    this.membershipPlan,
+    this.gymActivities = const [],
+  });
 
   @override
   State<_AddMemberDialog> createState() => _AddMemberDialogState();
@@ -987,16 +1024,62 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
-  final _activityController = TextEditingController();
+  final _amountController = TextEditingController(text: '0');
   
   String _gender = 'Male';
   String _paymentMode = 'Cash';
   String _plan = 'Basic';
   String _duration = '1 Month';
   double _paymentAmount = 0;
+  Set<String> _selectedActivities = {};
   XFile? _profileImage;
   Uint8List? _profileImageBytes;
   bool _isSubmitting = false;
+
+  bool get _isMultiTier => widget.membershipPlan?.isMultiTier ?? false;
+
+  // Duration options from the gym's actual membership plan, fallback to hardcoded
+  List<Map<String, dynamic>> get _durationOptions {
+    final plan = widget.membershipPlan;
+    if (plan != null && plan.monthlyOptions.isNotEmpty) {
+      return plan.monthlyOptions.map((opt) {
+        final months = opt.months;
+        final label = months == 1 ? '1 Month' : months == 12 ? '12 Months' : '$months Months';
+        return <String, dynamic>{
+          'value': label,
+          'months': months,
+          'price': opt.finalPrice,
+          'discount': opt.discount,
+          'isPopular': opt.isPopular,
+        };
+      }).toList();
+    }
+    return <Map<String, dynamic>>[
+      <String, dynamic>{'value': '1 Month', 'months': 1, 'price': 0.0},
+      <String, dynamic>{'value': '3 Months', 'months': 3, 'price': 0.0},
+      <String, dynamic>{'value': '6 Months', 'months': 6, 'price': 0.0},
+      <String, dynamic>{'value': '12 Months', 'months': 12, 'price': 0.0},
+    ];
+  }
+
+  // Resolve which activities to show as chips
+  List<GymActivity> get _activityOptions {
+    if (widget.gymActivities.isNotEmpty) return widget.gymActivities;
+    return PredefinedActivities.all;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // Lock plan to gym name when single-tier
+    if (!_isMultiTier && widget.membershipPlan != null) {
+      _plan = widget.membershipPlan!.name;
+    }
+    if (_durationOptions.isNotEmpty) {
+      _duration = _durationOptions.first['value'] as String;
+      _autoFillAmount();
+    }
+  }
 
   @override
   void dispose() {
@@ -1005,14 +1088,27 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     _phoneController.dispose();
     _emailController.dispose();
     _addressController.dispose();
-    _activityController.dispose();
+    _amountController.dispose();
     super.dispose();
+  }
+
+  void _autoFillAmount() {
+    final selected = _durationOptions.firstWhere(
+      (opt) => opt['value'] == _duration,
+      orElse: () => <String, dynamic>{'price': 0.0},
+    );
+    final price = (selected['price'] as num).toDouble();
+    if (price > 0) {
+      setState(() {
+        _paymentAmount = price;
+        _amountController.text = price.toStringAsFixed(0);
+      });
+    }
   }
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
       setState(() {
@@ -1024,6 +1120,12 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedActivities.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select at least one activity'), backgroundColor: AppTheme.errorColor),
+      );
+      return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -1038,7 +1140,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         paymentAmount: _paymentAmount,
         planSelected: _plan,
         monthlyPlan: _duration,
-        activityPreference: _activityController.text,
+        activityPreference: _selectedActivities.join(', '),
         address: _addressController.text.isEmpty ? null : _addressController.text,
         profileImage: _profileImage,
       );
@@ -1086,157 +1188,329 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Profile Image
-                InkWell(
-                  onTap: _pickImage,
-                  child: CircleAvatar(
-                    radius: 48,
-                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    backgroundImage: _profileImageBytes != null ? MemoryImage(_profileImageBytes!) : null,
-                    child: _profileImageBytes == null
-                        ? const FaIcon(FontAwesomeIcons.camera, size: 32, color: AppTheme.primaryColor)
-                        : null,
+                // ── Profile Image ────────────────────────────
+                Center(
+                  child: InkWell(
+                    onTap: _pickImage,
+                    child: CircleAvatar(
+                      radius: 48,
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      backgroundImage: _profileImageBytes != null ? MemoryImage(_profileImageBytes!) : null,
+                      child: _profileImageBytes == null
+                          ? const FaIcon(FontAwesomeIcons.camera, size: 32, color: AppTheme.primaryColor)
+                          : null,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                
-                // Name
+                const SizedBox(height: 8),
+                const Center(
+                  child: Text('Tap to add photo', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                ),
+                const SizedBox(height: 20),
+
+                // ── Name ─────────────────────────────────────
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(labelText: 'Name *'),
-                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Full Name *',
+                    prefixIcon: Icon(Icons.person_outline),
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.words,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
-                const SizedBox(height: 16),
-                
-                // Age and Gender
+                const SizedBox(height: 14),
+
+                // ── Age & Gender ──────────────────────────────
                 Row(
                   children: [
                     Expanded(
                       child: TextFormField(
                         controller: _ageController,
-                        decoration: const InputDecoration(labelText: 'Age *'),
+                        decoration: const InputDecoration(
+                          labelText: 'Age *',
+                          prefixIcon: Icon(Icons.cake_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                         keyboardType: TextInputType.number,
-                        validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          final age = int.tryParse(v);
+                          if (age == null || age < 1 || age > 120) return 'Invalid';
+                          return null;
+                        },
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _gender,
-                        decoration: const InputDecoration(labelText: 'Gender *'),
+                        decoration: const InputDecoration(
+                          labelText: 'Gender *',
+                          prefixIcon: Icon(Icons.wc_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                         items: const [
                           DropdownMenuItem(value: 'Male', child: Text('Male')),
                           DropdownMenuItem(value: 'Female', child: Text('Female')),
                           DropdownMenuItem(value: 'Other', child: Text('Other')),
                         ],
-                        onChanged: (value) => setState(() => _gender = value!),
+                        onChanged: (v) => setState(() => _gender = v!),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                
-                // Phone and Email
+                const SizedBox(height: 14),
+
+                // ── Phone ─────────────────────────────────────
                 TextFormField(
                   controller: _phoneController,
-                  decoration: const InputDecoration(labelText: 'Phone *'),
+                  decoration: const InputDecoration(
+                    labelText: 'Phone *',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                    border: OutlineInputBorder(),
+                  ),
                   keyboardType: TextInputType.phone,
-                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
+                // ── Email ─────────────────────────────────────
                 TextFormField(
                   controller: _emailController,
-                  decoration: const InputDecoration(labelText: 'Email *'),
+                  decoration: const InputDecoration(
+                    labelText: 'Email *',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(),
+                  ),
                   keyboardType: TextInputType.emailAddress,
-                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Required';
+                    if (!v.contains('@')) return 'Invalid email';
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 16),
-                
-                // Address
+                const SizedBox(height: 14),
+
+                // ── Address ───────────────────────────────────
                 TextFormField(
                   controller: _addressController,
-                  decoration: const InputDecoration(labelText: 'Address'),
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    prefixIcon: Icon(Icons.location_on_outlined),
+                    border: OutlineInputBorder(),
+                  ),
                   maxLines: 2,
                 ),
-                const SizedBox(height: 16),
-                
-                // Plan and Duration
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _plan,
-                        decoration: const InputDecoration(labelText: 'Plan *'),
-                        items: const [
-                          DropdownMenuItem(value: 'Basic', child: Text('Basic')),
-                          DropdownMenuItem(value: 'Standard', child: Text('Standard')),
-                          DropdownMenuItem(value: 'Premium', child: Text('Premium')),
-                        ],
-                        onChanged: (value) => setState(() {
-                          _plan = value!;
-                          _calculatePayment();
-                        }),
-                      ),
+                const SizedBox(height: 14),
+
+                // ── Membership Plan ────────────────────────────
+                if (_isMultiTier) ...[
+                  DropdownButtonFormField<String>(
+                    initialValue: _plan,
+                    decoration: const InputDecoration(
+                      labelText: 'Membership Tier *',
+                      prefixIcon: Icon(Icons.card_membership_outlined),
+                      border: OutlineInputBorder(),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: DropdownButtonFormField<String>(
-                        initialValue: _duration,
-                        decoration: const InputDecoration(labelText: 'Duration *'),
-                        items: const [
-                          DropdownMenuItem(value: '1 Month', child: Text('1 Month')),
-                          DropdownMenuItem(value: '3 Months', child: Text('3 Months')),
-                          DropdownMenuItem(value: '6 Months', child: Text('6 Months')),
-                          DropdownMenuItem(value: '12 Months', child: Text('12 Months')),
-                        ],
-                        onChanged: (value) => setState(() {
-                          _duration = value!;
-                          _calculatePayment();
-                        }),
-                      ),
+                    items: const [
+                      DropdownMenuItem(value: 'Basic', child: Text('Basic')),
+                      DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                      DropdownMenuItem(value: 'Premium', child: Text('Premium')),
+                    ],
+                    onChanged: (v) => setState(() => _plan = v!),
+                  ),
+                ] else ...[
+                  // Single plan – show locked chip
+                  InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'Membership Plan',
+                      prefixIcon: Icon(Icons.card_membership_outlined),
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              FaIcon(FontAwesomeIcons.star, size: 12, color: AppTheme.primaryColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                _plan,
+                                style: TextStyle(
+                                  color: AppTheme.primaryColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.lock_outline, size: 12, color: AppTheme.primaryColor),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 14),
+
+                // ── Duration ──────────────────────────────────
+                DropdownButtonFormField<String>(
+                  initialValue: _duration,
+                  decoration: const InputDecoration(
+                    labelText: 'Duration *',
+                    prefixIcon: Icon(Icons.calendar_month_outlined),
+                    border: OutlineInputBorder(),
+                  ),
+                  items: _durationOptions.map((opt) {
+                    final label = opt['value'] as String;
+                    final price = (opt['price'] as num).toDouble();
+                    final isPopular = opt['isPopular'] == true;
+                    final discount = opt['discount'] as int? ?? 0;
+                    return DropdownMenuItem<String>(
+                      value: label,
+                      child: Row(
+                        children: [
+                          Text(label),
+                          if (price > 0) ...[
+                            const SizedBox(width: 6),
+                            Text('– ₹${price.toStringAsFixed(0)}',
+                                style: const TextStyle(color: AppTheme.successColor, fontSize: 11, fontWeight: FontWeight.w600)),
+                          ],
+                          if (discount > 0) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.successColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text('$discount% off',
+                                  style: const TextStyle(color: AppTheme.successColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                          if (isPopular) ...[
+                            const SizedBox(width: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text('Popular',
+                                  style: TextStyle(color: AppTheme.primaryColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (v) {
+                    setState(() => _duration = v!);
+                    _autoFillAmount();
+                  },
                 ),
-                const SizedBox(height: 16),
-                
-                // Payment Mode and Amount
+                const SizedBox(height: 14),
+
+                // ── Payment Mode & Amount ─────────────────────
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: _paymentMode,
-                        decoration: const InputDecoration(labelText: 'Payment Mode *'),
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Mode *',
+                          prefixIcon: Icon(Icons.payment_outlined),
+                          border: OutlineInputBorder(),
+                        ),
                         items: const [
                           DropdownMenuItem(value: 'Cash', child: Text('Cash')),
                           DropdownMenuItem(value: 'Card', child: Text('Card')),
                           DropdownMenuItem(value: 'UPI', child: Text('UPI')),
                           DropdownMenuItem(value: 'Online', child: Text('Online')),
                         ],
-                        onChanged: (value) => setState(() => _paymentMode = value!),
+                        onChanged: (v) => setState(() => _paymentMode = v!),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: TextFormField(
-                        initialValue: _paymentAmount.toString(),
-                        decoration: const InputDecoration(labelText: 'Amount *'),
-                        keyboardType: TextInputType.number,
-                        onChanged: (value) => setState(() {
-                          _paymentAmount = double.tryParse(value) ?? 0;
-                        }),
-                        validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                        controller: _amountController,
+                        decoration: const InputDecoration(
+                          labelText: 'Amount Paid (₹) *',
+                          prefixIcon: Icon(Icons.currency_rupee),
+                          border: OutlineInputBorder(),
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        onChanged: (v) => setState(() => _paymentAmount = double.tryParse(v) ?? 0),
+                        validator: (v) {
+                          if (v == null || v.trim().isEmpty) return 'Required';
+                          if (double.tryParse(v) == null) return 'Invalid';
+                          return null;
+                        },
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                
-                // Activity Preference
-                TextFormField(
-                  controller: _activityController,
-                  decoration: const InputDecoration(labelText: 'Activity Preference *'),
-                  validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+
+                // ── Activity Preference (chips) ────────────────
+                Text(
+                  'Activity Preference *',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                if (_selectedActivities.isEmpty)
+                  Text('Select at least one activity', style: TextStyle(fontSize: 12, color: AppTheme.errorColor)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: _activityOptions.map((activity) {
+                    final isSelected = _selectedActivities.contains(activity.name);
+                    return FilterChip(
+                      avatar: FaIcon(
+                        FontAwesomeIconMapper.getIcon(activity.icon),
+                        size: 14,
+                        color: isSelected ? Colors.white : AppTheme.primaryColor,
+                      ),
+                      label: Text(activity.name),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedActivities.add(activity.name);
+                          } else {
+                            _selectedActivities.remove(activity.name);
+                          }
+                        });
+                      },
+                      selectedColor: AppTheme.primaryColor,
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : null,
+                        fontSize: 12,
+                      ),
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.06),
+                      side: BorderSide(
+                        color: isSelected ? AppTheme.primaryColor : AppTheme.primaryColor.withValues(alpha: 0.25),
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -1250,25 +1524,15 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submitForm,
+          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, foregroundColor: Colors.white),
           child: _isSubmitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
               : const Text('Add Member'),
         ),
       ],
     );
   }
 
-  void _calculatePayment() {
-    // TODO: Implement payment calculation based on plan and duration
-    // This should fetch pricing from backend or use predefined rates
-    setState(() {
-      _paymentAmount = 1000; // Placeholder
-    });
-  }
 }
 
 // Member Details Sheet Widget
@@ -1581,11 +1845,15 @@ class _MemberDetailsSheet extends StatelessWidget {
 // Renew Membership Dialog Widget  
 class _RenewMembershipDialog extends StatefulWidget {
   final Member member;
+  final MembershipPlan? membershipPlan;
+  final List<GymActivity> gymActivities;
   final VoidCallback onRenewed;
 
   const _RenewMembershipDialog({
     required this.member,
     required this.onRenewed,
+    this.membershipPlan,
+    this.gymActivities = const [],
   });
 
   @override
@@ -1594,19 +1862,85 @@ class _RenewMembershipDialog extends StatefulWidget {
 
 class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
   final _memberService = MemberService();
+  final _amountController = TextEditingController(text: '0');
   String _plan = 'Basic';
   String _duration = '1 Month';
   String _paymentMode = 'Cash';
-  String _activity = '';
   double _amount = 0;
   bool _isSubmitting = false;
   bool _is7DayAllowance = false;
+  Set<String> _selectedActivities = {};
+
+  bool get _isMultiTier => widget.membershipPlan?.isMultiTier ?? false;
+
+  List<GymActivity> get _activityOptions {
+    if (widget.gymActivities.isNotEmpty) return widget.gymActivities;
+    return PredefinedActivities.all;
+  }
+
+  // Duration options from gym's actual membership plan, fallback to hardcoded
+  List<Map<String, dynamic>> get _durationOptions {
+    final plan = widget.membershipPlan;
+    if (plan != null && plan.monthlyOptions.isNotEmpty) {
+      return plan.monthlyOptions.map((opt) {
+        final months = opt.months;
+        final label = months == 1 ? '1 Month' : months == 12 ? '12 Months' : '$months Months';
+        return <String, dynamic>{
+          'value': label,
+          'months': months,
+          'price': opt.finalPrice,
+          'discount': opt.discount,
+          'isPopular': opt.isPopular,
+        };
+      }).toList();
+    }
+    return <Map<String, dynamic>>[
+      <String, dynamic>{'value': '1 Month', 'months': 1, 'price': 0.0},
+      <String, dynamic>{'value': '3 Months', 'months': 3, 'price': 0.0},
+      <String, dynamic>{'value': '6 Months', 'months': 6, 'price': 0.0},
+      <String, dynamic>{'value': '12 Months', 'months': 12, 'price': 0.0},
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _plan = widget.member.planSelected;
-    _activity = widget.member.activityPreference;
+    // Lock plan name in single-tier mode
+    if (!_isMultiTier && widget.membershipPlan != null) {
+      _plan = widget.membershipPlan!.name;
+    } else {
+      _plan = widget.member.planSelected;
+    }
+    // Pre-select member's existing activities
+    final existing = widget.member.activityPreference;
+    if (existing.isNotEmpty) {
+      _selectedActivities = existing.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toSet();
+    }
+    // Pre-select first duration and auto-fill its price
+    if (_durationOptions.isNotEmpty) {
+      _duration = _durationOptions.first['value'] as String;
+      _autoFillAmount();
+    }
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _autoFillAmount() {
+    final selected = _durationOptions.firstWhere(
+      (opt) => opt['value'] == _duration,
+      orElse: () => <String, dynamic>{'price': 0.0},
+    );
+    final price = (selected['price'] as num).toDouble();
+    if (price > 0) {
+      setState(() {
+        _amount = price;
+        _amountController.text = price.toStringAsFixed(0);
+      });
+    }
   }
 
   Future<void> _submitRenewal() async {
@@ -1619,7 +1953,7 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
         monthlyPlan: _duration,
         paymentAmount: _amount,
         paymentMode: _paymentMode,
-        activityPreference: _activity,
+        activityPreference: _selectedActivities.join(', '),
         is7DayAllowance: _is7DayAllowance,
       );
 
@@ -1660,7 +1994,7 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
         ],
       ),
       content: SizedBox(
-        width: 400,
+        width: 420,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1696,39 +2030,169 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
                 ),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _plan,
-                decoration: const InputDecoration(labelText: 'New Plan'),
-                items: const [
-                  DropdownMenuItem(value: 'Basic', child: Text('Basic')),
-                  DropdownMenuItem(value: 'Standard', child: Text('Standard')),
-                  DropdownMenuItem(value: 'Premium', child: Text('Premium')),
-                ],
-                onChanged: (value) => setState(() => _plan = value!),
-              ),
+              // Plan section: locked chip for single-tier, dropdown for multi-tier
+              if (_isMultiTier) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _plan,
+                  decoration: const InputDecoration(
+                    labelText: 'New Plan',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Basic', child: Text('Basic')),
+                    DropdownMenuItem(value: 'Standard', child: Text('Standard')),
+                    DropdownMenuItem(value: 'Premium', child: Text('Premium')),
+                  ],
+                  onChanged: (value) => setState(() => _plan = value!),
+                ),
+              ] else ...[
+                InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Plan',
+                    border: OutlineInputBorder(),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FaIcon(FontAwesomeIcons.star, size: 12, color: AppTheme.primaryColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              _plan,
+                              style: TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, left: 2),
+                  child: Text(
+                    'Single-plan gym — plan name is fixed',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _duration,
-                decoration: const InputDecoration(labelText: 'Duration'),
-                items: const [
-                  DropdownMenuItem(value: '1 Month', child: Text('1 Month')),
-                  DropdownMenuItem(value: '3 Months', child: Text('3 Months')),
-                  DropdownMenuItem(value: '6 Months', child: Text('6 Months')),
-                  DropdownMenuItem(value: '12 Months', child: Text('12 Months')),
-                ],
-                onChanged: (value) => setState(() => _duration = value!),
+                decoration: const InputDecoration(
+                  labelText: 'Duration',
+                  border: OutlineInputBorder(),
+                ),
+                items: _durationOptions.map((opt) {
+                  final label = opt['value'] as String;
+                  final price = (opt['price'] as num).toDouble();
+                  final isPopular = opt['isPopular'] == true;
+                  final discount = opt['discount'] as int? ?? 0;
+                  return DropdownMenuItem<String>(
+                    value: label,
+                    child: Row(
+                      children: [
+                        Text(label),
+                        if (price > 0) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            '– ₹${price.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: AppTheme.successColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (discount > 0) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.successColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              '$discount% off',
+                              style: const TextStyle(
+                                color: AppTheme.successColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                        if (isPopular) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              'Popular',
+                              style: TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  setState(() => _duration = value!);
+                  _autoFillAmount();
+                },
               ),
+              if (widget.membershipPlan != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Pricing from "${widget.membershipPlan!.name}" plan',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
               const SizedBox(height: 16),
               TextFormField(
-                initialValue: _amount.toString(),
-                decoration: const InputDecoration(labelText: 'Payment Amount'),
-                keyboardType: TextInputType.number,
+                controller: _amountController,
+                decoration: const InputDecoration(
+                  labelText: 'Payment Amount (₹)',
+                  prefixIcon: Icon(Icons.currency_rupee),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (value) => setState(() => _amount = double.tryParse(value) ?? 0),
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 initialValue: _paymentMode,
-                decoration: const InputDecoration(labelText: 'Payment Mode'),
+                decoration: const InputDecoration(
+                  labelText: 'Payment Mode',
+                  border: OutlineInputBorder(),
+                ),
                 items: const [
                   DropdownMenuItem(value: 'Cash', child: Text('Cash')),
                   DropdownMenuItem(value: 'Card', child: Text('Card')),
@@ -1738,10 +2202,45 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
                 onChanged: (value) => setState(() => _paymentMode = value!),
               ),
               const SizedBox(height: 16),
-              TextFormField(
-                initialValue: _activity,
-                decoration: const InputDecoration(labelText: 'Activity Preference'),
-                onChanged: (value) => setState(() => _activity = value),
+              // Activity preference chips
+              InputDecorator(
+                decoration: InputDecoration(
+                  labelText: 'Activity Preference',
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  errorText: _selectedActivities.isEmpty ? 'Select at least one activity' : null,
+                ),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: _activityOptions.map((activity) {
+                    final isSelected = _selectedActivities.contains(activity.name);
+                    return FilterChip(
+                      avatar: FaIcon(
+                        FontAwesomeIconMapper.getIcon(activity.icon),
+                        size: 12,
+                        color: isSelected ? Colors.white : AppTheme.primaryColor,
+                      ),
+                      label: Text(activity.name, style: const TextStyle(fontSize: 12)),
+                      selected: isSelected,
+                      selectedColor: AppTheme.primaryColor,
+                      checkmarkColor: Colors.white,
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : null,
+                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                      ),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedActivities.add(activity.name);
+                          } else {
+                            _selectedActivities.remove(activity.name);
+                          }
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
               ),
               const SizedBox(height: 16),
               CheckboxListTile(
@@ -1761,11 +2260,15 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
         ),
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submitRenewal,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
+          ),
           child: _isSubmitting
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
               : const Text('Renew'),
         ),

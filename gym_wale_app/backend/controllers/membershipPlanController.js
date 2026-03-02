@@ -26,12 +26,14 @@ exports.getMembershipPlans = async (req, res) => {
         color: '#3a86ff',
         benefits: ['Gym Access', 'Group Classes', 'Locker Facility'],
         note: 'Flexible membership options',
+        planMode: 'single',
         monthlyOptions: [
           { months: 1, price: 1500, discount: 0, isPopular: false },
           { months: 3, price: 4000, discount: 5, isPopular: false },
           { months: 6, price: 7500, discount: 10, isPopular: true },
           { months: 12, price: 14000, discount: 15, isPopular: false }
-        ]
+        ],
+        tiers: []
       };
       gym.membershipPlan = plan;
       await gym.save();
@@ -50,37 +52,71 @@ exports.updateMembershipPlans = async (req, res) => {
     if (!gym) return res.status(404).json({ message: 'Gym not found' });
     
     const plan = req.body;
-    if (!plan || !plan.monthlyOptions || !Array.isArray(plan.monthlyOptions)) {
-      return res.status(400).json({ message: 'Invalid membership plan data' });
+    const planMode = ['single', 'multi'].includes(plan.planMode) ? plan.planMode : 'single';
+
+    if (planMode === 'multi') {
+      // Multi-tier: validate tiers array
+      if (!Array.isArray(plan.tiers) || plan.tiers.length === 0) {
+        return res.status(400).json({ message: 'Multi-tier plan requires at least one tier' });
+      }
+      gym.membershipPlan = {
+        name: plan.name || 'Multi-Tier Plan',
+        icon: plan.icon || 'fa-star',
+        color: plan.color || '#3a86ff',
+        benefits: Array.isArray(plan.benefits) ? plan.benefits : [],
+        note: plan.note || '',
+        planMode: 'multi',
+        monthlyOptions: [], // not used in multi mode
+        tiers: plan.tiers.map(tier => ({
+          name: tier.name || 'Plan',
+          icon: tier.icon || 'fa-star',
+          color: tier.color || '#3a86ff',
+          benefits: Array.isArray(tier.benefits) ? tier.benefits : [],
+          note: tier.note || '',
+          monthlyOptions: (Array.isArray(tier.monthlyOptions) ? tier.monthlyOptions : []).map(opt => ({
+            months: opt.months,
+            price: opt.price,
+            discount: opt.discount || 0,
+            isPopular: opt.isPopular || false
+          }))
+        }))
+      };
+    } else {
+      // Single-tier mode
+      if (!plan || !plan.monthlyOptions || !Array.isArray(plan.monthlyOptions)) {
+        return res.status(400).json({ message: 'Invalid membership plan data' });
+      }
+      gym.membershipPlan = {
+        name: plan.name || 'Standard',
+        icon: plan.icon || 'fa-star',
+        color: plan.color || '#3a86ff',
+        benefits: Array.isArray(plan.benefits) ? plan.benefits : [],
+        note: plan.note || '',
+        planMode: 'single',
+        monthlyOptions: plan.monthlyOptions.map(opt => ({
+          months: opt.months,
+          price: opt.price,
+          discount: opt.discount || 0,
+          isPopular: opt.isPopular || false
+        })),
+        tiers: []
+      };
     }
-    
-    // Validate and assign
-    gym.membershipPlan = {
-      name: plan.name || 'Standard',
-      icon: plan.icon || 'fa-star',
-      color: plan.color || '#3a86ff',
-      benefits: Array.isArray(plan.benefits) ? plan.benefits : [],
-      note: plan.note || '',
-      monthlyOptions: plan.monthlyOptions.map(opt => ({
-        months: opt.months,
-        price: opt.price,
-        discount: opt.discount || 0,
-        isPopular: opt.isPopular || false
-      }))
-    };
     
     await gym.save();
     
     // Log activity for recent activity section
     const Activity = require('../models/Activity');
+    const tierCount = planMode === 'multi' ? gym.membershipPlan.tiers.length : 1;
     await Activity.create({
       gym: gym._id,
       type: 'membership_plan_updated',
-      description: `Updated membership plan: ${plan.name} with ${plan.monthlyOptions.length} duration options`,
+      description: `Updated membership plan: ${gym.membershipPlan.name} (${planMode} mode, ${tierCount} tier${tierCount > 1 ? 's' : ''})`,
       metadata: {
-        planName: plan.name,
-        optionsCount: plan.monthlyOptions.length,
-        benefitsCount: plan.benefits.length
+        planName: gym.membershipPlan.name,
+        planMode,
+        optionsCount: planMode === 'multi' ? tierCount : gym.membershipPlan.monthlyOptions.length,
+        benefitsCount: gym.membershipPlan.benefits.length
       }
     });
     
@@ -102,7 +138,7 @@ exports.getGymMembershipPlansPublic = async (req, res) => {
     }
     
     let plan = gym.membershipPlan;
-    if (!plan || !plan.monthlyOptions || plan.monthlyOptions.length === 0) {
+    if (!plan || (!plan.monthlyOptions?.length && !plan.tiers?.length)) {
       // Return default plan if none exists
       plan = {
         name: 'Standard',
@@ -110,11 +146,13 @@ exports.getGymMembershipPlansPublic = async (req, res) => {
         color: '#3a86ff',
         benefits: ['Gym Access', 'Group Classes', 'Locker Facility'],
         note: 'Flexible membership options',
+        planMode: 'single',
         monthlyOptions: [
           { months: 1, price: 1500, discount: 0, isPopular: false },
           { months: 3, price: 4000, discount: 5, isPopular: false },
           { months: 6, price: 7500, discount: 10, isPopular: true }
-        ]
+        ],
+        tiers: []
       };
     }
     

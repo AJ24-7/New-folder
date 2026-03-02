@@ -967,20 +967,9 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   }
 
   Widget _buildMembershipPlanCard(MembershipPlan plan) {
-    // Determine card color based on plan name
-    Color planColor = AppTheme.primaryColor;
-    IconData planIcon = Icons.fitness_center;
-    
-    if (plan.name.toLowerCase().contains('basic')) {
-      planColor = const Color(0xFF38b000);
-      planIcon = Icons.eco;
-    } else if (plan.name.toLowerCase().contains('standard')) {
-      planColor = const Color(0xFF3a86ff);
-      planIcon = Icons.star;
-    } else if (plan.name.toLowerCase().contains('premium')) {
-      planColor = const Color(0xFF8338ec);
-      planIcon = Icons.diamond;
-    }
+    // Use the admin-configured color and icon directly
+    final planColor = _parseHexColor(plan.color);
+    final planIcon = _getMembershipPlanIcon(plan.icon);
 
     return _MembershipPlanCardWidget(
       membershipPlan: plan,
@@ -988,6 +977,29 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
       planColor: planColor,
       planIcon: planIcon,
     );
+  }
+
+  /// Parse a hex color string like '#3a86ff' to a Flutter Color
+  Color _parseHexColor(String hex) {
+    try {
+      final cleaned = hex.replaceFirst('#', '').trim();
+      if (cleaned.length == 6) return Color(int.parse('FF$cleaned', radix: 16));
+      if (cleaned.length == 8) return Color(int.parse(cleaned, radix: 16));
+    } catch (_) {}
+    return AppTheme.primaryColor;
+  }
+
+  /// Map fa-icon name strings to Material IconData
+  IconData _getMembershipPlanIcon(String iconName) {
+    switch (iconName) {
+      case 'fa-gem':    return Icons.diamond;
+      case 'fa-crown':  return Icons.workspace_premium;
+      case 'fa-leaf':   return Icons.eco;
+      case 'fa-fire':   return Icons.local_fire_department;
+      case 'fa-bolt':   return Icons.bolt;
+      case 'fa-star':
+      default:          return Icons.star;
+    }
   }
 
   Future<void> _showTrialBookingDialog() async {
@@ -3301,154 +3313,206 @@ class _MembershipPlanCardWidget extends StatefulWidget {
 
 class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
   int _selectedOptionIndex = 0;
+  int _selectedTierIndex = 0;
 
-  MonthlyOption get _selectedOption => widget.membershipPlan.monthlyOptions[_selectedOptionIndex];
+  bool get _isMultiTier => widget.membershipPlan.isMultiTier && widget.membershipPlan.tiers.isNotEmpty;
+
+  // Active tier (for multi-tier mode)
+  dynamic get _activeTier => _isMultiTier ? widget.membershipPlan.tiers[_selectedTierIndex] : null;
+
+  // The list of monthlyOptions relevant to the current tier/plan
+  List<MonthlyOption> get _activeOptions => _isMultiTier
+      ? (_activeTier?.monthlyOptions ?? <MonthlyOption>[])
+      : widget.membershipPlan.monthlyOptions;
+
+  MonthlyOption? get _selectedOption =>
+      _activeOptions.isNotEmpty && _selectedOptionIndex < _activeOptions.length
+          ? _activeOptions[_selectedOptionIndex]
+          : (_activeOptions.isNotEmpty ? _activeOptions.first : null);
+
+  Color get _activePlanColor {
+    if (_isMultiTier && _activeTier != null) {
+      try { return Color(int.parse((_activeTier!.color as String).replaceFirst('#', '0xFF'))); } catch (_) {}
+    }
+    return widget.planColor;
+  }
+
+  IconData get _activePlanIcon {
+    if (_isMultiTier && _activeTier != null) {
+      final iconName = _activeTier!.icon as String;
+      switch (iconName) {
+        case 'fa-gem':    return Icons.diamond;
+        case 'fa-crown':  return Icons.workspace_premium;
+        case 'fa-leaf':   return Icons.eco;
+        case 'fa-fire':   return Icons.local_fire_department;
+        case 'fa-bolt':   return Icons.bolt;
+        default:          return Icons.star;
+      }
+    }
+    return widget.planIcon;
+  }
+
+  String get _activePlanName => _isMultiTier && _activeTier != null
+      ? (_activeTier!.name as String)
+      : widget.membershipPlan.name;
+
+  String get _activePlanNote => _isMultiTier && _activeTier != null
+      ? (_activeTier!.note as String)
+      : widget.membershipPlan.note;
+
+  List<String> get _activeBenefits => _isMultiTier && _activeTier != null
+      ? List<String>.from(_activeTier!.benefits as List)
+      : widget.membershipPlan.benefits;
 
   @override
   void initState() {
     super.initState();
-    // Select the popular option by default, or the first if none is popular
-    final popularIndex = widget.membershipPlan.monthlyOptions.indexWhere((o) => o.isPopular);
-    if (popularIndex != -1) {
-      _selectedOptionIndex = popularIndex;
-    }
+    _resetOptionSelection();
+  }
+
+  void _resetOptionSelection() {
+    final opts = _activeOptions;
+    final popularIndex = opts.indexWhere((o) => o.isPopular);
+    _selectedOptionIndex = popularIndex != -1 ? popularIndex : 0;
   }
 
   @override
   Widget build(BuildContext context) {
     final isWideScreen = MediaQuery.of(context).size.width > 600;
-    
+    final opt = _selectedOption;
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: _selectedOption.isPopular
-              ? widget.planColor.withValues(alpha: 0.5)
+          color: (opt?.isPopular ?? false)
+              ? _activePlanColor.withValues(alpha: 0.5)
               : Theme.of(context).dividerColor.withValues(alpha: 0.5),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: widget.planColor.withValues(alpha: 0.1),
+            color: _activePlanColor.withValues(alpha: 0.1),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
         ],
       ),
-      child: isWideScreen 
-        ? IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(flex: 2, child: _buildCardHeader()),
-                Expanded(flex: 3, child: _buildCardContent()),
-              ],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Multi-tier tier selector tabs
+          if (_isMultiTier) _buildTierSelector(),
+          // Card body
+          isWideScreen
+              ? IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(flex: 2, child: _buildCardHeader()),
+                      Expanded(flex: 3, child: _buildCardContent()),
+                    ],
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildCardHeader(),
+                    _buildCardContent(),
+                  ],
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTierSelector() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      child: Row(
+        children: widget.membershipPlan.tiers.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final tier = entry.value;
+          Color tc;
+          try { tc = Color(int.parse(tier.color.replaceFirst('#', '0xFF'))); } catch (_) { tc = AppTheme.primaryColor; }
+          final isSelected = idx == _selectedTierIndex;
+
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => setState(() {
+                _selectedTierIndex = idx;
+                _resetOptionSelection();
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: EdgeInsets.only(right: idx < widget.membershipPlan.tiers.length - 1 ? 6 : 0),
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? tc : tc.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: tc.withValues(alpha: isSelected ? 1.0 : 0.3), width: 1.5),
+                ),
+                child: Text(
+                  tier.name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: isSelected ? Colors.white : tc,
+                  ),
+                ),
+              ),
             ),
-          )
-        : Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildCardHeader(),
-              _buildCardContent(),
-            ],
-          ),
+          );
+        }).toList(),
+      ),
     );
   }
 
   Widget _buildCardHeader() {
+    final opt = _selectedOption;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            widget.planColor.withValues(alpha: 0.1),
-            widget.planColor.withValues(alpha: 0.05),
-          ],
+          colors: [_activePlanColor.withValues(alpha: 0.1), _activePlanColor.withValues(alpha: 0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: MediaQuery.of(context).size.width > 600
-            ? const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                bottomLeft: Radius.circular(18),
-              )
-            : const BorderRadius.only(
-                topLeft: Radius.circular(18),
-                topRight: Radius.circular(18),
-              ),
+            ? const BorderRadius.only(topLeft: Radius.circular(18), bottomLeft: Radius.circular(18))
+            : const BorderRadius.only(topLeft: Radius.circular(18), topRight: Radius.circular(18)),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          if (_selectedOption.discount > 0)
+          if (opt != null && opt.discount > 0)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade400, Colors.orange.shade400],
-                ),
+                gradient: LinearGradient(colors: [Colors.red.shade400, Colors.orange.shade400]),
                 borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.red.withValues(alpha: 0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
+                boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 2))],
               ),
-              child: Text(
-                'SAVE ${_selectedOption.discount}%',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
+              child: Text('SAVE ${opt.discount}%', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
             ),
           const SizedBox(height: 16),
           Container(
-            width: 80,
-            height: 80,
+            width: 80, height: 80,
             decoration: BoxDecoration(
-              color: widget.planColor,
+              color: _activePlanColor,
               shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: widget.planColor.withValues(alpha: 0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+              boxShadow: [BoxShadow(color: _activePlanColor.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 5))],
             ),
-            child: Icon(
-              widget.planIcon,
-              size: 40,
-              color: Colors.white,
-            ),
+            child: Icon(_activePlanIcon, size: 40, color: Colors.white),
           ),
           const SizedBox(height: 16),
-          Text(
-            widget.membershipPlan.name,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: widget.planColor,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          if (widget.membershipPlan.note.isNotEmpty) ...[
+          Text(_activePlanName, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: _activePlanColor), textAlign: TextAlign.center),
+          if (_activePlanNote.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              widget.membershipPlan.note,
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).textTheme.bodySmall?.color,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(_activePlanNote, style: TextStyle(fontSize: 12, color: Theme.of(context).textTheme.bodySmall?.color), textAlign: TextAlign.center),
           ],
         ],
       ),
@@ -3456,6 +3520,7 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
   }
 
   Widget _buildCardContent() {
+    final opt = _selectedOption;
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -3463,208 +3528,113 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Benefits
-          if (widget.membershipPlan.benefits.isNotEmpty) ...[
-            ...widget.membershipPlan.benefits.map((benefit) => Padding(
+          if (_activeBenefits.isNotEmpty) ...[
+            ..._activeBenefits.map((benefit) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    color: widget.planColor,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      benefit,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: Row(children: [
+                Icon(Icons.check_circle, color: _activePlanColor, size: 18),
+                const SizedBox(width: 10),
+                Expanded(child: Text(benefit, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+              ]),
             )),
             const SizedBox(height: 16),
           ],
 
           // Month selection
-          const Text(
-            'Select Duration',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textSecondary,
-            ),
-          ),
+          const Text('Select Duration', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: List.generate(widget.membershipPlan.monthlyOptions.length, (index) {
-              final option = widget.membershipPlan.monthlyOptions[index];
+            children: List.generate(_activeOptions.length, (index) {
+              final option = _activeOptions[index];
               final isSelected = index == _selectedOptionIndex;
               return InkWell(
                 onTap: () => setState(() => _selectedOptionIndex = index),
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected
-                        ? widget.planColor
-                        : Colors.grey.shade100,
+                    color: isSelected ? _activePlanColor : Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isSelected
-                          ? widget.planColor
-                          : Colors.grey.shade300,
-                      width: 1.5,
-                    ),
+                    border: Border.all(color: isSelected ? _activePlanColor : Colors.grey.shade300, width: 1.5),
                   ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        option.durationLabel,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : AppTheme.textPrimary,
-                        ),
-                      ),
-                      if (option.discount > 0)
-                        Text(
-                          '${option.discount}% off',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: isSelected ? Colors.white : Colors.green,
-                          ),
-                        ),
-                    ],
-                  ),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(option.durationLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : AppTheme.textPrimary)),
+                    if (option.discount > 0)
+                      Text('${option.discount}% off', style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : Colors.green)),
+                  ]),
                 ),
               );
             }),
           ),
           const SizedBox(height: 16),
           
-          // Total price with discount
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: widget.planColor.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: widget.planColor.withValues(alpha: 0.2),
+          if (opt != null) ...[
+            // Total price
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _activePlanColor.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _activePlanColor.withValues(alpha: 0.2)),
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Total Price',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      if (_selectedOption.discount > 0) ...[
-                        Text(
-                          '₹${_selectedOption.price.toStringAsFixed(0)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade500,
-                            decoration: TextDecoration.lineThrough,
-                          ),
-                        ),
-                      ],
-                      Text(
-                        '₹${_selectedOption.finalPrice.toStringAsFixed(0)}',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: widget.planColor,
-                        ),
-                      ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Text('Total Price', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                    const SizedBox(height: 2),
+                    if (opt.discount > 0) ...[
+                      Text('₹${opt.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade500, decoration: TextDecoration.lineThrough)),
                     ],
-                  ),
-                ),
-                if (_selectedOption.discount > 0)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
+                    Text('₹${opt.finalPrice.toStringAsFixed(0)}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _activePlanColor)),
+                  ])),
+                  if (opt.discount > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(5)),
+                      child: Text('Save ₹${(opt.price - opt.finalPrice).toStringAsFixed(0)}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
                     ),
-                    decoration: BoxDecoration(
-                      color: Colors.green.shade100,
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      'Save ₹${(_selectedOption.price - _selectedOption.finalPrice).toStringAsFixed(0)}',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.green.shade700,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          
-          // Buy button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () {
-                // Navigate to booking with selected option
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Selected: ${_selectedOption.durationLabel} - ₹${_selectedOption.finalPrice.toStringAsFixed(0)}'),
-                  ),
-                );
-                // TODO: Implement booking navigation with MonthlyOption
-                // Navigator.push(
-                //   context,
-                //   MaterialPageRoute(
-                //     builder: (_) => BookingScreen(
-                //       gym: widget.gym,
-                //       monthlyOption: _selectedOption,
-                //     ),
-                //   ),
-                // );
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.planColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                elevation: 4,
-                shadowColor: widget.planColor.withValues(alpha: 0.4),
-              ),
-              child: const Text(
-                'Buy Membership',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
+                ],
               ),
             ),
-          ),
+            const SizedBox(height: 12),
+            // Buy button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () {
+                  final pricePerMonth = opt.months > 0 ? opt.price / opt.months : opt.price;
+                  final planName = _isMultiTier ? _activePlanName : widget.membershipPlan.name;
+                  final planNote = _isMultiTier ? _activePlanNote : widget.membershipPlan.note;
+                  final synthetic = Membership(
+                    id: '',
+                    gymId: widget.gym.id,
+                    name: planName,
+                    description: planNote,
+                    price: pricePerMonth,
+                    duration: opt.months * 30,
+                    durationType: 'month',
+                    features: _activeBenefits,
+                    isPopular: opt.isPopular,
+                    createdAt: DateTime.now(),
+                  );
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => BookingScreen(gym: widget.gym, membership: synthetic, selectedMonths: opt.months)));
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _activePlanColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  elevation: 4,
+                  shadowColor: _activePlanColor.withValues(alpha: 0.4),
+                ),
+                child: const Text('Buy Membership', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              ),
+            ),
+          ],
         ],
       ),
     );

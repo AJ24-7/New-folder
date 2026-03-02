@@ -20,6 +20,7 @@ import 'services/local_notification_service.dart';
 import 'services/foreground_task_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'l10n/app_localizations.dart';
 import 'services/location_service.dart';
@@ -171,12 +172,16 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(seconds: 2));
 
     if (mounted) {
+      Widget destination;
+      if (authProvider.isAuthenticated) {
+        destination = const HomeScreen();
+      } else if (await OnboardingScreen.shouldShow()) {
+        destination = const OnboardingScreen();
+      } else {
+        destination = const LoginScreen();
+      }
       Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => authProvider.isAuthenticated
-              ? const HomeScreen()
-              : const LoginScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => destination),
       );
     }
   }
