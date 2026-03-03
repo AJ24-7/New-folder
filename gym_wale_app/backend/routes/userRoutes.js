@@ -153,6 +153,25 @@ router.post('/fcm-token', authMiddleware, async (req, res) => {
   }
 });
 // ======================
+/**
+ * DELETE /api/users/fcm-token
+ * Unregister (null-out) the FCM device token on logout.
+ */
+router.delete('/fcm-token', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const User = require('../models/User');
+    await User.findByIdAndUpdate(userId, {
+      $set: { 'fcmToken.token': null },
+    });
+    console.log(`✅ FCM token cleared for user ${userId}`);
+    res.json({ success: true, message: 'FCM token unregistered' });
+  } catch (error) {
+    console.error('❌ Error unregistering FCM token:', error);
+    res.status(500).json({ success: false, message: 'Failed to unregister FCM token' });
+  }
+});
+// ======================
 router.get('/:userId/coupons', authMiddleware, getUserCoupons);
 router.post('/:userId/coupons', authMiddleware, saveOfferToProfile);
 router.get('/:userId/coupons/:couponId/check', authMiddleware, checkCouponValidity);

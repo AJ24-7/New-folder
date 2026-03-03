@@ -228,6 +228,9 @@ class GeofencingService extends ChangeNotifier {
             activeDays: gs?.activeDays ?? _attendanceSettings!.activeDays,
           );
         }
+        // Mark active membership so the background isolate is allowed to
+        // poll GPS and call the backend.
+        await ForegroundTaskService.persistActiveMembership(true);
         // Start the persistent Android foreground service (survives force-kill).
         await _fgTaskService.startService();
 
@@ -275,7 +278,9 @@ class GeofencingService extends ChangeNotifier {
       await prefs.remove('geofence_radius');
       await prefs.remove('geofence_type');
       await prefs.remove('geofence_polygon_coordinates');
-      
+      // Signal the background isolate to halt — no active membership/login.
+      await ForegroundTaskService.persistActiveMembership(false);
+
       notifyListeners();
       debugPrint('[GEOFENCE] All geofences removed');
     } catch (e) {

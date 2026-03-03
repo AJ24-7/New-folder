@@ -78,20 +78,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
         if (gymId != null && !gymSettings.containsKey(gymId)) {
           try {
             final settingsResult = await ApiService.getGymSettings(gymId);
-            print('Settings result for gym $gymId: $settingsResult');
+      debugPrint('Settings result for gym $gymId: $settingsResult');
             
             if (settingsResult['success'] == true && settingsResult['settings'] != null) {
               final allowFreezing = settingsResult['settings']['allowMembershipFreezing'];
-              gymSettings[gymId] = allowFreezing ?? false; // Default to false if not specified
-              print('Gym $gymId allows freezing: ${gymSettings[gymId]}');
+              gymSettings[gymId] = allowFreezing ?? false;
+              debugPrint('Gym $gymId allows freezing: ${gymSettings[gymId]}');
             } else {
-              // If settings couldn't be loaded, default to false for safety
               gymSettings[gymId] = false;
-              print('Failed to load settings for gym $gymId, defaulting to false');
+              debugPrint('Failed to load settings for gym $gymId, defaulting to false');
             }
           } catch (e) {
-            print('Error loading gym settings for $gymId: $e');
-            gymSettings[gymId] = false; // Default to NOT allowing freeze for safety
+            debugPrint('Error loading gym settings for $gymId: $e');
+            gymSettings[gymId] = false;
           }
         }
       }
@@ -116,7 +115,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
           diets = [dietResult['subscription'] as UserDietSubscription];
         }
       } catch (e) {
-        print('Error loading diet subscriptions: $e');
+        debugPrint('Error loading diet subscriptions: $e');
         diets = [];
       }
 
@@ -133,7 +132,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading subscriptions: $e');
+      debugPrint('Error loading subscriptions: $e');
       setState(() => _isLoading = false);
     }
   }
@@ -177,7 +176,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
     final gymName = pass['gym']?['gymName'] ?? pass['gym']?['name'] ?? 'Gym';
     final gymLogo = pass['gym']?['logo'];
     final membershipId = pass['membershipId'] ?? 'N/A';
-    // Use validUntil if available, otherwise try endDate or joinDate + monthlyPlan
+    // Use validUntil if available, otherwise fall back to endDate / computed date.
+    // Then adjust for any active freeze: the membership end is extended by the
+    // freeze duration so the pass reflects the correct expiry date.
     DateTime validUntil;
     if (pass['validUntil'] != null && pass['validUntil'].toString().isNotEmpty) {
       validUntil = DateTime.parse(pass['validUntil']);
@@ -189,6 +190,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
       final monthlyPlan = pass['monthlyPlan'] ?? '1 Month';
       final months = int.tryParse(monthlyPlan.split(' ')[0]) ?? 1;
       validUntil = DateTime(joinDate.year, joinDate.month + months, joinDate.day);
+    }
+    // Extend validUntil by the freeze duration when the membership is currently frozen.
+    if (pass['currentlyFrozen'] == true &&
+        pass['freezeStartDate'] != null &&
+        pass['freezeEndDate'] != null) {
+      final freezeStart = DateTime.parse(pass['freezeStartDate'].toString());
+      final freezeEnd   = DateTime.parse(pass['freezeEndDate'].toString());
+      validUntil = validUntil.add(freezeEnd.difference(freezeStart));
     }
     
     // Generate QR code data
@@ -257,7 +266,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                               ),
                             ),
                             errorWidget: (context, error, stackTrace) {
-                              print('❌ Error loading gym logo: $gymLogo - $error');
+                              debugPrint('Error loading gym logo: $gymLogo - $error');
                               return const Icon(
                                 Icons.fitness_center,
                                 color: AppTheme.primaryColor,
@@ -333,7 +342,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                                       : null,
                                   onBackgroundImageError: pass['profileImage'] != null && pass['profileImage'].isNotEmpty
                                       ? (exception, stackTrace) {
-                                          print('❌ Error loading profile image: ${pass['profileImage']} - $exception');
+                                          debugPrint('Error loading profile image: ${pass['profileImage']} - $exception');
                                         }
                                       : null,
                                   child: pass['profileImage'] == null || pass['profileImage'].isEmpty
@@ -1045,6 +1054,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
     final endDate = membership['endDate'] != null
         ? DateTime.parse(membership['endDate'])
         : DateTime.now();
+    final effectiveEndDate = membership['validUntil'] != null &&
+            membership['validUntil'].toString().isNotEmpty
+        ? DateTime.parse(membership['validUntil'])
+        : endDate;
     final membershipId = membership['id'] ?? membership['membershipId'] ?? '';
     final currentlyFrozen = membership['currentlyFrozen'] ?? false;
     final totalFreezeCount = membership['totalFreezeCount'] ?? 0;
@@ -1082,23 +1095,17 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
-                      child: (gymLogo != null && gymLogo.isNotEmpty)
-                        ? Image.network(
-                            gymLogo,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(
-                                Icons.fitness_center,
-                                color: AppTheme.primaryColor,
-                                size: 24,
-                              );
-                            },
-                          )
-                        : const Icon(
+                      child: Image.network(
+                        gymLogo,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) {
+                          return const Icon(
                             Icons.fitness_center,
                             color: AppTheme.primaryColor,
                             size: 24,
-                          ),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 Expanded(
@@ -1185,8 +1192,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                         color: AppTheme.borderColor,
                       ),
                       _buildDateInfo(
-                        l10n.endDate,
-                        DateFormat('MMM dd, yyyy').format(endDate),
+                        currentlyFrozen ? 'Valid Until*' : l10n.endDate,
+                        DateFormat('MMM dd, yyyy').format(effectiveEndDate),
                         Icons.event,
                       ),
                     ],

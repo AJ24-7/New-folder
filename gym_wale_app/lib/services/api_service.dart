@@ -46,10 +46,25 @@ class ApiService {
     await prefs.remove('auth_token');
     await prefs.remove('user_id');
     await prefs.remove('user_email');
+    // Signal the geofence background isolate to halt on next tick.
+    await prefs.setBool('geofence_has_active_membership', false);
   }
 
   static bool get isAuthenticated => _token != null;
   static String? get token => _token;
+
+  /// Unregister (null-out) the FCM device token on the backend at logout.
+  static Future<void> unregisterFcmToken() async {
+    try {
+      final url = Uri.parse(ApiConfig.baseUrl + ApiConfig.fcmToken);
+      await http.delete(
+        url,
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      debugPrint('[API] unregisterFcmToken error: $e');
+    }
+  }
 
   /// Register or update the FCM device token on the backend.
   static Future<void> registerFcmToken(String fcmToken) async {
@@ -185,7 +200,7 @@ class ApiService {
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'idToken': idToken,
+          'credential': idToken,
         }),
       ).timeout(const Duration(seconds: 30));
 

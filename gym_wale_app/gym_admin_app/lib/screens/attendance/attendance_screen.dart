@@ -64,6 +64,10 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     });
     
     try {
+      // Gym ID comes from the authenticated admin's ID (one admin = one gym).
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final gymId = authProvider.currentAdmin?.id ?? '';
+
       // Load all data in parallel
       final results = await Future.wait([
         _apiService.getAttendanceByDate(_selectedDate),
@@ -73,7 +77,9 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         ),
         _apiService.getAttendanceSettings(),
         _apiService.getRushHourAnalysis(days: 7),
-        _apiService.getMembersLocationStatus(),
+        gymId.isNotEmpty
+            ? _apiService.getMembersLocationStatus(gymId)
+            : Future.value(null),
       ]);
       
       setState(() {

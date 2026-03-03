@@ -119,85 +119,79 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Your gym';
         
         if (gymId == null) continue;
-        
-        // Check if we've already shown this warning for this gym today
-        final lastWarningShown = prefs.getInt('geofence_warning_shown_$gymId');
-        
-        // Show warning once per day per gym
-        if (lastWarningShown != null && (now - lastWarningShown) < 24 * 60 * 60 * 1000) {
-          continue; // Already shown today for this gym
-        }
 
-        // Fetch gym's attendance settings
+        // ── Always fetch attendance settings and configure geofence ──────────
+        // This MUST happen every time the app opens, regardless of whether
+        // the daily warning dialog has already been shown today.
         debugPrint('[HOME] Fetching attendance settings for gym: $gymId ($gymName)');
         final response = await ApiService.getGymAttendanceSettings(gymId);
-        
-        if (response['success'] == true) {
-          final settings = response['settings'];
-          final geofenceEnabled = settings['geofenceEnabled'] == true ||
-                                  settings['mode'] == 'geofence' ||
-                                  settings['mode'] == 'hybrid';
-          
-          debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
-          
-          if (!geofenceEnabled) {
-            continue; // Geofence not enabled for this gym
-          }
 
-          // ── Auto-configure geofencing ─────────────────────────────────────
-          // If the geofence service is not yet running for this gym, set it
-          // up automatically so the user doesn't have to open AttendanceScreen
-          // and tap "Enable Tracking" manually.
+        if (response['success'] != true) continue;
+
+        final settings = response['settings'];
+        final geofenceEnabled = settings['geofenceEnabled'] == true ||
+                                settings['mode'] == 'geofence' ||
+                                settings['mode'] == 'hybrid';
+
+        debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
+
+        if (geofenceEnabled) {
+          // ── Auto-configure geofencing ───────────────────────────────────────
+          // Set up the in-app geofence listener if it isn't running for this
+          // gym yet.  Do this unconditionally so it works on every app open,
+          // not just the first time the permission warning is shown.
           if (!geofencingService.isServiceRunning ||
               geofencingService.currentGymId != gymId) {
             debugPrint('[HOME] Auto-configuring geofence for gym: $gymId ($gymName)');
             try {
               final attendanceProvider =
                   Provider.of<AttendanceProvider>(context, listen: false);
-              // setupGeofencingWithSettings fetches coordinates from
-              // the attendance-settings API and registers the geofence.
               await attendanceProvider.setupGeofencingWithSettings(gymId);
             } catch (autoSetupErr) {
               debugPrint('[HOME] Auto geofence setup failed: $autoSetupErr');
             }
+          } else {
+            debugPrint('[HOME] Geofence already running for gym $gymId — skipping setup');
           }
+        }
 
-          // Check if we need to show warning
-          debugPrint('[HOME] Checking if should show location warning for gym: $gymName');
-          
-          try {
-            final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
-              geofencingService: geofencingService,
-              geofenceEnabled: geofenceEnabled,
-            );
+        // ── Daily warning dialog (throttled to once per day per gym) ─────────
+        // Check separately from the geofence setup so a shown dialog never
+        // prevents the service from being started.
+        final lastWarningShown = prefs.getInt('geofence_warning_shown_$gymId');
+        final warningShownToday = lastWarningShown != null &&
+            (now - lastWarningShown) < 24 * 60 * 60 * 1000;
 
-            debugPrint('[HOME] Should show warning: $shouldShow');
+        if (!geofenceEnabled || warningShownToday) {
+          continue; // Geofence off, or warning already shown today
+        }
 
-            if (shouldShow && mounted) {
-              // Wait a bit for the screen to fully load
-              await Future.delayed(const Duration(milliseconds: 800));
-              
-              if (mounted) {
-                debugPrint('[HOME] Showing location warning dialog for gym: $gymName');
-                await BackgroundLocationWarningDialog.show(
-                  context: context,
-                  gymName: gymName,
-                  geofencingService: geofencingService,
-                );
-                
-                // Mark as shown for this gym
-                await prefs.setInt('geofence_warning_shown_$gymId', now);
-                debugPrint('[HOME] Location warning shown and marked in preferences');
-              }
-              
-              // Only show warning for one gym at a time
-              break;
+        debugPrint('[HOME] Checking if should show location warning for gym: $gymName');
+        try {
+          final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
+            geofencingService: geofencingService,
+            geofenceEnabled: geofenceEnabled,
+          );
+
+          debugPrint('[HOME] Should show warning: $shouldShow');
+
+          if (shouldShow && mounted) {
+            await Future.delayed(const Duration(milliseconds: 800));
+            if (mounted) {
+              debugPrint('[HOME] Showing location warning dialog for gym: $gymName');
+              await BackgroundLocationWarningDialog.show(
+                context: context,
+                gymName: gymName,
+                geofencingService: geofencingService,
+              );
+              await prefs.setInt('geofence_warning_shown_$gymId', now);
+              debugPrint('[HOME] Location warning shown and marked in preferences');
             }
-          } catch (warningError) {
-            debugPrint('[HOME] Error showing location warning: $warningError');
-            // Continue to next membership if this one fails
-            continue;
+            break; // Only show warning for one gym at a time
           }
+        } catch (warningError) {
+          debugPrint('[HOME] Error showing location warning: $warningError');
+          continue;
         }
       }
     } catch (e) {

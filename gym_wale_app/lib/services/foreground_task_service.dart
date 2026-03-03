@@ -42,14 +42,24 @@ class _GeofenceTaskHandler extends TaskHandler {
   bool _entryMarkedToday = false;
   String? _lastMarkedDateKey; // 'yyyy-MM-dd'
 
+  /// Timestamp of the most recent confirmed EXIT, used for short-exit tolerance.
+  /// If the user re-enters the geofence within [_shortExitToleranceSecs] seconds
+  /// after a confirmed exit, we restore the original _enterTime instead of
+  /// restarting the 5-minute dwell timer from zero.  This prevents GPS jitter
+  /// at the boundary from indefinitely blocking auto-attendance marking.
+  DateTime? _lastExitTime;
+  /// Original enter-time saved across a short EXIT so we can restore it.
+  DateTime? _savedEnterTimeAcrossExit;
+  static const int _shortExitToleranceSecs = 180; // 3 minutes
+
   static const int _kBackendOk        = 0; // success — stop trying
   static const int _kBackendSoftFail  = 1; // transient error — retry later
   static const int _kBackendHardBlock = 2; // permanent block — stop today
 
   /// GPS jitter protection: require this many consecutive outside-boundary
   /// readings before we consider the user to have truly exited the geofence.
-  /// At a 30-second poll interval this means ~60 s outside before EXIT fires.
-  static const int _exitGraceTicks = 2;
+  /// At a 30-second poll interval this means ~120 s outside before EXIT fires.
+  static const int _exitGraceTicks = 4;
   int _consecutiveOutsideCount = 0;
 
   /// Incremental attempt counter for the DWELL mark — resets on success.
@@ -134,6 +144,25 @@ class _GeofenceTaskHandler extends TaskHandler {
     try {
       final prefs = await SharedPreferences.getInstance();
 
+      // ── Guard: require login + active membership ─────────────────────────
+      // Stop the foreground service entirely if the user has logged out or
+      // has no active gym membership.  This prevents GPS polling, battery
+      // drain, and unwanted notifications when the user is not entitled to
+      // geofence attendance tracking.
+      final authToken = prefs.getString('auth_token');
+      if (authToken == null || authToken.isEmpty) {
+        debugPrint('[BGTask] No auth token — stopping foreground service immediately');
+        await FlutterForegroundTask.stopService();
+        return;
+      }
+      final hasActiveMembership =
+          prefs.getBool('geofence_has_active_membership') ?? false;
+      if (!hasActiveMembership) {
+        debugPrint('[BGTask] No active membership — stopping foreground service immediately');
+        await FlutterForegroundTask.stopService();
+        return;
+      }
+
       // Read geofence config saved by GeofencingService
       final gymId     = prefs.getString('geofence_gym_id');
       final gymLat    = prefs.getDouble('geofence_latitude');
@@ -210,10 +239,26 @@ class _GeofenceTaskHandler extends TaskHandler {
         }
 
         _wasInsideGeofence = true;
-        _enterTime = DateTime.now();
         _dwellMarkAttempts = 0;
+
+        // ── Short-exit tolerance ───────────────────────────────────────────
+        // If the user re-enters within _shortExitToleranceSecs after a
+        // confirmed exit, restore the original enter time so the 5-min dwell
+        // countdown is not reset by GPS jitter at the boundary.
+        final now2 = DateTime.now();
+        if (_lastExitTime != null &&
+            _savedEnterTimeAcrossExit != null &&
+            now2.difference(_lastExitTime!).inSeconds <= _shortExitToleranceSecs) {
+          _enterTime = _savedEnterTimeAcrossExit;
+          debugPrint('[BGTask] Short-exit re-enter — restoring original enter time: $_enterTime');
+        } else {
+          _enterTime = now2;
+          debugPrint('[BGTask] ENTER — 5-min dwell timer started at $_enterTime');
+        }
+        _lastExitTime = null;
+        _savedEnterTimeAcrossExit = null;
+
         await _saveDailyState(); // Persist timer so service-restart restores it
-        debugPrint('[BGTask] ENTER — 5-min dwell timer started at $_enterTime');
 
         _updateFgNotif(
           title: '🏋️ Gym Detected',
@@ -253,6 +298,9 @@ class _GeofenceTaskHandler extends TaskHandler {
         // EXIT confirmed
         _consecutiveOutsideCount = 0;
         _wasInsideGeofence = false;
+        // Save enter time and exit timestamp for short-exit tolerance on re-enter.
+        _savedEnterTimeAcrossExit = _enterTime;
+        _lastExitTime = DateTime.now();
         debugPrint('[BGTask] EXIT confirmed after grace period');
 
         _updateFgNotif(
@@ -344,16 +392,38 @@ class _GeofenceTaskHandler extends TaskHandler {
                 );
               } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
                 // Soft transient failure (GPS, network, operating-hours edge).
-                // Retry on next tick without the aggressive backoff that was
-                // causing the "stuck 30 s / 2 s" notification loop.
+                // Retry on next tick without any backoff that could rewind the
+                // timer and cause the infinite oscillation loop.
                 debugPrint('[BGTask] Soft-fail (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry next tick');
               } else {
-                // Max soft retries exceeded — back off 60 s (2 ticks) to give
-                // GPS / network time to recover without hammering the backend.
-                debugPrint('[BGTask] Max retries reached — backing off 60 s');
+                // ── Max soft retries exceeded ─────────────────────────────────
+                // IMPORTANT: do NOT reset _enterTime here.  The old approach of
+                // setting _enterTime = now - 240 s rewound the timer to 4 min,
+                // causing DWELL to re-fire every 60 s indefinitely (the
+                // "increasing / decreasing dwell time" oscillation bug).
+                //
+                // Instead, treat this the same as a hard-block: mark entry as
+                // done for today so the task stops cycling and show a clear
+                // error notification so the user knows to mark manually.
+                debugPrint('[BGTask] Max retries ($_maxDwellMarkAttempts) exceeded — stopping auto-mark for today');
+                _entryMarkedToday = true;
                 _dwellMarkAttempts = 0;
-                _enterTime = DateTime.now().subtract(const Duration(seconds: 240));
                 await _saveDailyState();
+
+                _updateFgNotif(
+                  title: '⚠️ Attendance Not Auto-Marked',
+                  text: 'Could not reach the server after $_maxDwellMarkAttempts attempts. Mark manually.',
+                );
+                await _showLocalNotif(
+                  id: 3004,
+                  title: '⚠️ Auto-Attendance Failed',
+                  body: 'Gym presence was detected but attendance could not be '
+                      'marked automatically after $_maxDwellMarkAttempts attempts. '
+                      'Possible causes: weak network, low GPS accuracy, or a '
+                      'temporary server issue. Please mark your attendance '
+                      'manually from the app.',
+                  importance: Importance.high,
+                );
               }
             }
           } else {
@@ -450,6 +520,7 @@ class _GeofenceTaskHandler extends TaskHandler {
           'auto-mark exit is disabled',
           'member not found',
           'mock locations are not allowed',
+          'attendance can only be marked during gym operating hours',
         ];
         if (hardBlocks.any(msg.contains)) {
           debugPrint('[BGTask] Hard-block: $msg');
@@ -591,6 +662,14 @@ class _GeofenceTaskHandler extends TaskHandler {
               debugPrint('[BGTask] Restored enter time from prefs: $restored');
             }
           }
+          // Restore short-exit tolerance state
+          final lastExitStr   = prefs.getString('bg_task_last_exit_time');
+          final savedEnterStr = prefs.getString('bg_task_saved_enter_time');
+          if (lastExitStr != null && savedEnterStr != null) {
+            _lastExitTime              = DateTime.tryParse(lastExitStr);
+            _savedEnterTimeAcrossExit  = DateTime.tryParse(savedEnterStr);
+            debugPrint('[BGTask] Restored short-exit tolerance state: exit=$_lastExitTime savedEnter=$_savedEnterTimeAcrossExit');
+          }
         }
       } else {
         // New day — clear everything
@@ -598,6 +677,8 @@ class _GeofenceTaskHandler extends TaskHandler {
         _lastMarkedDateKey = today;
         await prefs.remove('bg_task_was_inside');
         await prefs.remove('bg_task_enter_time');
+        await prefs.remove('bg_task_last_exit_time');
+        await prefs.remove('bg_task_saved_enter_time');
       }
       debugPrint('[BGTask] Loaded daily state: marked=$_entryMarkedToday wasInside=$_wasInsideGeofence');
     } catch (_) {}
@@ -615,6 +696,14 @@ class _GeofenceTaskHandler extends TaskHandler {
       } else {
         await prefs.remove('bg_task_was_inside');
         await prefs.remove('bg_task_enter_time');
+      }
+      // Persist short-exit tolerance state
+      if (_lastExitTime != null && _savedEnterTimeAcrossExit != null) {
+        await prefs.setString('bg_task_last_exit_time', _lastExitTime!.toIso8601String());
+        await prefs.setString('bg_task_saved_enter_time', _savedEnterTimeAcrossExit!.toIso8601String());
+      } else {
+        await prefs.remove('bg_task_last_exit_time');
+        await prefs.remove('bg_task_saved_enter_time');
       }
     } catch (_) {}
   }
@@ -766,5 +855,17 @@ class ForegroundTaskService {
         'morning=$morningOpening-$morningClosing '
         'evening=$eveningOpening-$eveningClosing '
         'activeDays=$activeDays');
+  }
+
+  /// Persist whether the user currently has an active gym membership.
+  ///
+  /// Set to `true` just before [startService] is called so the background
+  /// isolate knows it is authorised to poll GPS and mark attendance.
+  /// Set to `false` on [removeAllGeofences] and on user logout so the isolate
+  /// halts immediately without making any network calls.
+  static Future<void> persistActiveMembership(bool active) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('geofence_has_active_membership', active);
+    debugPrint('[FGTask] Active membership flag persisted: $active');
   }
 }

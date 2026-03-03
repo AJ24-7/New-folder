@@ -4,9 +4,8 @@ import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/attendance_settings.dart';
 import '../providers/attendance_provider.dart';
-import '../providers/auth_provider.dart';
+import 'package:geolocator/geolocator.dart';
 import '../l10n/app_localizations.dart';
-import '../services/location_monitoring_service.dart';
 import '../services/api_service.dart';
 import '../widgets/location_warning_dialog.dart';
 import '../screens/attendance_history_screen.dart';
@@ -27,11 +26,15 @@ class AttendanceWidget extends StatefulWidget {
 }
 
 class _AttendanceWidgetState extends State<AttendanceWidget> {
-  final LocationMonitoringService _locationMonitoring = LocationMonitoringService();
-  LocationStatus? _locationStatus;
+  bool _locationEnabled = false;
+  bool _hasLocationPermission = false;
+  bool _hasBackgroundPermission = false;
   bool _isCheckingLocation = false;
   bool _geofenceEnabled = false;
   bool _showLocationWarning = false;
+  // Per-instance copy so that multiple widgets (one per membership) each
+  // evaluate their own gym's schedule rather than sharing the provider value.
+  AttendanceSettings? _localSettings;
 
   @override
   void initState() {
@@ -44,17 +47,21 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
 
   @override
   void dispose() {
-    // Don't dispose the singleton service, just stop monitoring for this gym
     super.dispose();
   }
 
   Future<void> _loadAttendanceData() async {
     final provider = Provider.of<AttendanceProvider>(context, listen: false);
-    // Load attendance settings (needed for schedule / off-day banners)
-    if (provider.attendanceSettings == null) {
+    // Reload settings when the provider doesn't yet hold data for this gym.
+    // Avoids cross-contamination when multiple AttendanceWidgets are rendered
+    // for different gyms on the same screen (subscriptions screen).
+    if (provider.attendanceSettings == null ||
+        provider.attendanceSettings!.gymId != widget.gymId) {
       await provider.loadAttendanceSettings(widget.gymId);
     }
+    if (!mounted) return;
     await provider.fetchTodayAttendance(widget.gymId);
+    if (!mounted) return;
     await provider.fetchAttendanceStats(
       widget.gymId,
       month: DateTime.now().month,
@@ -73,15 +80,20 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
     try {
       // Get geofence requirements from backend
       final response = await ApiService.getGymAttendanceSettings(widget.gymId);
-      
+      if (!mounted) return;
+
       if (response['success'] == true && response['settings'] != null) {
         final settings = response['settings'];
         final geofenceEnabled = settings['geofenceEnabled'] == true ||
                                settings['mode'] == 'geofence' ||
                                settings['mode'] == 'hybrid';
-        
+        // Parse the full settings locally — this is the source of truth for
+        // this widget's schedule banner and avoids sharing state with other
+        // AttendanceWidget instances that manage different gyms.
+        final parsedSettings = AttendanceSettings.fromJson(settings);
         setState(() {
           _geofenceEnabled = geofenceEnabled;
+          _localSettings = parsedSettings;
         });
 
         // Skip location monitoring on web platform
@@ -91,21 +103,26 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
             // Show a static warning that geofencing is not supported on web
             setState(() {
               _showLocationWarning = true;
-              _locationStatus = null; // Set to null to indicate web platform
             });
           }
           return;
         }
 
         if (geofenceEnabled) {
-          // Check current location status (one-shot permission/service check).
-          // Do NOT call _locationMonitoring.initialize() here — it starts a
-          // periodic polling timer that conflicts with the geofence attendance
-          // foreground task.
-          final status = await _locationMonitoring.getCurrentLocationStatus();
+          // Use Geolocator directly; GeofencingService owns background tracking.
+          final locationEnabled = await Geolocator.isLocationServiceEnabled();
+          final permission = await Geolocator.checkPermission();
+          final hasPermission = permission == LocationPermission.always ||
+              permission == LocationPermission.whileInUse;
+          final hasBackgroundPermission =
+              permission == LocationPermission.always;
+          if (!mounted) return;
           setState(() {
-            _locationStatus = status;
-            _showLocationWarning = !status.meetsGeofenceRequirements;
+            _locationEnabled = locationEnabled;
+            _hasLocationPermission = hasPermission;
+            _hasBackgroundPermission = hasBackgroundPermission;
+            _showLocationWarning =
+                !(locationEnabled && hasBackgroundPermission);
           });
         }
       }
@@ -120,25 +137,18 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
 
   /// Show location warning dialog
   Future<void> _showLocationWarningDialog() async {
-    if (_locationStatus == null) return;
+    // Always do a fresh check before showing the dialog
+    await _checkGeofenceAndLocation();
+    if (!mounted) return;
 
     final warnings = <LocationWarning>[];
 
-    if (!_locationStatus!.locationEnabled) {
+    if (!_locationEnabled) {
       warnings.add(LocationWarning.locationDisabled());
-    }
-    
-    if (_locationStatus!.locationPermission != 'granted') {
+    } else if (!_hasLocationPermission) {
       warnings.add(LocationWarning.permissionDenied());
-    }
-    
-    if (!_locationStatus!.backgroundLocationEnabled ||
-        _locationStatus!.backgroundLocationPermission != 'granted') {
+    } else if (!_hasBackgroundPermission) {
       warnings.add(LocationWarning.backgroundPermissionDenied());
-    }
-    
-    if (_locationStatus!.locationAccuracy == 'low') {
-      warnings.add(LocationWarning.lowAccuracy());
     }
 
     if (warnings.isNotEmpty) {
@@ -146,9 +156,10 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
         context,
         warnings: warnings,
       );
-      
+
       // Recheck after user returns from settings
       await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
       await _checkGeofenceAndLocation();
     }
   }
@@ -169,7 +180,9 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
           return _buildErrorState(l10n, provider.errorMessage!);
         }
 
-        final scheduleBanner = _buildScheduleBanner(provider.attendanceSettings);
+        // Use _localSettings (per-instance) so every gym membership card
+        // evaluates its own opening hours / active days, not a shared value.
+        final scheduleBanner = _buildScheduleBanner(_localSettings);
         return Column(
           children: [
             // Show "off day" / "outside operating hours" banner
@@ -195,13 +208,11 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
     if (kIsWeb) {
       message = 'Automatic attendance is not available on web. Please use the mobile app for geofence-based attendance.';
       showFixButton = false;
-    } else if (_locationStatus == null) {
-      message = 'Location access required for automatic attendance';
-    } else if (!_locationStatus!.locationEnabled) {
+    } else if (!_locationEnabled) {
       message = 'Enable location services for attendance tracking';
-    } else if (_locationStatus!.locationPermission != 'granted') {
+    } else if (!_hasLocationPermission) {
       message = 'Allow location permission for attendance';
-    } else if (!_locationStatus!.backgroundLocationEnabled) {
+    } else if (!_hasBackgroundPermission) {
       message = 'Enable background location for automatic attendance';
     } else {
       message = 'Location access required for automatic attendance';
@@ -454,17 +465,17 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
                           Row(
                             children: [
                               Icon(
-                                _locationStatus?.meetsGeofenceRequirements == true
+                                (_locationEnabled && _hasBackgroundPermission)
                                     ? Icons.check_circle
                                     : Icons.location_off,
-                                color: _locationStatus?.meetsGeofenceRequirements == true
+                                color: (_locationEnabled && _hasBackgroundPermission)
                                     ? Colors.green[300]
                                     : Colors.orange[300],
                                 size: 12,
                               ),
                               const SizedBox(width: 4),
                               Text(
-                                _locationStatus?.meetsGeofenceRequirements == true
+                                (_locationEnabled && _hasBackgroundPermission)
                                     ? 'Auto-tracking enabled'
                                     : 'Location setup required',
                                 style: TextStyle(

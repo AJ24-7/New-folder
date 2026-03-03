@@ -179,6 +179,18 @@ class LocalNotificationService {
   // PUBLIC NOTIFICATION METHODS
   // ────────────────────────────────────────────────────────────────────────────
 
+  /// Shown when geofence dwell was detected but auto-marking failed after
+  /// all retries.  Gives the user a clear, actionable reason.
+  Future<void> showAttendanceFailedNotification({required String reason}) async {
+    await _show(
+      id: _idAttendanceEntry, // reuse the entry slot so it replaces any
+                               // previous "Gym Detected" notification
+      title: '⚠️ Auto-Attendance Failed',
+      body: reason,
+      payload: 'attendance_failed',
+    );
+  }
+
   /// Shown immediately when user enters the geofence.
   /// Tells the user that a 5-minute dwell check has started.
   Future<void> showGeofenceEnteredNotification({required String gymName}) async {

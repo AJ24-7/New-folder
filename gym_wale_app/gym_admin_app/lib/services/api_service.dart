@@ -1072,9 +1072,9 @@ class ApiService {
 
   // Location Status Methods
   /// Get all members location status for a gym
-  Future<Map<String, dynamic>?> getMembersLocationStatus() async {
+  Future<Map<String, dynamic>?> getMembersLocationStatus(String gymId) async {
     try {
-      final response = await _dio.get('/api/member/admin/members-location-status/:gymId');
+      final response = await _dio.get('/api/member/admin/members-location-status/$gymId');
       if (response.statusCode == 200 && response.data['success'] == true) {
         return response.data;
       }
@@ -1086,9 +1086,9 @@ class ApiService {
   }
 
   /// Get members with location issues
-  Future<List<dynamic>> getMembersWithLocationIssues() async {
+  Future<List<dynamic>> getMembersWithLocationIssues(String gymId) async {
     try {
-      final response = await _dio.get('/api/member/admin/members-location-issues/:gymId');
+      final response = await _dio.get('/api/member/admin/members-location-issues/$gymId');
       if (response.statusCode == 200 && response.data['success'] == true) {
         return response.data['members'] ?? [];
       }
@@ -1100,9 +1100,11 @@ class ApiService {
   }
 
   /// Get specific member location status
-  Future<Map<String, dynamic>?> getMemberLocationStatus(String memberId) async {
+  Future<Map<String, dynamic>?> getMemberLocationStatus(
+      String memberId, String gymId) async {
     try {
-      final response = await _dio.get('/api/member/location-status/$memberId/:gymId');
+      final response =
+          await _dio.get('/api/member/location-status/$memberId/$gymId');
       if (response.statusCode == 200 && response.data['success'] == true) {
         return response.data['status'];
       }

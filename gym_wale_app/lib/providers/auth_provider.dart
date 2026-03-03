@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user.dart';
 import '../services/api_service.dart';
+import '../services/firebase_notification_service.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -108,6 +109,14 @@ class AuthProvider extends ChangeNotifier {
 
   /// Logout user
   Future<void> logout() async {
+    // Remove FCM token from backend and Firebase before clearing auth so the
+    // server stops sending push notifications to this device after logout.
+    try {
+      await ApiService.unregisterFcmToken();
+    } catch (_) {}
+    try {
+      if (!kIsWeb) await FirebaseNotificationService.instance.deleteToken();
+    } catch (_) {}
     await ApiService.logout();
     _user = null;
     _error = null;

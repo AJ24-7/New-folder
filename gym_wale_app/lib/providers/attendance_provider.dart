@@ -18,6 +18,15 @@ class AttendanceProvider extends ChangeNotifier {
   // calls (geofence_service fires DWELL every poll tick once loiteringDelayMs is hit).
   bool _isDwellMarkInProgress = false;
 
+  /// How many consecutive DWELL-triggered mark attempts have soft-failed.
+  /// Resets on any success or on daily status reset.
+  /// When this reaches [_maxDwellFailsBeforeGiveUp] the provider stops trying
+  /// for the rest of the day (sets _isAttendanceMarkedToday = true) and shows
+  /// an error notification — preventing the infinite retry loop that occurred
+  /// because geofence_service fires DWELL on every ~5 s poll tick.
+  int _dwellMarkFailCount = 0;
+  static const int _maxDwellFailsBeforeGiveUp = 3;
+
   bool _isAttendanceMarkedToday = false;
   bool get isAttendanceMarkedToday => _isAttendanceMarkedToday;
 
@@ -189,12 +198,39 @@ class AttendanceProvider extends ChangeNotifier {
         _isDwellMarkInProgress = true;
         final success = await markAttendanceEntry(gymId);
         _isDwellMarkInProgress = false;
-        // ── Gate 4: Hard server errors ──────────────────────────────────────
-        // Stop geofence tracking on permanent errors (expired membership,
-        // geofence disabled server-side) to avoid repeated failed calls.
-        if (!success && _isHardBlockError(_errorMessage)) {
+
+        if (success) {
+          // Reset fail counter so a future session works from scratch.
+          _dwellMarkFailCount = 0;
+        } else if (_isHardBlockError(_errorMessage)) {
+          // ── Gate 4a: Hard server errors ───────────────────────────────────
+          // Stop geofence tracking on permanent errors (expired membership,
+          // geofence disabled server-side) to avoid repeated failed calls.
           debugPrint('[ATTENDANCE] Hard block – stopping geofence: $_errorMessage');
+          _dwellMarkFailCount = 0;
           await _geofencingService!.removeAllGeofences();
+        } else {
+          // ── Gate 4b: Soft / transient failure ────────────────────────────
+          // geofence_service fires DWELL every ~5 s indefinitely once the
+          // threshold is passed.  After _maxDwellFailsBeforeGiveUp consecutive
+          // failures we stop retrying for today to avoid burning battery and
+          // spamming the backend, and notify the user with a clear reason.
+          _dwellMarkFailCount++;
+          debugPrint('[ATTENDANCE] DWELL soft-fail $_dwellMarkFailCount/$_maxDwellFailsBeforeGiveUp — error: $_errorMessage');
+
+          if (_dwellMarkFailCount >= _maxDwellFailsBeforeGiveUp) {
+            debugPrint('[ATTENDANCE] Max DWELL fails reached — giving up for today');
+            // Mark as done so DWELL events are silently ignored for the rest
+            // of the day.  The user must mark attendance manually.
+            _isAttendanceMarkedToday = true;
+            _dwellMarkFailCount = 0;
+            notifyListeners();
+
+            final reason = _buildFailureReason(_errorMessage);
+            await LocalNotificationService.instance.showAttendanceFailedNotification(
+              reason: reason,
+            );
+          }
         }
       } else {
         debugPrint('[ATTENDANCE] Auto-mark entry disabled in settings.');
@@ -211,18 +247,107 @@ class AttendanceProvider extends ChangeNotifier {
   }
 
   /// Returns true when the current wall-clock time is within the gym's
-  /// configured operating hours. If hours are not configured, returns true
-  /// (no restriction).
+  /// configured operating hours and the current day is an active day.
+  ///
+  /// Checks (in order):
+  ///   1. Active days of the week (if configured).
+  ///   2. Morning shift + evening shift (preferred, from geofenceSettings or
+  ///      top-level operatingHours).
+  ///   3. Legacy single-window operatingHoursStart/End as a fallback.
+  ///
+  /// Returns true (no restriction) when no shift information is stored,
+  /// mirroring the behaviour of the background-isolate `_isWithinActivePeriod`.
   bool _isWithinOperatingHours() {
-    final geo = _attendanceSettings?.geofenceSettings;
-    if (geo == null) return true;
-    final start = geo.operatingHoursStart;
-    final end   = geo.operatingHoursEnd;
-    if (start == null || end == null || start.isEmpty || end.isEmpty) return true;
+    final settings = _attendanceSettings;
+    if (settings == null) return true;
 
-    final now     = DateTime.now();
-    final current = '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-    return current.compareTo(start) >= 0 && current.compareTo(end) <= 0;
+    final now = DateTime.now();
+
+    // ── 1. Active days --─────────────────────────────────────────────────────
+    const dayNames = [
+      'monday', 'tuesday', 'wednesday', 'thursday',
+      'friday', 'saturday', 'sunday'
+    ];
+    final activeDays = settings.geofenceSettings?.activeDays ?? settings.activeDays;
+    if (activeDays.isNotEmpty) {
+      final today = dayNames[now.weekday - 1]; // weekday: 1=Mon … 7=Sun
+      if (!activeDays.contains(today)) {
+        debugPrint('[ATTENDANCE] Today ($today) is not an active gym day — skipping auto-mark.');
+        return false;
+      }
+    }
+
+    // ── 2. Shift-based hours check ────────────────────────────────────────────
+    // Helper: parse "HH:mm" → minutes since midnight. Returns null on error.
+    int? hmm(String? s) {
+      if (s == null || s.isEmpty) return null;
+      final p = s.split(':');
+      if (p.length < 2) return null;
+      final h = int.tryParse(p[0]);
+      final m = int.tryParse(p[1]);
+      return (h != null && m != null) ? h * 60 + m : null;
+    }
+
+    final geo   = settings.geofenceSettings;
+    final hours = settings.operatingHours;
+
+    // Prefer geofenceSettings shifts; fall back to top-level operatingHours.
+    final morningShift = geo?.morningShift ?? hours?.morning;
+    final eveningShift = geo?.eveningShift ?? hours?.evening;
+
+    if (morningShift != null || eveningShift != null) {
+      final mo = hmm(morningShift?.opening);
+      final mc = hmm(morningShift?.closing);
+      final eo = hmm(eveningShift?.opening);
+      final ec = hmm(eveningShift?.closing);
+
+      final nowMin    = now.hour * 60 + now.minute;
+      final inMorning = (mo != null && mc != null) && (nowMin >= mo && nowMin <= mc);
+      final inEvening = (eo != null && ec != null) && (nowMin >= eo && nowMin <= ec);
+
+      if (!inMorning && !inEvening) {
+        debugPrint('[ATTENDANCE] Outside all operating shifts '
+            '(${now.hour}:${now.minute.toString().padLeft(2, '0')}) — skipping.');
+        return false;
+      }
+      return true;
+    }
+
+    // ── 3. Legacy single-window fallback ──────────────────────────────────────
+    final legacyStart = geo?.operatingHoursStart;
+    final legacyEnd   = geo?.operatingHoursEnd;
+    if (legacyStart != null && legacyEnd != null &&
+        legacyStart.isNotEmpty && legacyEnd.isNotEmpty) {
+      final current = '${now.hour.toString().padLeft(2, '0')}'
+          ':${now.minute.toString().padLeft(2, '0')}';
+      return current.compareTo(legacyStart) >= 0 &&
+             current.compareTo(legacyEnd)   <= 0;
+    }
+
+    return true; // No shift information stored → no time restriction
+  }
+
+  /// Builds a human-readable failure reason from a raw error message.
+  String _buildFailureReason(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return 'Gym presence was detected but attendance could not be marked '
+          'automatically. Possible causes: weak network, low GPS accuracy, or '
+          'a temporary server issue. Please mark your attendance manually.';
+    }
+    final lower = raw.toLowerCase();
+    if (lower.contains('location') || lower.contains('gps') || lower.contains('accuracy')) {
+      return 'Attendance could not be auto-marked due to a GPS / location '
+          'accuracy problem. Move to an open area and mark manually.';
+    }
+    if (lower.contains('network') || lower.contains('connection') || lower.contains('timeout')) {
+      return 'Attendance could not be auto-marked — no internet connection. '
+          'Please check your network and mark manually.';
+    }
+    if (lower.contains('operating hours') || lower.contains('outside')) {
+      return 'Attendance was not marked because you checked in outside the '
+          "gym's operating hours. Please contact the gym if this is incorrect.";
+    }
+    return 'Auto-attendance failed: $raw. Please mark your attendance manually.';
   }
 
   /// Returns true when the server-returned error should permanently stop
@@ -764,6 +889,7 @@ class AttendanceProvider extends ChangeNotifier {
     _checkOutTime = null;
     _todayAttendance = null;
     _isDwellMarkInProgress = false;
+    _dwellMarkFailCount = 0;
     notifyListeners();
   }
 

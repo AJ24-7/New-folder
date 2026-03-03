@@ -1,6 +1,5 @@
 const Attendance = require('../models/Attendance');
 const Gym = require('../models/gym');
-const Member = require('../models/Member');
 const Membership = require('../models/Membership');
 const Notification = require('../models/Notification');
 const GeofenceConfig = require('../models/GeofenceConfig');
@@ -153,15 +152,9 @@ exports.autoMarkEntry = async (req, res) => {
                 });
             }
 
-            // Operating hours check from config
-            if (!geofenceConfig.isWithinOperatingHours()) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Attendance can only be marked during gym operating hours',
-                    openingTime: geofenceConfig.operatingHoursStart,
-                    closingTime: geofenceConfig.operatingHoursEnd
-                });
-            }
+            // NOTE: Operating hours are enforced by the mobile client (device-local
+            // time).  The server cannot reliably check hours because it runs in UTC
+            // while the gym admin sets hours in their local timezone.
 
             // ── Containment check (polygon OR circular) ──────────────────────
             const isInside = geofenceConfig.containsPoint(latitude, longitude);
@@ -209,31 +202,19 @@ exports.autoMarkEntry = async (req, res) => {
                     requiredRadius: geofenceRadius
                 });
             }
-
-            // Check time window (legacy)
-            if (!isWithinTimeWindow(gym.openingTime, gym.closingTime)) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'Attendance can only be marked during gym operating hours'
-                });
-            }
+            // NOTE: No server-side time-window check — client enforces operating hours.
         }
 
-        // Check if member exists and is active
-        const member = await Member.findById(memberId);
-        if (!member) {
-            return res.status(404).json({
-                success: false,
-                message: 'Member not found'
-            });
-        }
+        // The authenticated user IS the member — no separate Member lookup needed
+        // (req.user is set by authMiddleware from the JWT; Member._id ≠ User._id).
+        // Use the User document directly for notifications.
+        const memberUser = req.user;
 
-        // Check if member has an active membership
+        // Check if user has an active membership at this gym
         const activeMembership = await Membership.findOne({
-            memberId: memberId,
+            userId: memberId,
             gymId: gymId,
-            status: 'active',
-            endDate: { $gte: new Date() }
+            active: true
         });
 
         if (!activeMembership) {
@@ -303,9 +284,9 @@ exports.autoMarkEntry = async (req, res) => {
                 });
                 await notification.save();
                 console.log(`📲 Attendance update notification sent to member ${memberId}`);
-                // Send FCM push to device
+                // Send FCM push to device (use User's fcmToken — Member schema has none)
                 await sendFcmPush(
-                    member.fcmToken,
+                    memberUser.fcmToken,
                     '✅ Attendance Updated',
                     `Welcome back to ${gym.name || 'the gym'}! Checked in at ${existingAttendance.checkInTime}.`,
                     { type: 'attendance_entry', gymId: String(gymId), attendanceId: String(existingAttendance._id) }
@@ -382,9 +363,9 @@ exports.autoMarkEntry = async (req, res) => {
             });
             await notification.save();
             console.log(`📲 Attendance entry notification sent to member ${memberId}`);
-            // Send FCM push to device
+            // Send FCM push to device (use User's fcmToken — Member schema has none)
             await sendFcmPush(
-                member.fcmToken,
+                memberUser.fcmToken,
                 '✅ Attendance Marked',
                 `Welcome to ${gym.name || 'the gym'}! Auto-recorded at ${currentTime}.`,
                 {
@@ -521,10 +502,9 @@ exports.autoMarkExit = async (req, res) => {
             });
             await notification.save();
             console.log(`📲 Attendance exit notification sent to member ${memberId}`);
-            // Send FCM push to device
-            const exitMember = await Member.findById(memberId).select('fcmToken').lean();
+            // Send FCM push to device (use User's fcmToken — Member schema has none)
             await sendFcmPush(
-                exitMember?.fcmToken,
+                req.user.fcmToken,
                 '👋 Gym Exit Recorded',
                 `Great session at ${gymName}! You trained for ${durationInMinutes} min. See you next time!`,
                 {

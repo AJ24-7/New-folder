@@ -151,21 +151,30 @@ class _SplashScreenState extends State<SplashScreen> {
     // Request permissions
     await _requestPermissions();
     
-    // Restore geofence if previously set up
-    try {
-      final restored = await geofencingService.restoreGeofenceFromPreferences();
-      // If the geofence was restored, also load attendance settings into the
-      // AttendanceProvider so that isAutoMarkEnabled() / shouldAutoMarkEntry()
-      // return the correct values for this session (fixes silent DWELL skip).
-      if (restored) {
-        final restoredGymId = geofencingService.currentGymId;
-        if (restoredGymId != null) {
-          debugPrint('[MAIN] Loading attendance settings after restore for gym: $restoredGymId');
-          await attendanceProvider.loadAttendanceSettings(restoredGymId);
+    // Restore geofence only when the user is authenticated — never auto-start
+    // location tracking or foreground service for a logged-out user.
+    if (authProvider.isAuthenticated) {
+      try {
+        final restored = await geofencingService.restoreGeofenceFromPreferences();
+        // If the geofence was restored, also load attendance settings into the
+        // AttendanceProvider so that isAutoMarkEnabled() / shouldAutoMarkEntry()
+        // return the correct values for this session (fixes silent DWELL skip).
+        if (restored) {
+          final restoredGymId = geofencingService.currentGymId;
+          if (restoredGymId != null) {
+            debugPrint('[MAIN] Loading attendance settings after restore for gym: $restoredGymId');
+            await attendanceProvider.loadAttendanceSettings(restoredGymId);
+          }
         }
+      } catch (e) {
+        print('[GEOFENCE] Error restoring geofence: $e');
       }
-    } catch (e) {
-      print('[GEOFENCE] Error restoring geofence: $e');
+    } else {
+      // User is logged out — ensure any lingering foreground service is stopped
+      // so no attendance notification or GPS polling occurs.
+      try {
+        await ForegroundTaskService().stopService();
+      } catch (_) {}
     }
 
     // Add a small delay for splash screen effect
