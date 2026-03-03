@@ -13,6 +13,7 @@ import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/api_service.dart';
+import '../services/geofencing_service.dart';
 import '../config/app_theme.dart';
 import '../models/membership.dart';
 import '../widgets/attendance_widget_new.dart';
@@ -299,6 +300,10 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
 
     if (confirmed == true && mounted) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final geofencingService = Provider.of<GeofencingService>(context, listen: false);
+      // Clear geofence state before logout so the next user on this device
+      // does not see a stale "Gym Attendance Tracking" notification on login.
+      try { await geofencingService.removeAllGeofences(); } catch (_) {}
       await authProvider.logout();
       
       if (mounted) {

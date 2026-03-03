@@ -204,11 +204,9 @@ class GeofencingService extends ChangeNotifier {
         _isServiceRunning = true;
         notifyListeners();
 
-        // Show an ongoing notification so Android keeps the process alive
-        // when the app is sent to the background (screen off / locked).
-        await LocalNotificationService.instance.showGeofenceActiveNotification();
-
         // ── Start the true killed-app foreground service ──────────────────────
+        // (The foreground service already shows its own persistent notification;
+        //  no separate showGeofenceActiveNotification() needed here.)
         // Persist auto-mark flags so the background isolate can read them.
         await ForegroundTaskService.persistAutoMarkFlags(
           autoMarkEntry: shouldAutoMarkEntry(),
@@ -338,7 +336,8 @@ class GeofencingService extends ChangeNotifier {
         await _geofenceService.start(_geofenceList);
         _isServiceRunning = true;
         notifyListeners();
-        await LocalNotificationService.instance.showGeofenceActiveNotification();
+        // No extra notification here — the foreground task service already
+        // shows its own persistent notification; avoids duplicate alerts.
       } catch (startError) {
         debugPrint('[GEOFENCE] Error starting geofence service on restore: $startError');
         _geofenceList.clear();

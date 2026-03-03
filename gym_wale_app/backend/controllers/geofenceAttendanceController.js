@@ -1,6 +1,7 @@
 const Attendance = require('../models/Attendance');
 const Gym = require('../models/gym');
 const Membership = require('../models/Membership');
+const Member = require('../models/Member');
 const Notification = require('../models/Notification');
 const GeofenceConfig = require('../models/GeofenceConfig');
 const { getFirebaseMessaging } = require('../config/firebase');
@@ -205,17 +206,61 @@ exports.autoMarkEntry = async (req, res) => {
             // NOTE: No server-side time-window check — client enforces operating hours.
         }
 
-        // The authenticated user IS the member — no separate Member lookup needed
-        // (req.user is set by authMiddleware from the JWT; Member._id ≠ User._id).
+        // The authenticated user IS the member — req.user is set by authMiddleware from the JWT.
         // Use the User document directly for notifications.
         const memberUser = req.user;
 
-        // Check if user has an active membership at this gym
-        const activeMembership = await Membership.findOne({
+        // ── Membership check ────────────────────────────────────────────────
+        // Primary: look up the simple Membership collection by User._id.
+        let activeMembership = await Membership.findOne({
             userId: memberId,
             gymId: gymId,
             active: true
         });
+
+        // Fallback: Membership may be stored against Member._id instead of User._id
+        // (older flow where admin creates Member records, not linked via User._id).
+        // Also check Member model directly by matching on email.
+        if (!activeMembership && memberUser && memberUser.email) {
+            const memberDoc = await Member.findOne({
+                gym: gymId,
+                email: memberUser.email,
+                paymentStatus: { $in: ['paid', 'pending'] }
+            });
+            if (memberDoc && !memberDoc.currentlyFrozen) {
+                // If there is a Membership record linked to Member._id, use that.
+                const membershipByMemberId = await Membership.findOne({
+                    userId: memberDoc._id,
+                    gymId: gymId,
+                    active: true
+                });
+                if (membershipByMemberId) {
+                    activeMembership = membershipByMemberId;
+                } else if (memberDoc.paymentStatus === 'paid') {
+                    // No separate Membership row exists — treat the Member record as proof
+                    // of active membership (gym admin manages membership via Member model).
+                    const now = new Date();
+                    let isValid = true;
+                    if (memberDoc.membershipValidUntil) {
+                        const validUntil = new Date(memberDoc.membershipValidUntil);
+                        isValid = !isNaN(validUntil.getTime()) && validUntil >= now;
+                    }
+                    if (isValid) {
+                        // Synthesize an in-memory membership object sufficient for the
+                        // rest of the controller (only sessionsRemaining is checked below).
+                        activeMembership = {
+                            _id: memberDoc._id,
+                            userId: memberDoc._id,
+                            gymId,
+                            active: true,
+                            sessionsRemaining: null,
+                            sessionsUsed: 0,
+                            save: async () => {},  // no-op: nothing to persist
+                        };
+                    }
+                }
+            }
+        }
 
         if (!activeMembership) {
             return res.status(403).json({

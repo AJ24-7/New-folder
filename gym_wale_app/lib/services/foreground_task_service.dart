@@ -576,12 +576,27 @@ class _GeofenceTaskHandler extends TaskHandler {
     // If no shift times stored at all → no restriction
     if (morningOpen == null && eveningOpen == null) return true;
 
-    final inMorning = (morningOpen != null && morningClose != null)
-        ? (nowMin >= morningOpen && nowMin <= morningClose)
-        : false;
-    final inEvening = (eveningOpen != null && eveningClose != null)
-        ? (nowMin >= eveningOpen && nowMin <= eveningClose)
-        : false;
+    // Morning shift: require opening; if closing is missing treat as open
+    // until end-of-day so a gym with only an opening time is never blocked.
+    bool inMorning = false;
+    if (morningOpen != null) {
+      if (morningClose != null) {
+        inMorning = nowMin >= morningOpen && nowMin <= morningClose;
+      } else {
+        // Only opening stored — open from morningOpen onwards (no hard close).
+        inMorning = nowMin >= morningOpen;
+      }
+    }
+
+    // Evening shift: same permissive logic.
+    bool inEvening = false;
+    if (eveningOpen != null) {
+      if (eveningClose != null) {
+        inEvening = nowMin >= eveningOpen && nowMin <= eveningClose;
+      } else {
+        inEvening = nowMin >= eveningOpen;
+      }
+    }
 
     if (!inMorning && !inEvening) {
       debugPrint('[BGTask] Current time ${now.hour}:${now.minute.toString().padLeft(2,'0')} is outside all operating shifts.');
