@@ -31,6 +31,11 @@ class GymOffer {
   final double? discount;
   final bool? isClaimed;
   final String? claimId;
+  // Membership-plan targeting
+  final String applicableTo; // 'all' or 'specific'
+  final List<int> applicableMonths;
+  final List<String> applicableTiers;
+  final List<int> applicableTierMonths;
 
   GymOffer({
     required this.id,
@@ -62,6 +67,10 @@ class GymOffer {
     this.discount,
     this.isClaimed,
     this.claimId,
+    this.applicableTo = 'all',
+    this.applicableMonths = const [],
+    this.applicableTiers = const [],
+    this.applicableTierMonths = const [],
   });
 
   factory GymOffer.fromJson(Map<String, dynamic> json) {
@@ -95,6 +104,10 @@ class GymOffer {
       discount: json['discount'] != null ? _parseDouble(json['discount']) : null,
       isClaimed: json['isClaimed'],
       claimId: json['claimId']?.toString(),
+      applicableTo: json['applicableTo']?.toString() ?? 'all',
+      applicableMonths: (json['applicableMonths'] as List<dynamic>?)?.map((e) => _parseInt(e)).toList() ?? [],
+      applicableTiers: _parseList(json['applicableTiers']),
+      applicableTierMonths: (json['applicableTierMonths'] as List<dynamic>?)?.map((e) => _parseInt(e)).toList() ?? [],
     );
   }
 
@@ -129,6 +142,10 @@ class GymOffer {
       'discount': discount,
       'isClaimed': isClaimed,
       'claimId': claimId,
+      'applicableTo': applicableTo,
+      'applicableMonths': applicableMonths,
+      'applicableTiers': applicableTiers,
+      'applicableTierMonths': applicableTierMonths,
     };
   }
 
@@ -257,6 +274,10 @@ class GymOffer {
     double? discount,
     bool? isClaimed,
     String? claimId,
+    String? applicableTo,
+    List<int>? applicableMonths,
+    List<String>? applicableTiers,
+    List<int>? applicableTierMonths,
   }) {
     return GymOffer(
       id: id ?? this.id,
@@ -288,6 +309,10 @@ class GymOffer {
       discount: discount ?? this.discount,
       isClaimed: isClaimed ?? this.isClaimed,
       claimId: claimId ?? this.claimId,
+      applicableTo: applicableTo ?? this.applicableTo,
+      applicableMonths: applicableMonths ?? this.applicableMonths,
+      applicableTiers: applicableTiers ?? this.applicableTiers,
+      applicableTierMonths: applicableTierMonths ?? this.applicableTierMonths,
     );
   }
 
@@ -320,9 +345,39 @@ class GymOffer {
     if (value is List) return value.map((e) => e.toString()).toList();
     return [];
   }
+  /// Check if this offer applies to a specific plan/tier/month combo
+  bool appliesTo({String? tierName, int? months}) {
+    if (applicableTo != 'specific') return true;
+    // Check tier
+    if (tierName != null && applicableTiers.isNotEmpty) {
+      if (!applicableTiers.contains(tierName)) return false;
+    }
+    // Check months within tier
+    if (months != null) {
+      final monthList = applicableTierMonths.isNotEmpty
+          ? applicableTierMonths
+          : applicableMonths;
+      if (monthList.isNotEmpty && !monthList.contains(months)) return false;
+    }
+    return true;
+  }
+
+  /// Calculate discount for a given amount
+  double calculateDiscount(double amount) {
+    if (!isValid || amount < minAmount) return 0;
+    switch (type) {
+      case 'percentage':
+        return (amount * value) / 100;
+      case 'fixed':
+        return value > amount ? amount : value;
+      case 'bogo':
+        return amount * 0.5;
+      default:
+        return 0;
+    }
+  }
 }
 
-/// Represents a coupon that can be used to redeem offers
 class GymCoupon {
   final String id;
   final String code;
@@ -492,12 +547,16 @@ class OfferStats {
   final int activeCoupons;
   final int totalClaims;
   final double revenue;
+  final double totalDiscount;
+  final int membershipOffers;
 
   OfferStats({
     required this.activeOffers,
     required this.activeCoupons,
     required this.totalClaims,
     required this.revenue,
+    this.totalDiscount = 0,
+    this.membershipOffers = 0,
   });
 
   factory OfferStats.fromJson(Map<String, dynamic> json) {
@@ -506,6 +565,8 @@ class OfferStats {
       activeCoupons: json['activeCoupons'] ?? 0,
       totalClaims: json['totalClaims'] ?? 0,
       revenue: GymOffer._parseDouble(json['revenue']),
+      totalDiscount: GymOffer._parseDouble(json['totalDiscount']),
+      membershipOffers: json['membershipOffers'] ?? 0,
     );
   }
 
@@ -515,6 +576,8 @@ class OfferStats {
       'activeCoupons': activeCoupons,
       'totalClaims': totalClaims,
       'revenue': revenue,
+      'totalDiscount': totalDiscount,
+      'membershipOffers': membershipOffers,
     };
   }
 }

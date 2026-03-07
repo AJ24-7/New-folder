@@ -464,7 +464,9 @@ router.post('/book-membership', require('../middleware/authMiddleware'), async (
       monthlyPlan,
       paymentMode,
       paymentAmount,
-      activityPreference
+      activityPreference,
+      offerId,
+      offerDiscount
     } = req.body;
 
     // Get user details
@@ -510,10 +512,50 @@ router.post('/book-membership', require('../middleware/authMiddleware'), async (
 
     await member.save();
 
+    // Track offer usage if an offer was applied
+    if (offerId && offerDiscount > 0) {
+      try {
+        const Offer = require('../models/Offer');
+        const offer = await Offer.findById(offerId);
+        if (offer) {
+          offer.usageCount = (offer.usageCount || 0) + 1;
+          offer.revenue = (offer.revenue || 0) + paymentAmount;
+          await offer.save();
+        }
+
+        // Also create an OfferStats entry if the model exists
+        try {
+          const OfferStats = require('../models/OfferStats');
+          await OfferStats.findOneAndUpdate(
+            { offerId, gymId },
+            {
+              $inc: {
+                totalClaims: 1,
+                totalDiscount: offerDiscount,
+                revenue: paymentAmount,
+                membershipOffers: 1,
+              },
+              $set: { lastClaimedAt: new Date() },
+            },
+            { upsert: true, new: true }
+          );
+        } catch (statsErr) {
+          // OfferStats model may not exist, silently ignore
+          console.log('OfferStats tracking skipped:', statsErr.message);
+        }
+      } catch (offerErr) {
+        console.error('Error tracking offer usage:', offerErr);
+        // Don't fail the booking if offer tracking fails
+      }
+    }
+
     // Send email notification
     const sendEmail = require('../utils/sendEmail');
     try {
       const gymLogoUrl = gym.logoUrl || 'https://img.icons8.com/color/96/000000/gym.png';
+      const offerLine = (offerId && offerDiscount > 0)
+        ? `<p><strong>Offer Discount:</strong> -₹${offerDiscount}</p>`
+        : '';
       const html = `
         <div style="font-family: Arial, sans-serif; padding: 20px;">
           <h2>Welcome to ${gym.gymName}!</h2>
@@ -523,7 +565,8 @@ router.post('/book-membership', require('../middleware/authMiddleware'), async (
             <p><strong>Membership ID:</strong> ${member.membershipId}</p>
             <p><strong>Plan:</strong> ${membershipPlan} (${monthlyPlan})</p>
             <p><strong>Valid Until:</strong> ${validUntil.toLocaleDateString()}</p>
-            <p><strong>Amount:</strong> ₹${paymentAmount}</p>
+            ${offerLine}
+            <p><strong>Amount Paid:</strong> ₹${paymentAmount}</p>
           </div>
           <p>Thank you for joining ${gym.gymName}!</p>
         </div>

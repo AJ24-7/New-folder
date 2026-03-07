@@ -119,7 +119,23 @@ const offerSchema = new mongoose.Schema({
     type: Boolean, 
     default: false 
   },
-  discount: { type: Number } // Alternative field for discount percentage
+  discount: { type: Number }, // Alternative field for discount percentage
+
+  // ── Membership-plan targeting ─────────────────────────────────────────────
+  // 'all' = every plan/tier, 'specific' = only listed plans/tiers
+  applicableTo: {
+    type: String,
+    enum: ['all', 'specific'],
+    default: 'all'
+  },
+  // For single-tier mode: array of month durations the offer applies to
+  // e.g. [1, 3, 6] – empty means all durations
+  applicableMonths: [{ type: Number }],
+  // For multi-tier mode: array of tier names the offer applies to
+  // e.g. ['Basic', 'Premium'] – empty means all tiers
+  applicableTiers: [{ type: String }],
+  // For multi-tier mode: optional month durations within selected tiers
+  applicableTierMonths: [{ type: Number }]
 }, {
   timestamps: true
 });

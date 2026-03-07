@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/gym_offer.dart';
+import '../../models/membership_plan.dart';
 import '../../services/api_service.dart';
+import '../../services/gym_service.dart';
 import '../../services/storage_service.dart';
 import '../../config/app_theme.dart';
 import '../../widgets/sidebar_menu.dart';
@@ -344,7 +346,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
     final isMobile = size.width <= 600;
     
     return GridView.count(
-      crossAxisCount: isDesktop ? 4 : 2,
+      crossAxisCount: isDesktop ? 6 : (isMobile ? 2 : 3),
       crossAxisSpacing: isMobile ? 8 : 16,
       mainAxisSpacing: isMobile ? 8 : 16,
       shrinkWrap: true,
@@ -366,6 +368,13 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
           trend: null,
         ),
         StatCard(
+          title: 'Membership Offers',
+          value: _stats?.membershipOffers.toString() ?? '0',
+          icon: Icons.card_membership,
+          color: Colors.teal,
+          trend: null,
+        ),
+        StatCard(
           title: 'Total Claims',
           value: _stats?.totalClaims.toString() ?? '0',
           icon: Icons.redeem,
@@ -377,6 +386,13 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
           value: '₹${_stats?.revenue.toStringAsFixed(0) ?? '0'}',
           icon: Icons.currency_rupee,
           color: Colors.purple,
+          trend: null,
+        ),
+        StatCard(
+          title: 'Total Discount',
+          value: '₹${_stats?.totalDiscount.toStringAsFixed(0) ?? '0'}',
+          icon: Icons.savings,
+          color: Colors.deepOrange,
           trend: null,
         ),
       ],
@@ -1926,10 +1942,41 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
     List<String> features = List.from(offer?.features ?? []);
     final featureController = TextEditingController();
 
+    // ── Membership plan targeting state ──────────────────────────────────
+    String applicableTo = offer?.applicableTo ?? 'all';
+    MembershipPlan? membershipPlan;
+    bool isLoadingPlan = false;
+    List<int> selectedMonths = List<int>.from(offer?.applicableMonths ?? []);
+    List<String> selectedTiers = List<String>.from(offer?.applicableTiers ?? []);
+    List<int> selectedTierMonths = List<int>.from(offer?.applicableTierMonths ?? []);
+
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
+        builder: (context, setState) {
+          // Load membership plan when category is membership and applicableTo is specific
+          void loadMembershipPlan() async {
+            if (membershipPlan != null || isLoadingPlan) return;
+            setState(() => isLoadingPlan = true);
+            try {
+              final gymService = GymService();
+              final plan = await gymService.getMembershipPlans();
+              setState(() {
+                membershipPlan = plan;
+                isLoadingPlan = false;
+              });
+            } catch (e) {
+              setState(() => isLoadingPlan = false);
+              debugPrint('Error loading membership plan: $e');
+            }
+          }
+
+          // Auto-load plan when applicable
+          if (selectedCategory == 'membership' && applicableTo == 'specific' && membershipPlan == null && !isLoadingPlan) {
+            loadMembershipPlan();
+          }
+
+          return AlertDialog(
           title: Text(isEdit ? 'Edit Offer' : 'Create New Offer'),
           content: SizedBox(
             width: MediaQuery.of(context).size.width * 0.9,
@@ -2012,7 +2059,16 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                             DropdownMenuItem(value: 'equipment', child: Text('Equipment')),
                           ],
                           onChanged: (value) {
-                            setState(() => selectedCategory = value!);
+                            setState(() {
+                              selectedCategory = value!;
+                              // Reset plan targeting when category changes
+                              if (value != 'membership') {
+                                applicableTo = 'all';
+                                selectedMonths.clear();
+                                selectedTiers.clear();
+                                selectedTierMonths.clear();
+                              }
+                            });
                           },
                         ),
                       ),
@@ -2029,6 +2085,179 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                       ),
                     ],
                   ),
+
+                  // ── Membership Plan Targeting Section ──────────────────
+                  if (selectedCategory == 'membership') ...[
+                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.card_membership, size: 20, color: Theme.of(context).colorScheme.primary),
+                              const SizedBox(width: 8),
+                              const Text('Apply to Membership Plans', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<String>(
+                            value: applicableTo,
+                            decoration: const InputDecoration(
+                              labelText: 'Apply Offer To',
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            items: const [
+                              DropdownMenuItem(value: 'all', child: Text('All Membership Plans')),
+                              DropdownMenuItem(value: 'specific', child: Text('Specific Plans / Tiers')),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                applicableTo = value!;
+                                if (value == 'specific') {
+                                  loadMembershipPlan();
+                                } else {
+                                  selectedMonths.clear();
+                                  selectedTiers.clear();
+                                  selectedTierMonths.clear();
+                                }
+                              });
+                            },
+                          ),
+
+                          if (applicableTo == 'specific') ...[
+                            const SizedBox(height: 12),
+                            if (isLoadingPlan)
+                              const Center(child: Padding(
+                                padding: EdgeInsets.all(16),
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ))
+                            else if (membershipPlan == null)
+                              const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Text('Could not load membership plans', style: TextStyle(color: Colors.red)),
+                              )
+                            else ...[
+                              // ── Multi-tier mode: select tiers ──
+                              if (membershipPlan!.isMultiTier && membershipPlan!.tiers.isNotEmpty) ...[
+                                const Text('Select Tiers:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: membershipPlan!.tiers.map((tier) {
+                                    final isSelected = selectedTiers.contains(tier.name);
+                                    return FilterChip(
+                                      label: Text(tier.name),
+                                      selected: isSelected,
+                                      selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          if (selected) {
+                                            selectedTiers.add(tier.name);
+                                          } else {
+                                            selectedTiers.remove(tier.name);
+                                          }
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                                const SizedBox(height: 12),
+                                // Show duration options for selected tiers
+                                if (selectedTiers.isNotEmpty) ...[
+                                  const Text('Select Durations (optional):', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  const SizedBox(height: 8),
+                                  Builder(builder: (context) {
+                                    // Collect all unique months across selected tiers
+                                    final allMonths = <int>{};
+                                    for (final tier in membershipPlan!.tiers) {
+                                      if (selectedTiers.contains(tier.name)) {
+                                        for (final opt in tier.monthlyOptions) {
+                                          allMonths.add(opt.months);
+                                        }
+                                      }
+                                    }
+                                    final sortedMonths = allMonths.toList()..sort();
+                                    return Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: sortedMonths.map((m) {
+                                        final isSelected = selectedTierMonths.contains(m);
+                                        return FilterChip(
+                                          label: Text(m == 1 ? '1 Month' : m == 12 ? '1 Year' : '$m Months'),
+                                          selected: isSelected,
+                                          selectedColor: Theme.of(context).colorScheme.secondary.withValues(alpha: 0.2),
+                                          checkmarkColor: Theme.of(context).colorScheme.secondary,
+                                          onSelected: (selected) {
+                                            setState(() {
+                                              if (selected) {
+                                                selectedTierMonths.add(m);
+                                              } else {
+                                                selectedTierMonths.remove(m);
+                                              }
+                                            });
+                                          },
+                                        );
+                                      }).toList(),
+                                    );
+                                  }),
+                                  if (selectedTierMonths.isEmpty)
+                                    const Padding(
+                                      padding: EdgeInsets.only(top: 4),
+                                      child: Text('Leave empty to apply to all durations in selected tiers', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                    ),
+                                ],
+                              ]
+                              // ── Single-tier mode: select durations ──
+                              else if (membershipPlan!.monthlyOptions.isNotEmpty) ...[
+                                Text('Plan: ${membershipPlan!.name}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                const SizedBox(height: 8),
+                                const Text('Select Durations:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: membershipPlan!.monthlyOptions.map((opt) {
+                                    final isSelected = selectedMonths.contains(opt.months);
+                                    return FilterChip(
+                                      label: Text('${opt.durationLabel} - ₹${opt.price.toStringAsFixed(0)}'),
+                                      selected: isSelected,
+                                      selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+                                      checkmarkColor: Theme.of(context).colorScheme.primary,
+                                      onSelected: (selected) {
+                                        setState(() {
+                                          if (selected) {
+                                            selectedMonths.add(opt.months);
+                                          } else {
+                                            selectedMonths.remove(opt.months);
+                                          }
+                                        });
+                                      },
+                                    );
+                                  }).toList(),
+                                ),
+                                if (selectedMonths.isEmpty)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Text('Leave empty to apply to all durations', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                                  ),
+                              ],
+                            ],
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+
                   const SizedBox(height: 16),
                   TextField(
                     controller: couponCodeController,
@@ -2182,6 +2411,11 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                     'maxUses': int.parse(maxUsesController.text),
                   'features': features,
                   'gymId': _gymId,
+                  // Membership plan targeting
+                  'applicableTo': applicableTo,
+                  if (selectedMonths.isNotEmpty) 'applicableMonths': selectedMonths,
+                  if (selectedTiers.isNotEmpty) 'applicableTiers': selectedTiers,
+                  if (selectedTierMonths.isNotEmpty) 'applicableTierMonths': selectedTierMonths,
                 };
 
                 try {
@@ -2214,7 +2448,8 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
               child: Text(isEdit ? 'Update' : 'Create'),
             ),
           ],
-        ),
+        );
+        },
       ),
     );
   }

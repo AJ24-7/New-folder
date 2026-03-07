@@ -59,23 +59,27 @@ exports.getOfferStats = async (req, res) => {
       return res.status(400).json({ message: 'Gym ID is required' });
     }
 
-    const [activeOffers, activeCoupons, totalClaims, revenueData] = await Promise.all([
+    const [activeOffers, activeCoupons, totalClaims, revenueData, membershipOffers] = await Promise.all([
       Offer.countDocuments({ gymId, status: 'active' }),
       Coupon.countDocuments({ gymId, status: 'active' }),
       CouponUsage.countDocuments({ gymId, status: 'completed' }),
       CouponUsage.aggregate([
         { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
-        { $group: { _id: null, totalRevenue: { $sum: '$finalAmount' } } }
-      ])
+        { $group: { _id: null, totalRevenue: { $sum: '$finalAmount' }, totalDiscount: { $sum: '$discountAmount' } } }
+      ]),
+      Offer.countDocuments({ gymId, status: 'active', category: 'membership' })
     ]);
 
     const revenue = revenueData.length > 0 ? revenueData[0].totalRevenue : 0;
+    const totalDiscount = revenueData.length > 0 ? (revenueData[0].totalDiscount || 0) : 0;
 
     res.json({
       activeOffers,
       activeCoupons,
       totalClaims,
-      revenue
+      revenue,
+      totalDiscount,
+      membershipOffers
     });
   } catch (error) {
     console.error('Error fetching offer stats:', error);
@@ -99,7 +103,11 @@ exports.createOffer = async (req, res) => {
       gymId,
       templateId,
       features,
-      couponCode
+      couponCode,
+      applicableTo,
+      applicableMonths,
+      applicableTiers,
+      applicableTierMonths
     } = req.body;
 
     // Validate required fields – gymId can come from body OR auth token
@@ -137,6 +145,18 @@ exports.createOffer = async (req, res) => {
       features: features || [],
       createdBy: req.user?.id || req.admin?.id
     };
+
+    // Add membership-plan targeting
+    if (applicableTo) offerData.applicableTo = applicableTo;
+    if (Array.isArray(applicableMonths) && applicableMonths.length) {
+      offerData.applicableMonths = applicableMonths.map(Number);
+    }
+    if (Array.isArray(applicableTiers) && applicableTiers.length) {
+      offerData.applicableTiers = applicableTiers;
+    }
+    if (Array.isArray(applicableTierMonths) && applicableTierMonths.length) {
+      offerData.applicableTierMonths = applicableTierMonths.map(Number);
+    }
 
     // Add coupon code if provided
     if (couponCode) {
@@ -715,7 +735,7 @@ exports.getValidOffersByGym = async (req, res) => {
       endDate: { $gte: now },
       status: 'active'
     })
-    .select('title description type value couponCode minAmount highlightOffer templateId features startDate endDate displayOnWebsite')
+    .select('title description type value couponCode minAmount highlightOffer templateId features startDate endDate displayOnWebsite applicableTo applicableMonths applicableTiers applicableTierMonths category')
     .sort({ highlightOffer: -1, createdAt: -1 })
     .limit(10); // Limit to prevent too many offers
 

@@ -971,11 +971,18 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     final planColor = _parseHexColor(plan.color);
     final planIcon = _getMembershipPlanIcon(plan.icon);
 
+    // Filter active, valid offers applicable to membership
+    final membershipOffers = _offers.where((o) =>
+        o.status == 'active' &&
+        !o.isExpired &&
+        (o.category == 'membership' || o.category == 'all')).toList();
+
     return _MembershipPlanCardWidget(
       membershipPlan: plan,
       gym: _gym!,
       planColor: planColor,
       planIcon: planIcon,
+      applicableOffers: membershipOffers,
     );
   }
 
@@ -3298,6 +3305,7 @@ class _MembershipPlanCardWidget extends StatefulWidget {
   final Gym gym;
   final Color planColor;
   final IconData planIcon;
+  final List<GymOffer> applicableOffers;
 
   const _MembershipPlanCardWidget({
     Key? key,
@@ -3305,6 +3313,7 @@ class _MembershipPlanCardWidget extends StatefulWidget {
     required this.gym,
     required this.planColor,
     required this.planIcon,
+    this.applicableOffers = const [],
   }) : super(key: key);
 
   @override
@@ -3519,8 +3528,37 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
     );
   }
 
+  /// Find the best applicable offer for the current selection
+  GymOffer? get _bestApplicableOffer {
+    if (widget.applicableOffers.isEmpty) return null;
+    final opt = _selectedOption;
+    if (opt == null) return null;
+    final tierName = _isMultiTier ? _activePlanName : null;
+    final months = opt.months;
+
+    // Filter offers that apply to this tier/month
+    final applicable = widget.applicableOffers
+        .where((o) => o.appliesTo(tierName: tierName, months: months))
+        .toList();
+    if (applicable.isEmpty) return null;
+
+    // Pick the one with highest discount value
+    applicable.sort((a, b) {
+      final dA = a.calculateDiscount(opt.finalPrice);
+      final dB = b.calculateDiscount(opt.finalPrice);
+      return dB.compareTo(dA);
+    });
+    return applicable.first;
+  }
+
   Widget _buildCardContent() {
     final opt = _selectedOption;
+    final bestOffer = _bestApplicableOffer;
+    final offerDiscount = (opt != null && bestOffer != null)
+        ? bestOffer.calculateDiscount(opt.finalPrice)
+        : 0.0;
+    final priceAfterOffer = opt != null ? opt.finalPrice - offerDiscount : 0.0;
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -3549,6 +3587,9 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
             children: List.generate(_activeOptions.length, (index) {
               final option = _activeOptions[index];
               final isSelected = index == _selectedOptionIndex;
+              // Check if offer applies to this duration
+              final tierName = _isMultiTier ? _activePlanName : null;
+              final hasOffer = widget.applicableOffers.any((o) => o.appliesTo(tierName: tierName, months: option.months));
               return InkWell(
                 onTap: () => setState(() => _selectedOptionIndex = index),
                 borderRadius: BorderRadius.circular(8),
@@ -3563,6 +3604,16 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                     Text(option.durationLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : AppTheme.textPrimary)),
                     if (option.discount > 0)
                       Text('${option.discount}% off', style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : Colors.green)),
+                    if (hasOffer)
+                      Container(
+                        margin: const EdgeInsets.only(top: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Colors.white.withValues(alpha: 0.2) : Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text('OFFER', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.orange.shade700)),
+                      ),
                   ]),
                 ),
               );
@@ -3570,6 +3621,34 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
           ),
           const SizedBox(height: 16),
           
+          // ── Offer banner ──────────────────────────────────────────────
+          if (bestOffer != null && offerDiscount > 0) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [Colors.orange.shade50, Colors.red.shade50]),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.local_offer, color: Colors.orange.shade700, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(bestOffer.title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.orange.shade800)),
+                      Text(
+                        '${bestOffer.discountText} applied! You save ₹${offerDiscount.toStringAsFixed(0)}',
+                        style: TextStyle(fontSize: 11, color: Colors.orange.shade700),
+                      ),
+                    ]),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+
           if (opt != null) ...[
             // Total price
             Container(
@@ -3586,17 +3665,35 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('Total Price', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                     const SizedBox(height: 2),
-                    if (opt.discount > 0) ...[
+                    if (opt.discount > 0 || offerDiscount > 0) ...[
                       Text('₹${opt.price.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade500, decoration: TextDecoration.lineThrough)),
                     ],
-                    Text('₹${opt.finalPrice.toStringAsFixed(0)}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _activePlanColor)),
-                  ])),
-                  if (opt.discount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(5)),
-                      child: Text('Save ₹${(opt.price - opt.finalPrice).toStringAsFixed(0)}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                    if (offerDiscount > 0 && opt.discount > 0)
+                      Text('₹${opt.finalPrice.toStringAsFixed(0)}', style: TextStyle(fontSize: 12, color: Colors.grey.shade500, decoration: TextDecoration.lineThrough)),
+                    Text(
+                      '₹${(offerDiscount > 0 ? priceAfterOffer : opt.finalPrice).toStringAsFixed(0)}',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: _activePlanColor),
                     ),
+                  ])),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      if (opt.discount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(5)),
+                          child: Text('Save ₹${(opt.price - opt.finalPrice).toStringAsFixed(0)}', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.green.shade700)),
+                        ),
+                      if (offerDiscount > 0) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(color: Colors.orange.shade100, borderRadius: BorderRadius.circular(5)),
+                          child: Text('+ ₹${offerDiscount.toStringAsFixed(0)} offer', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange.shade700)),
+                        ),
+                      ],
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -3621,7 +3718,12 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                     isPopular: opt.isPopular,
                     createdAt: DateTime.now(),
                   );
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => BookingScreen(gym: widget.gym, membership: synthetic, selectedMonths: opt.months)));
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => BookingScreen(
+                    gym: widget.gym,
+                    membership: synthetic,
+                    selectedMonths: opt.months,
+                    appliedOffer: bestOffer,
+                  )));
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _activePlanColor,
@@ -3631,7 +3733,12 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                   elevation: 4,
                   shadowColor: _activePlanColor.withValues(alpha: 0.4),
                 ),
-                child: const Text('Buy Membership', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                child: Text(
+                  bestOffer != null && offerDiscount > 0
+                      ? 'Buy Membership - ₹${priceAfterOffer.toStringAsFixed(0)}'
+                      : 'Buy Membership',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
               ),
             ),
           ],

@@ -7,11 +7,17 @@ import 'home_screen.dart';
 class PaymentScreen extends StatefulWidget {
   final Booking booking;
   final double amount;
+  final String? offerTitle;
+  final double? offerDiscount;
+  final double? originalAmount;
 
   const PaymentScreen({
     Key? key,
     required this.booking,
     required this.amount,
+    this.offerTitle,
+    this.offerDiscount,
+    this.originalAmount,
   }) : super(key: key);
 
   @override
@@ -169,6 +175,65 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
+                  // Offer discount breakdown
+                  if (widget.offerTitle != null && widget.offerDiscount != null && widget.offerDiscount! > 0) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (widget.originalAmount != null)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Original Price',
+                                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                                Text(
+                                  '₹${widget.originalAmount!.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          if (widget.originalAmount != null)
+                            const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.local_offer, color: Colors.greenAccent, size: 14),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    widget.offerTitle!,
+                                    style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                              Text(
+                                '-₹${widget.offerDiscount!.toStringAsFixed(0)}',
+                                style: const TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),

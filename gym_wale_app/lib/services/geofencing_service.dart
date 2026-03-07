@@ -1,29 +1,27 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart' as geo;
-import 'package:geofence_service/geofence_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/attendance_settings.dart';
 import './attendance_settings_service.dart';
-import './local_notification_service.dart';
 import './foreground_task_service.dart';
 
+/// Manages geofence configuration, permissions, and the persistent background
+/// foreground-task service that handles all attendance tracking (both when the
+/// app is open and when it is killed).
+///
+/// The actual ENTER / DWELL / EXIT detection and attendance API calls are
+/// handled exclusively by [ForegroundTaskService] and its background isolate
+/// [_GeofenceTaskHandler].  This class is responsible for:
+///   • Checking & requesting location permissions
+///   • Saving/restoring geofence coordinates to SharedPreferences
+///   • Starting/stopping the [ForegroundTaskService]
+///   • Loading attendance settings from the backend
 class GeofencingService extends ChangeNotifier {
-  late final GeofenceService _geofenceService;
-
-  final StreamController<GeofenceStatus> _geofenceController =
-      StreamController<GeofenceStatus>.broadcast();
-
-  Stream<GeofenceStatus> get geofenceStream => _geofenceController.stream;
-
   bool _isServiceRunning = false;
   bool get isServiceRunning => _isServiceRunning;
-
-  List<Geofence> _geofenceList = [];
-  List<Geofence> get geofenceList => _geofenceList;
 
   String? _currentGymId;
   String? get currentGymId => _currentGymId;
@@ -34,42 +32,8 @@ class GeofencingService extends ChangeNotifier {
   final AttendanceSettingsService _settingsService = AttendanceSettingsService();
   final ForegroundTaskService _fgTaskService = ForegroundTaskService();
 
-  // ── Dwell tracking (5-minute rule) ─────────────────────────────────────────
-  // gymId → timestamp of first ENTER event (used to enforce 5-min dwell)
-  final Map<String, DateTime> _enterTimestamps = {};
+  GeofencingService();
 
-  GeofencingService() {
-    _geofenceService = GeofenceService.instance.setup(
-      interval: 5000,       // location poll every 5 s
-      accuracy: 100,        // 100 m accuracy bucket
-      // loiteringDelayMs = 5 min dwell before DWELL event fires
-      // This is the core "stay 5 minutes" enforcement.
-      loiteringDelayMs: 300000,   // 5 minutes = 300 000 ms
-      statusChangeDelayMs: 10000, // 10 s debounce before state switch
-      useActivityRecognition: true,
-      allowMockLocations: false,
-      printDevLog: kDebugMode,
-      geofenceRadiusSortType: GeofenceRadiusSortType.DESC,
-    );
-    _initializeService();
-  }
-
-  void _initializeService() {
-    // Listen to geofence status changes
-    _geofenceService.addGeofenceStatusChangeListener((geofence, geofenceRadius, geofenceStatus, location) async {
-      await _onGeofenceStatusChanged(geofence, geofenceRadius, geofenceStatus, location);
-    });
-    
-    // Listen to location changes
-    _geofenceService.addLocationChangeListener(_onLocationChanged);
-    
-    // Listen to location service status changes
-    _geofenceService.addLocationServicesStatusChangeListener(
-        _onLocationServicesStatusChanged);
-    
-    // Listen to stream errors
-    _geofenceService.addStreamErrorListener(_onStreamError);
-  }
 
   /// Open app settings for background location permission
   Future<void> openLocationSettings() async {
@@ -182,39 +146,19 @@ class GeofencingService extends ChangeNotifier {
       // Remove existing geofences
       await removeAllGeofences();
 
-      // Create new geofence
-      final geofence = Geofence(
-        id: gymId,
-        latitude: latitude,
-        longitude: longitude,
-        radius: [
-          GeofenceRadius(id: 'radius_$radius', length: radius),
-        ],
-      );
-
-      _geofenceList = [geofence];
       _currentGymId = gymId;
 
       // Save to preferences for persistence
       await _saveGeofenceToPreferences(gymId, latitude, longitude, radius);
 
-      // Start geofence service with proper error handling
+      // Start the persistent foreground service
       try {
-        await _geofenceService.start(_geofenceList);
-        _isServiceRunning = true;
-        notifyListeners();
-
-        // ── Start the true killed-app foreground service ──────────────────────
-        // (The foreground service already shows its own persistent notification;
-        //  no separate showGeofenceActiveNotification() needed here.)
         // Persist auto-mark flags so the background isolate can read them.
         await ForegroundTaskService.persistAutoMarkFlags(
           autoMarkEntry: shouldAutoMarkEntry(),
           autoMarkExit:  shouldAutoMarkExit(),
         );
         // Persist operating schedule so the background isolate can gate events.
-        // (Full persist happens in configureFromSettings; this is a quick refresh
-        //  in case registerGymGeofence is called independently.)
         if (_attendanceSettings != null) {
           final gs = _attendanceSettings!.geofenceSettings;
           final hours = _attendanceSettings!.operatingHours;
@@ -232,15 +176,15 @@ class GeofencingService extends ChangeNotifier {
         // Start the persistent Android foreground service (survives force-kill).
         await _fgTaskService.startService();
 
+        _isServiceRunning = true;
+        notifyListeners();
+
         debugPrint('[GEOFENCE] Geofence registered for gym: $gymId');
         debugPrint('[GEOFENCE] Location: ($latitude, $longitude), Radius: $radius m');
-        debugPrint('[GEOFENCE] Foreground task service started for killed-app tracking');
 
         return true;
       } catch (startError) {
-        debugPrint('[GEOFENCE] Error starting geofence service: $startError');
-        // Clean up on failure
-        _geofenceList.clear();
+        debugPrint('[GEOFENCE] Error starting foreground service: $startError');
         _currentGymId = null;
         _isServiceRunning = false;
         notifyListeners();
@@ -252,18 +196,11 @@ class GeofencingService extends ChangeNotifier {
     }
   }
 
-  /// Remove all geofences
+  /// Remove all geofences and stop the background service.
   Future<void> removeAllGeofences() async {
     try {
-      if (_isServiceRunning) {
-        await _geofenceService.stop();
-      }
-      _geofenceList.clear();
       _currentGymId = null;
       _isServiceRunning = false;
-
-      // Dismiss the ongoing background-tracking notification
-      await LocalNotificationService.instance.hideGeofenceActiveNotification();
 
       // Stop the persistent foreground service
       await _fgTaskService.stopService();
@@ -288,10 +225,8 @@ class GeofencingService extends ChangeNotifier {
 
   /// Restore geofence from saved preferences (called on app start).
   ///
-  /// Unlike [registerGymGeofence], this method does **not** stop the
-  /// persistent foreground task if it is already running — the background
-  /// isolate keeps polling GPS without interruption while the app
-  /// re-attaches to its in-app geofence listener.
+  /// Does **not** stop the persistent foreground task if it is already
+  /// running — the background isolate keeps polling GPS without interruption.
   Future<bool> restoreGeofenceFromPreferences() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -314,49 +249,26 @@ class GeofencingService extends ChangeNotifier {
         return false;
       }
 
-      // ── Stop only the in-app listener (NOT the foreground task) ──────────
-      // The background isolate must keep running so GPS polling is never
-      // interrupted when the user opens the app.
-      if (_isServiceRunning) {
-        try { await _geofenceService.stop(); } catch (_) {}
-        _isServiceRunning = false;
-      }
-
-      // ── Reconstruct and start the in-app geofence listener ───────────────
-      final geofence = Geofence(
-        id: gymId,
-        latitude: latitude,
-        longitude: longitude,
-        radius: [GeofenceRadius(id: 'radius_$radius', length: radius)],
-      );
-      _geofenceList = [geofence];
       _currentGymId = gymId;
-
-      try {
-        await _geofenceService.start(_geofenceList);
-        _isServiceRunning = true;
-        notifyListeners();
-        // No extra notification here — the foreground task service already
-        // shows its own persistent notification; avoids duplicate alerts.
-      } catch (startError) {
-        debugPrint('[GEOFENCE] Error starting geofence service on restore: $startError');
-        _geofenceList.clear();
-        _currentGymId = null;
-        notifyListeners();
-        return false;
-      }
+      _isServiceRunning = true;
+      notifyListeners();
 
       // ── Foreground task: keep alive if running, else restart ─────────────
       // IMPORTANT: never call stopService() during restore — that would kill
       // the background isolate and lose the in-progress dwell timer.
+      //
+      // Always reaffirm the active-membership flag so the background isolate
+      // does not stop itself if the flag was cleared in a previous session.
+      await ForegroundTaskService.persistActiveMembership(true);
+
       final fgRunning = await _fgTaskService.isRunning;
       if (fgRunning) {
         debugPrint('[GEOFENCE] Foreground task already running — keeping alive on restore');
-        // Just refresh the notification text; the isolate state is untouched.
-        await FlutterForegroundTask.updateService(
-          notificationTitle: '📍 Gym Attendance Tracking',
-          notificationText: 'Monitoring your location…',
-        );
+        // DO NOT overwrite the notification text here.  The background
+        // isolate's _tick() owns the persistent notification and may be
+        // showing a dwell countdown, operating-hours diagnostic, or error
+        // state.  Resetting to "Monitoring your location…" would hide that
+        // information and confuse users debugging an operating-hours issue.
       } else {
         debugPrint('[GEOFENCE] Foreground task not running — starting after restore');
         await _fgTaskService.startService();
@@ -464,100 +376,6 @@ class GeofencingService extends ChangeNotifier {
   }
 
   /// Callback when geofence status changes
-  Future<void> _onGeofenceStatusChanged(
-      Geofence geofence,
-      GeofenceRadius geofenceRadius,
-      GeofenceStatus geofenceStatus,
-      dynamic location) async {
-    debugPrint('[GEOFENCE] Status changed: ${geofenceStatus.toString()}');
-    debugPrint('[GEOFENCE] Gym ID: ${geofence.id}');
-
-    if (location != null) {
-      debugPrint('[GEOFENCE] Location: ${location.latitude}, ${location.longitude}');
-      debugPrint('[GEOFENCE] Accuracy: ${location.accuracy}');
-      debugPrint('[GEOFENCE] Is Mock: ${location.isMock ?? false}');
-    }
-
-    // Emit raw event to stream (AttendanceProvider listens to this)
-    _geofenceController.add(geofenceStatus);
-
-    if (geofenceStatus == GeofenceStatus.ENTER) {
-      // Record entry time and show "gym detected" notification.
-      // Actual attendance marking waits for DWELL (5 min).
-      _enterTimestamps[geofence.id] = DateTime.now();
-      await _handleGeofenceEntry(geofence.id, location);
-    } else if (geofenceStatus == GeofenceStatus.DWELL) {
-      // User has been inside the geofence for loiteringDelayMs (5 min).
-      // This is the trigger for auto attendance marking.
-      await _handleGeofenceDwell(geofence.id, location);
-    } else if (geofenceStatus == GeofenceStatus.EXIT) {
-      _enterTimestamps.remove(geofence.id);
-      await _handleGeofenceExit(geofence.id, location);
-    }
-  }
-
-  /// Callback when location changes
-  void _onLocationChanged(dynamic location) {
-    if (location != null) {
-      debugPrint('[GEOFENCE] Location update: ${location.latitude}, ${location.longitude}');
-    }
-  }
-
-  /// Callback when location services status changes
-  void _onLocationServicesStatusChanged(bool status) {
-    debugPrint('[GEOFENCE] Location services ${status ? 'enabled' : 'disabled'}');
-    if (!status) {
-      // Location services disabled, handle accordingly
-      // You might want to show a notification to the user
-    }
-  }
-
-  /// Callback for stream errors
-  void _onStreamError(dynamic error) {
-    debugPrint('[GEOFENCE] Stream error: $error');
-  }
-
-  /// Handle geofence ENTER event
-  /// Fires when the user first crosses into the geofence boundary.
-  /// We show a local notification so the user knows the 5-min timer started.
-  Future<void> _handleGeofenceEntry(String gymId, dynamic location) async {
-    debugPrint('[GEOFENCE] ENTER event for gym: $gymId (5-min dwell timer started)');
-    try {
-      // Guard: only notify when inside an active operating period
-      if (!_isCurrentlyWithinOperatingHours()) {
-        debugPrint('[GEOFENCE] ENTER suppressed — outside operating hours or non-working day');
-        return;
-      }
-      // Notify user that we detected the gym — attendance will be marked at DWELL
-      await LocalNotificationService.instance.showGeofenceEnteredNotification(
-        gymName: _attendanceSettings?.gymId ?? 'your gym',
-      );
-    } catch (e) {
-      debugPrint('[GEOFENCE] Error showing entry notification: $e');
-    }
-  }
-
-  /// Handle geofence DWELL event (fires after loiteringDelayMs = 5 min).
-  /// This is the actual trigger for auto attendance marking.
-  /// AttendanceProvider listens to the stream and will call the backend API.
-  Future<void> _handleGeofenceDwell(String gymId, dynamic location) async {
-    debugPrint('[GEOFENCE] DWELL event (5 min inside) for gym: $gymId – checking operating hours');
-    // Guard: only proceed to attendance marking when inside an active period
-    if (!_isCurrentlyWithinOperatingHours()) {
-      debugPrint('[GEOFENCE] DWELL suppressed — outside operating hours or non-working day');
-      return;
-    }
-    debugPrint('[GEOFENCE] DWELL confirmed — triggering attendance mark');
-    // The stream event (DWELL) is already emitted above; AttendanceProvider
-    // will detect it and call markAttendanceEntry().
-  }
-
-  /// Handle geofence EXIT event
-  Future<void> _handleGeofenceExit(String gymId, dynamic location) async {
-    debugPrint('[GEOFENCE] EXIT event for gym: $gymId');
-    // Stream event (EXIT) already emitted; AttendanceProvider handles the API call.
-  }
-
   /// Get current location
   Future<geo.Position?> getCurrentLocation() async {
     try {
@@ -579,33 +397,6 @@ class GeofencingService extends ChangeNotifier {
   double calculateDistance(
       double lat1, double lon1, double lat2, double lon2) {
     return geo.Geolocator.distanceBetween(lat1, lon1, lat2, lon2);
-  }
-
-  /// Check if a location is inside the geofence
-  bool isInsideGeofence(double lat, double lon) {
-    if (_geofenceList.isEmpty) return false;
-
-    final geofence = _geofenceList.first;
-    final distance = calculateDistance(
-        lat, lon, geofence.latitude, geofence.longitude);
-    
-    return distance <= geofence.radius.first.length;
-  }
-
-  /// Pause geofence service
-  Future<void> pause() async {
-    if (_isServiceRunning) {
-      _geofenceService.pause();
-      debugPrint('[GEOFENCE] Service paused');
-    }
-  }
-
-  /// Resume geofence service
-  Future<void> resume() async {
-    if (_isServiceRunning) {
-      _geofenceService.resume();
-      debugPrint('[GEOFENCE] Service resumed');
-    }
   }
 
   /// Load and configure geofence based on gym's attendance settings
@@ -642,10 +433,10 @@ class GeofencingService extends ChangeNotifier {
       debugPrint('[GEOFENCE] Geofence type: ${geofenceSettings.type}');
 
       // For both circular and polygon, the backend provides pre-computed
-      // centroid lat/lng and bounding-circle radius so geofence_service
-      // (which only supports circular) can do a broad-area check.
-      // For polygon, the exact containment check happens on the backend
-      // when the attendance API is called.
+      // centroid lat/lng and bounding-circle radius.  The background isolate
+      // does its own containment check (polygon ray-casting or circular
+      // distance).  For polygon, the exact containment also re-verified on
+      // the backend when the attendance API is called.
       final success = await registerGymGeofence(
         gymId: gymId,
         latitude: geofenceSettings.latitude!,
@@ -749,44 +540,8 @@ class GeofencingService extends ChangeNotifier {
     return accuracy <= minAccuracy;
   }
 
-  // ── Operating hours / active-days guard ────────────────────────────────────
-
-  /// Returns true if the current time falls within the gym's active operating
-  /// period (day-of-week check + morning/evening slot check).
-  ///
-  /// Falls back to true (no restriction) when settings haven't been loaded yet
-  /// so the service doesn't silently suppress events for a restored geofence.
-  bool _isCurrentlyWithinOperatingHours() {
-    if (_attendanceSettings == null) return true; // no settings yet → allow
-
-    final now = DateTime.now();
-
-    // Active days check
-    final active = _attendanceSettings!.activeDays;
-    if (!isActiveDay(now: now, activeDays: active)) return false;
-
-    // Operating hours check using top-level operatingHours field from gym profile
-    final hours = _attendanceSettings!.operatingHours;
-    // Also check geofenceSettings shifts (may be more granular)
-    final gs = _attendanceSettings!.geofenceSettings;
-    final morning = gs?.morningShift ?? hours?.morning;
-    final evening = gs?.eveningShift ?? hours?.evening;
-
-    // Convert TimeShift (from attendance_settings.dart) to TimeShift type
-    return isWithinOperatingHours(
-      now: now,
-      morningShift: morning != null
-          ? TimeShift(opening: morning.opening, closing: morning.closing)
-          : null,
-      eveningShift: evening != null
-          ? TimeShift(opening: evening.opening, closing: evening.closing)
-          : null,
-    );
-  }
-
   @override
   void dispose() {
-    _geofenceController.close();
     _settingsService.dispose();
     super.dispose();
   }

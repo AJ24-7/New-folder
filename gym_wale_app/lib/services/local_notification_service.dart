@@ -29,9 +29,6 @@ class LocalNotificationService {
   bool _initialized = false;
 
   // ── Notification IDs ───────────────────────────────────────────────────────
-  static const int _idGeofenceEnter   = 2001;
-  static const int _idAttendanceEntry = 2002;
-  static const int _idAttendanceExit  = 2003;
   static const int _idGeneral         = 2000;
   static const int _idLocationWarning = 2010;
   static const int _idChat            = 2011;
@@ -179,61 +176,10 @@ class LocalNotificationService {
   // PUBLIC NOTIFICATION METHODS
   // ────────────────────────────────────────────────────────────────────────────
 
-  /// Shown when geofence dwell was detected but auto-marking failed after
-  /// all retries.  Gives the user a clear, actionable reason.
-  Future<void> showAttendanceFailedNotification({required String reason}) async {
-    await _show(
-      id: _idAttendanceEntry, // reuse the entry slot so it replaces any
-                               // previous "Gym Detected" notification
-      title: '⚠️ Auto-Attendance Failed',
-      body: reason,
-      payload: 'attendance_failed',
-    );
-  }
-
-  /// Shown immediately when user enters the geofence.
-  /// Tells the user that a 5-minute dwell check has started.
-  Future<void> showGeofenceEnteredNotification({required String gymName}) async {
-    await _show(
-      id: _idGeofenceEnter,
-      title: 'Gym Detected – $gymName',
-      body:
-          'You are near $gymName. Stay for 5 minutes to auto-mark your attendance.',
-      payload: 'geofence_enter',
-    );
-  }
-
-  /// Shown when the 5-minute dwell completes and attendance is auto-marked.
-  Future<void> showAttendanceEntryNotification({
-    required String gymName,
-    required String time,
-    int? sessionsRemaining,
-  }) async {
-    final body = (sessionsRemaining != null && sessionsRemaining > 0)
-        ? 'Welcome to $gymName! Checked in at $time. Sessions left: $sessionsRemaining'
-        : 'Welcome to $gymName! Attendance marked at $time.';
-    await _show(
-      id: _idAttendanceEntry,
-      title: 'Attendance Marked',
-      body: body,
-      payload: 'attendance_entry',
-    );
-  }
-
-  /// Shown when the user exits the geofence.
-  Future<void> showAttendanceExitNotification({
-    required String gymName,
-    required String time,
-    required int durationMinutes,
-  }) async {
-    await _show(
-      id: _idAttendanceExit,
-      title: 'Gym Exit Recorded',
-      body:
-          'Checked out from $gymName at $time. Duration: ${_fmt(durationMinutes)}. Great session!',
-      payload: 'attendance_exit',
-    );
-  }
+  // NOTE: All geofence-related attendance notifications (gym detected, attendance
+  // marked, attendance failed, gym exit) are handled exclusively by the
+  // ForegroundTaskService background isolate.  Do NOT add duplicate methods here
+  // — that was the root cause of the dual-notification bug.
 
   /// Generic attendance notification (API-driven message).
   Future<void> showAttendanceNotification({

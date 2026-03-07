@@ -37,7 +37,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   List<Gym> _popularGyms = [];
   List<Trainer> _topTrainers = [];
@@ -50,11 +50,34 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _showCenterFAB = true; // Default to showing FAB
   Set<String> _activeGymIds = {}; // Track gyms user is an active member of
 
+  // ── Location permission warning for geofence-enabled gyms ───────────────────
+  bool _showLocationWarning = false;
+  bool _locationEnabled = true;
+  bool _hasBackgroundPermission = true;
+  String _geofencedGymName = '';
+  bool _geofenceIsActive = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadPreferences();
     _initializeData();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Re-check location permission each time the user returns to the app
+    // (e.g. after granting permission in system Settings).
+    if (state == AppLifecycleState.resumed && _geofenceIsActive) {
+      _checkLocationPermissionStatus();
+    }
   }
 
   /// Initialize data in proper sequence
@@ -68,6 +91,24 @@ class _HomeScreenState extends State<HomeScreen> {
     
     // Check geofence settings after all data is loaded and user is authenticated
     await _checkGeofenceSettings();
+  }
+
+  /// Check location permission and update the inline warning banner state.
+  Future<void> _checkLocationPermissionStatus() async {
+    if (!_geofenceIsActive || kIsWeb) return;
+    try {
+      final locationEnabled = await Geolocator.isLocationServiceEnabled();
+      final permission = await Geolocator.checkPermission();
+      final hasBackground = permission == LocationPermission.always;
+      final show = !(locationEnabled && hasBackground);
+      if (mounted) {
+        setState(() {
+          _locationEnabled = locationEnabled;
+          _hasBackgroundPermission = hasBackground;
+          _showLocationWarning = show;
+        });
+      }
+    } catch (_) {}
   }
 
   /// Check if gym uses geofence attendance and warn about background location
@@ -136,6 +177,17 @@ class _HomeScreenState extends State<HomeScreen> {
         debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
 
         if (geofenceEnabled) {
+          // Track that at least one active gym uses geofencing so the inline
+          // location warning banner is shown/refreshed on the home screen.
+          if (mounted && !_geofenceIsActive) {
+            setState(() {
+              _geofenceIsActive = true;
+              _geofencedGymName = gymName ?? 'Your gym';
+            });
+            // Run the permission check now (banner will appear if needed).
+            _checkLocationPermissionStatus();
+          }
+
           // ── Auto-configure geofencing ───────────────────────────────────────
           // Set up the in-app geofence listener if it isn't running for this
           // gym yet.  Do this unconditionally so it works on every app open,
@@ -198,6 +250,89 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('[HOME] Error checking geofence settings: $e');
       // Silently fail - don't disrupt user experience
     }
+  }
+
+  // ─── Location warning banner ────────────────────────────────────────────────
+
+  /// Inline banner shown at the top of the Home tab when background location
+  /// permission is missing for a geofence-enabled gym membership.
+  Widget _buildLocationWarningBanner() {
+    final String message;
+    if (!_locationEnabled) {
+      message = 'Enable location services for auto-attendance';
+    } else if (!_hasBackgroundPermission) {
+      message = 'Enable "Allow all the time" location for auto-attendance';
+    } else {
+      message = 'Location access required for auto-attendance';
+    }
+
+    final geofencingService =
+        Provider.of<GeofencingService>(context, listen: false);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.orange.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.location_off, color: Colors.orange, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _geofencedGymName.isNotEmpty
+                      ? '📍 $_geofencedGymName'
+                      : '📍 Auto-attendance',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: const TextStyle(fontSize: 12, color: Colors.orange),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: () async {
+              await BackgroundLocationWarningDialog.show(
+                context: context,
+                gymName: _geofencedGymName.isNotEmpty
+                    ? _geofencedGymName
+                    : 'Your gym',
+                geofencingService: geofencingService,
+              );
+              // Recheck after the user returns from settings.
+              await Future.delayed(const Duration(milliseconds: 600));
+              await _checkLocationPermissionStatus();
+            },
+            style: TextButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
+            ),
+            child: const Text('Fix', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Load user's active memberships to filter gyms
@@ -867,6 +1002,12 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
+                  // ── Location permission warning banner ─────────────────────────
+                  // Shown when the user has at least one geofence-enabled gym
+                  // membership but background location permission is missing.
+                  if (_showLocationWarning && _geofenceIsActive)
+                    _buildLocationWarningBanner(),
+
                   // Offers Carousel - Always show if available
                   OfferCarousel(
                     offers: _offers,

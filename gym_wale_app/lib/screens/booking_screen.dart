@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/gym.dart';
 import '../models/membership.dart';
+import '../models/gym_offer.dart';
 import '../services/api_service.dart';
 import '../config/app_theme.dart';
 
@@ -9,12 +10,14 @@ class BookingScreen extends StatefulWidget {
   final Gym gym;
   final Membership membership;
   final int selectedMonths;
+  final GymOffer? appliedOffer;
 
   const BookingScreen({
     Key? key,
     required this.gym,
     required this.membership,
     this.selectedMonths = 1,
+    this.appliedOffer,
   }) : super(key: key);
 
   @override
@@ -63,13 +66,22 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   double get _baseAmount => widget.membership.price * _selectedMonths;
+
+  /// Discount from the applied membership offer
+  double get _offerDiscount {
+    if (widget.appliedOffer == null) return 0.0;
+    return widget.appliedOffer!.calculateDiscount(_baseAmount);
+  }
+
+  /// Amount after offer discount (before coupon)
+  double get _afterOfferAmount => _baseAmount - _offerDiscount;
   
   double get _discountAmount {
     if (_appliedCoupon == null) return 0.0;
     return (_appliedCoupon!['discountAmount'] ?? 0.0).toDouble();
   }
   
-  double get _totalAmount => _baseAmount - _discountAmount;
+  double get _totalAmount => _afterOfferAmount - _discountAmount;
 
   int get _discountPercent {
     if (_selectedMonths >= 12) return 15;
@@ -192,6 +204,8 @@ class _BookingScreenState extends State<BookingScreen> {
         monthlyPlan: '$_selectedMonths Month${_selectedMonths > 1 ? 's' : ''}',
         paymentMode: _selectedPaymentMode,
         paymentAmount: _totalAmount,
+        offerId: widget.appliedOffer?.id,
+        offerDiscount: _offerDiscount > 0 ? _offerDiscount : null,
       );
 
       if (result['success'] && mounted) {
@@ -436,6 +450,92 @@ class _BookingScreenState extends State<BookingScreen> {
             ),
 
             const SizedBox(height: 16),
+
+            // Applied Offer Banner
+            if (widget.appliedOffer != null && _offerDiscount > 0)
+              Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppTheme.accentColor, width: 1.5),
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppTheme.accentColor.withOpacity(0.1),
+                        Colors.white,
+                      ],
+                    ),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentColor,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.local_offer,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.appliedOffer!.title,
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.accentColor,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.appliedOffer!.type == 'percentage'
+                                  ? '${widget.appliedOffer!.value.toStringAsFixed(0)}% off applied'
+                                  : '₹${widget.appliedOffer!.value.toStringAsFixed(0)} off applied',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.successColor,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '-₹${_offerDiscount.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            if (widget.appliedOffer != null && _offerDiscount > 0)
+              const SizedBox(height: 16),
 
             // Duration Selection with Discount
             Card(
@@ -1022,6 +1122,42 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ],
                       
+                      // Offer discount
+                      if (widget.appliedOffer != null && _offerDiscount > 0) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.local_offer,
+                                  size: 16,
+                                  color: AppTheme.accentColor,
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'Offer: ${widget.appliedOffer!.title}',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: AppTheme.accentColor,
+                                        ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Text(
+                              '-₹${_offerDiscount.toStringAsFixed(0)}',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.accentColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      
                       // Coupon discount
                       if (_appliedCoupon != null && _discountAmount > 0) ...[
                         const SizedBox(height: 8),
@@ -1078,7 +1214,7 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       
                       // Savings indicator
-                      if (_discountAmount > 0 || _discountPercent > 0) ...[
+                      if (_discountAmount > 0 || _discountPercent > 0 || _offerDiscount > 0) ...[
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1099,7 +1235,7 @@ class _BookingScreenState extends State<BookingScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'You save ₹${((_baseAmount * _discountPercent / 100) + _discountAmount).toStringAsFixed(0)}!',
+                                'You save ₹${((_baseAmount * _discountPercent / 100) + _offerDiscount + _discountAmount).toStringAsFixed(0)}!',
                                 style: const TextStyle(
                                   color: AppTheme.successColor,
                                   fontWeight: FontWeight.bold,

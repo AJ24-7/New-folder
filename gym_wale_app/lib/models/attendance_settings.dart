@@ -25,6 +25,15 @@ class AttendanceSettings {
             ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
 
   factory AttendanceSettings.fromJson(Map<String, dynamic> json) {
+    // Normalize active day names to lowercase so case-insensitive comparisons
+    // work correctly regardless of how the backend serialises them
+    // (e.g. 'Monday' vs 'monday').
+    List<String>? parsedActiveDays;
+    if (json['activeDays'] != null) {
+      parsedActiveDays = List<String>.from(json['activeDays'])
+          .map((d) => d.trim().toLowerCase())
+          .toList();
+    }
     return AttendanceSettings(
       gymId: json['gymId'] ?? '',
       mode: _parseAttendanceMode(json['mode']),
@@ -34,9 +43,7 @@ class AttendanceSettings {
       geofenceSettings: json['geofenceSettings'] != null
           ? GeofenceSettings.fromJson(json['geofenceSettings'])
           : null,
-      activeDays: json['activeDays'] != null
-          ? List<String>.from(json['activeDays'])
-          : null,
+      activeDays: parsedActiveDays,
       operatingHours: json['operatingHours'] != null
           ? OperatingHoursInfo.fromJson(json['operatingHours'])
           : null,
@@ -186,6 +193,8 @@ GeofenceSettings({
           : null,
       activeDays: json['activeDays'] != null
           ? List<String>.from(json['activeDays'])
+              .map((d) => d.trim().toLowerCase())
+              .toList()
           : null,
       operatingHoursStart: json['operatingHoursStart'] as String?,
       operatingHoursEnd: json['operatingHoursEnd'] as String?,
@@ -333,17 +342,37 @@ bool isWithinOperatingHours({
   final eveningOpen  = _parseMinutes(eveningShift?.opening);
   final eveningClose = _parseMinutes(eveningShift?.closing);
 
-  // If no shifts configured at all → no restriction
+  // If no valid opening times at all → no restriction.
+  // This also handles the case where the backend returns empty {} objects
+  // that deserialise into TimeShift(opening: null, closing: null).
   if (morningOpen == null && eveningOpen == null) return true;
 
+  // Support half-open intervals: if only opening time is present (no closing),
+  // treat the shift as open-ended from the opening time.  This mirrors the
+  // background-task _isWithinActivePeriod() and prevents a missing closing
+  // time from silently blocking all geofence attendance.
+  // Midnight-crossing support: when close < open (e.g. 16:00–00:00 or
+  // 22:00–02:00), the shift wraps past midnight so we use OR instead of AND.
   bool inMorning = false;
-  if (morningOpen != null && morningClose != null) {
-    inMorning = nowMinutes >= morningOpen && nowMinutes <= morningClose;
+  if (morningOpen != null) {
+    if (morningClose != null) {
+      inMorning = morningClose >= morningOpen
+          ? (nowMinutes >= morningOpen && nowMinutes <= morningClose)
+          : (nowMinutes >= morningOpen || nowMinutes <= morningClose);
+    } else {
+      inMorning = nowMinutes >= morningOpen;
+    }
   }
 
   bool inEvening = false;
-  if (eveningOpen != null && eveningClose != null) {
-    inEvening = nowMinutes >= eveningOpen && nowMinutes <= eveningClose;
+  if (eveningOpen != null) {
+    if (eveningClose != null) {
+      inEvening = eveningClose >= eveningOpen
+          ? (nowMinutes >= eveningOpen && nowMinutes <= eveningClose)
+          : (nowMinutes >= eveningOpen || nowMinutes <= eveningClose);
+    } else {
+      inEvening = nowMinutes >= eveningOpen;
+    }
   }
 
   return inMorning || inEvening;
@@ -351,7 +380,9 @@ bool isWithinOperatingHours({
 
 /// Returns true if [now]'s day-of-week is in [activeDays].
 /// If [activeDays] is empty the function returns true (open every day).
+/// Comparison is case-insensitive: server values like 'Monday' match 'monday'.
 bool isActiveDay({required DateTime now, required List<String> activeDays}) {
   if (activeDays.isEmpty) return true;
-  return activeDays.contains(_dayName(now));
+  final today = _dayName(now); // always lowercase
+  return activeDays.any((d) => d.trim().toLowerCase() == today);
 }

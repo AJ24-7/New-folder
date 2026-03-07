@@ -29,6 +29,11 @@ class GymOffer {
   final String? createdBy;
   final bool offerNotificationSent;
   final double? discount;
+  // Membership-plan targeting
+  final String applicableTo; // 'all' or 'specific'
+  final List<int> applicableMonths;
+  final List<String> applicableTiers;
+  final List<int> applicableTierMonths;
 
   GymOffer({
     required this.id,
@@ -58,6 +63,10 @@ class GymOffer {
     this.createdBy,
     this.offerNotificationSent = false,
     this.discount,
+    this.applicableTo = 'all',
+    this.applicableMonths = const [],
+    this.applicableTiers = const [],
+    this.applicableTierMonths = const [],
   });
 
   factory GymOffer.fromJson(Map<String, dynamic> json) {
@@ -89,6 +98,10 @@ class GymOffer {
       createdBy: json['createdBy']?.toString(),
       offerNotificationSent: json['offerNotificationSent'] ?? false,
       discount: json['discount'] != null ? _parseDouble(json['discount']) : null,
+      applicableTo: json['applicableTo']?.toString() ?? 'all',
+      applicableMonths: (json['applicableMonths'] as List<dynamic>?)?.map((e) => _parseInt(e)).toList() ?? [],
+      applicableTiers: _parseList(json['applicableTiers']),
+      applicableTierMonths: (json['applicableTierMonths'] as List<dynamic>?)?.map((e) => _parseInt(e)).toList() ?? [],
     );
   }
 
@@ -121,6 +134,10 @@ class GymOffer {
       'createdBy': createdBy,
       'offerNotificationSent': offerNotificationSent,
       'discount': discount,
+      'applicableTo': applicableTo,
+      'applicableMonths': applicableMonths,
+      'applicableTiers': applicableTiers,
+      'applicableTierMonths': applicableTierMonths,
     };
   }
 
@@ -247,6 +264,10 @@ class GymOffer {
     String? createdBy,
     bool? offerNotificationSent,
     double? discount,
+    String? applicableTo,
+    List<int>? applicableMonths,
+    List<String>? applicableTiers,
+    List<int>? applicableTierMonths,
   }) {
     return GymOffer(
       id: id ?? this.id,
@@ -276,6 +297,10 @@ class GymOffer {
       createdBy: createdBy ?? this.createdBy,
       offerNotificationSent: offerNotificationSent ?? this.offerNotificationSent,
       discount: discount ?? this.discount,
+      applicableTo: applicableTo ?? this.applicableTo,
+      applicableMonths: applicableMonths ?? this.applicableMonths,
+      applicableTiers: applicableTiers ?? this.applicableTiers,
+      applicableTierMonths: applicableTierMonths ?? this.applicableTierMonths,
     );
   }
 
@@ -480,12 +505,16 @@ class OfferStats {
   final int activeCoupons;
   final int totalClaims;
   final double revenue;
+  final double totalDiscount;
+  final int membershipOffers;
 
   OfferStats({
     required this.activeOffers,
     required this.activeCoupons,
     required this.totalClaims,
     required this.revenue,
+    this.totalDiscount = 0,
+    this.membershipOffers = 0,
   });
 
   factory OfferStats.fromJson(Map<String, dynamic> json) {
@@ -494,6 +523,8 @@ class OfferStats {
       activeCoupons: json['activeCoupons'] ?? 0,
       totalClaims: json['totalClaims'] ?? 0,
       revenue: GymOffer._parseDouble(json['revenue']),
+      totalDiscount: GymOffer._parseDouble(json['totalDiscount']),
+      membershipOffers: json['membershipOffers'] ?? 0,
     );
   }
 
@@ -503,6 +534,8 @@ class OfferStats {
       'activeCoupons': activeCoupons,
       'totalClaims': totalClaims,
       'revenue': revenue,
+      'totalDiscount': totalDiscount,
+      'membershipOffers': membershipOffers,
     };
   }
 }

@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/diet_service.dart';
-import '../providers/auth_provider.dart';
 import '../models/trial_booking.dart';
 import '../models/user_diet_subscription.dart';
 import '../models/diet_plan.dart';

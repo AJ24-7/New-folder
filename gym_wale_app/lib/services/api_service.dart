@@ -728,6 +728,8 @@ class ApiService {
     required String paymentMode,
     required double paymentAmount,
     String activityPreference = 'General Fitness',
+    String? offerId,
+    double? offerDiscount,
   }) async {
     if (_token == null) {
       return {'success': false, 'message': 'Not authenticated'};
@@ -735,17 +737,21 @@ class ApiService {
     
     try {
       final url = Uri.parse(ApiConfig.baseUrl + '/members/book-membership');
+      final body = {
+        'gymId': gymId,
+        'membershipPlan': membershipPlan,
+        'monthlyPlan': monthlyPlan,
+        'paymentMode': paymentMode,
+        'paymentAmount': paymentAmount,
+        'activityPreference': activityPreference,
+      };
+      if (offerId != null) body['offerId'] = offerId;
+      if (offerDiscount != null) body['offerDiscount'] = offerDiscount;
+
       final response = await http.post(
         url,
         headers: _headers,
-        body: jsonEncode({
-          'gymId': gymId,
-          'membershipPlan': membershipPlan,
-          'monthlyPlan': monthlyPlan,
-          'paymentMode': paymentMode,
-          'paymentAmount': paymentAmount,
-          'activityPreference': activityPreference,
-        }),
+        body: jsonEncode(body),
       ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
@@ -2515,72 +2521,11 @@ class ApiService {
   }
 
   // ========== Geofence Attendance APIs ==========
-  
-  /// Mark attendance entry when user enters gym geofence
-  static Future<Map<String, dynamic>> markGeofenceEntry(Map<String, dynamic> data) async {
-    try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/auto-mark/entry');
-      
-      final response = await http.post(
-        url,
-        headers: _headers,
-        body: jsonEncode(data),
-      ).timeout(ApiConfig.timeout);
-
-      final responseData = jsonDecode(response.body);
-      
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return {
-          'success': true,
-          ...responseData,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': responseData['message'] ?? 'Failed to mark entry',
-        };
-      }
-    } catch (e) {
-      print('Mark geofence entry error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: ${e.toString()}',
-      };
-    }
-  }
-
-  /// Mark attendance exit when user leaves gym geofence
-  static Future<Map<String, dynamic>> markGeofenceExit(Map<String, dynamic> data) async {
-    try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/auto-mark/exit');
-      
-      final response = await http.post(
-        url,
-        headers: _headers,
-        body: jsonEncode(data),
-      ).timeout(ApiConfig.timeout);
-
-      final responseData = jsonDecode(response.body);
-      
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        return {
-          'success': true,
-          ...responseData,
-        };
-      } else {
-        return {
-          'success': false,
-          'message': responseData['message'] ?? 'Failed to mark exit',
-        };
-      }
-    } catch (e) {
-      print('Mark geofence exit error: $e');
-      return {
-        'success': false,
-        'message': 'Connection error: ${e.toString()}',
-      };
-    }
-  }
+  //
+  // NOTE: Auto-mark entry/exit API calls are made exclusively by the
+  // ForegroundTaskService background isolate (via direct HTTP).
+  // Do NOT add markGeofenceEntry / markGeofenceExit wrappers here —
+  // that was the root cause of the dual-system / duplicate-notification bug.
 
   /// Get today's attendance status
   static Future<Map<String, dynamic>> getTodayAttendance(String gymId) async {

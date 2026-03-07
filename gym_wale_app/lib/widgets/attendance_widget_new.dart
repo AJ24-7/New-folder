@@ -331,6 +331,11 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
   }
 
   /// Returns true when the current time is inside one of the gym's operating shifts.
+  ///
+  /// Supports half-open intervals (only opening set, no closing) — the shift
+  /// is treated as open-ended from the opening time.  This matches the
+  /// background-task _isWithinActivePeriod() and the model-level helper
+  /// isWithinOperatingHours() so all three code paths agree.
   bool _isWithinOperatingHours(AttendanceSettings? settings) {
     if (settings == null) return true;
     final geo = settings.geofenceSettings;
@@ -341,19 +346,47 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
       // Dual-shift from geofence settings
       final ms = _hhmm2min(geo.morningShift?.opening);
       final me = _hhmm2min(geo.morningShift?.closing);
-      if (ms != null && me != null && cur >= ms && cur <= me) return true;
-
       final es = _hhmm2min(geo.eveningShift?.opening);
       final ee = _hhmm2min(geo.eveningShift?.closing);
-      if (es != null && ee != null && cur >= es && cur <= ee) return true;
 
-      // Legacy single window
-      final ls = _hhmm2min(geo.operatingHoursStart);
-      final le = _hhmm2min(geo.operatingHoursEnd);
-      if (ms == null && es == null && ls == null) return true; // no restriction
-      if (ls != null && le != null && cur >= ls && cur <= le) return true;
+      // No shift times at all → check legacy or no restriction
+      if (ms == null && es == null) {
+        final ls = _hhmm2min(geo.operatingHoursStart);
+        final le = _hhmm2min(geo.operatingHoursEnd);
+        if (ls == null) return true; // no restriction
+        if (le != null) {
+          return le >= ls
+              ? (cur >= ls && cur <= le)
+              : (cur >= ls || cur <= le);
+        }
+        return cur >= ls;
+      }
 
-      return false;
+      // Morning: half-open + midnight-crossing support
+      bool inMorning = false;
+      if (ms != null) {
+        if (me != null) {
+          inMorning = me >= ms
+              ? (cur >= ms && cur <= me)
+              : (cur >= ms || cur <= me);
+        } else {
+          inMorning = cur >= ms;
+        }
+      }
+
+      // Evening: same logic
+      bool inEvening = false;
+      if (es != null) {
+        if (ee != null) {
+          inEvening = ee >= es
+              ? (cur >= es && cur <= ee)
+              : (cur >= es || cur <= ee);
+        } else {
+          inEvening = cur >= es;
+        }
+      }
+
+      return inMorning || inEvening;
     }
 
     // Fall back to top-level operatingHours (OperatingHoursInfo)
@@ -362,14 +395,34 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
 
     final ms = _hhmm2min(oh.morning?.opening);
     final me = _hhmm2min(oh.morning?.closing);
-    if (ms != null && me != null && cur >= ms && cur <= me) return true;
-
     final es = _hhmm2min(oh.evening?.opening);
     final ee = _hhmm2min(oh.evening?.closing);
-    if (es != null && ee != null && cur >= es && cur <= ee) return true;
 
     if (ms == null && es == null) return true; // no restriction configured
-    return false;
+
+    bool inMorning = false;
+    if (ms != null) {
+      if (me != null) {
+        inMorning = me >= ms
+            ? (cur >= ms && cur <= me)
+            : (cur >= ms || cur <= me);
+      } else {
+        inMorning = cur >= ms;
+      }
+    }
+
+    bool inEvening = false;
+    if (es != null) {
+      if (ee != null) {
+        inEvening = ee >= es
+            ? (cur >= es && cur <= ee)
+            : (cur >= es || cur <= ee);
+      } else {
+        inEvening = cur >= es;
+      }
+    }
+
+    return inMorning || inEvening;
   }
 
   int? _hhmm2min(String? s) {

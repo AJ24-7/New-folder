@@ -64,7 +64,11 @@ class _GeofenceTaskHandler extends TaskHandler {
 
   /// Incremental attempt counter for the DWELL mark — resets on success.
   int _dwellMarkAttempts = 0;
-  static const int _maxDwellMarkAttempts = 5;
+  static const int _maxDwellMarkAttempts = 3;
+
+  /// Last backend error message — displayed in the notification for immediate
+  /// diagnosis instead of silently retrying.
+  String? _lastBackendErrorMsg;
 
   // Local notification plugin for the background isolate
   final FlutterLocalNotificationsPlugin _notifPlugin =
@@ -144,6 +148,19 @@ class _GeofenceTaskHandler extends TaskHandler {
     try {
       final prefs = await SharedPreferences.getInstance();
 
+      // ── CRITICAL: Refresh Dart-level cache from the native platform ──────
+      // SharedPreferences caches all values in a per-isolate Dart Map on
+      // first load.  When the main isolate (app process) updates operating
+      // hours, active-days, auto-mark flags, etc. via persistOperatingSchedule
+      // or other helpers, this background isolate's Dart cache does NOT see
+      // those writes.  Calling reload() forces a re-read from the Android/iOS
+      // SharedPreferences file so we always have the latest values.
+      try {
+        await prefs.reload();
+      } catch (e) {
+        debugPrint('[BGTask] prefs.reload() failed (non-fatal): $e');
+      }
+
       // ── Guard: require login + active membership ─────────────────────────
       // Stop the foreground service entirely if the user has logged out or
       // has no active gym membership.  This prevents GPS polling, battery
@@ -185,6 +202,19 @@ class _GeofenceTaskHandler extends TaskHandler {
         _lastMarkedDateKey = today;
         await prefs.remove('bg_task_entry_marked');
         debugPrint('[BGTask] Daily state reset for $today');
+      }
+
+      // ── Cross-system sync ────────────────────────────────────────────────
+      // The in-app AttendanceProvider may have marked attendance via its own
+      // ApiService call (when the app is open).  It writes bg_task_entry_marked
+      // = true to SharedPreferences.  After prefs.reload() above, re-read the
+      // flag so both systems stay in sync and the bg task stops retrying.
+      if (!_entryMarkedToday) {
+        final externallyMarked = prefs.getBool('bg_task_entry_marked') ?? false;
+        if (externallyMarked && prefs.getString('bg_task_last_date') == today) {
+          _entryMarkedToday = true;
+          debugPrint('[BGTask] Attendance already marked by in-app provider — synced');
+        }
       }
 
       // ── get current GPS position ─────────────────────────────────────────
@@ -231,13 +261,12 @@ class _GeofenceTaskHandler extends TaskHandler {
         // Reset jitter counter — user is genuinely inside now.
         _consecutiveOutsideCount = 0;
 
-        // Check operating hours and active days before triggering anything
-        final withinPeriod = await _isWithinActivePeriod(prefs);
-        if (!withinPeriod) {
-          debugPrint('[BGTask] ENTER ignored — outside operating hours or non-working day');
-          return;
-        }
-
+        // IMPORTANT: always update state and start the dwell timer on ENTER,
+        // regardless of operating hours.  The timer must run continuously so
+        // that when the gym's operating window opens the user does NOT need to
+        // leave and re-enter the geofence for attendance to be auto-marked.
+        // (Previously the early `return` here prevented _wasInsideGeofence from
+        // ever being set to true when outside hours, stalling all detection.)
         _wasInsideGeofence = true;
         _dwellMarkAttempts = 0;
 
@@ -259,6 +288,19 @@ class _GeofenceTaskHandler extends TaskHandler {
         _savedEnterTimeAcrossExit = null;
 
         await _saveDailyState(); // Persist timer so service-restart restores it
+
+        // Check operating hours AFTER state/timer update — affects only
+        // whether we show the "Gym Detected" notification, not the timer.
+        final withinPeriod = await _isWithinActivePeriod(prefs);
+        if (!withinPeriod) {
+          final reason = _buildOperatingHoursDebugText(prefs);
+          debugPrint('[BGTask] ENTER outside operating hours — timer running, awaiting gym opening');
+          _updateFgNotif(
+            title: '🏋️ Inside Gym (Outside Hours)',
+            text: reason,
+          );
+          return;
+        }
 
         _updateFgNotif(
           title: '🏋️ Gym Detected',
@@ -344,10 +386,11 @@ class _GeofenceTaskHandler extends TaskHandler {
             // as operating hours start instead of restarting the 5-min timer.
             final withinPeriod = await _isWithinActivePeriod(prefs);
             if (!withinPeriod) {
+              final reason = _buildOperatingHoursDebugText(prefs);
               debugPrint('[BGTask] DWELL skipped — outside operating hours (timer kept, will mark when hours start)');
               _updateFgNotif(
-                title: '🏋️ Inside Gym',
-                text: 'Attendance will mark when gym opens.',
+                title: '🏋️ Inside Gym (Outside Hours)',
+                text: reason,
               );
               return;
             }
@@ -391,10 +434,22 @@ class _GeofenceTaskHandler extends TaskHandler {
                   text: 'Check membership or gym settings.',
                 );
               } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
-                // Soft transient failure (GPS, network, operating-hours edge).
-                // Retry on next tick without any backoff that could rewind the
-                // timer and cause the infinite oscillation loop.
+                // Soft transient failure — show error IMMEDIATELY in both
+                // the persistent notification and a pop-up so the user can
+                // diagnose the issue without guessing.  Will retry once
+                // more on the next tick.
                 debugPrint('[BGTask] Soft-fail (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry next tick');
+                final errText = _lastBackendErrorMsg ?? 'Server error — retrying…';
+                _updateFgNotif(
+                  title: '⚠️ Auto-Mark Retrying…',
+                  text: errText,
+                );
+                await _showLocalNotif(
+                  id: 3006,
+                  title: '⚠️ Auto-Attendance Error',
+                  body: 'Attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts failed: $errText',
+                  importance: Importance.high,
+                );
               } else {
                 // ── Max soft retries exceeded ─────────────────────────────────
                 // IMPORTANT: do NOT reset _enterTime here.  The old approach of
@@ -411,8 +466,8 @@ class _GeofenceTaskHandler extends TaskHandler {
                 await _saveDailyState();
 
                 _updateFgNotif(
-                  title: '⚠️ Attendance Not Auto-Marked',
-                  text: 'Could not reach the server after $_maxDwellMarkAttempts attempts. Mark manually.',
+                  title: '⚠️ Auto-Attendance Failed',
+                  text: 'Could not reach the server after $_maxDwellMarkAttempts attempts. Please mark manually.',
                 );
                 await _showLocalNotif(
                   id: 3004,
@@ -512,6 +567,11 @@ class _GeofenceTaskHandler extends TaskHandler {
       try {
         final body = (jsonDecode(resp.body) as Map<String, dynamic>);
         final msg  = (body['message'] as String? ?? '').toLowerCase();
+        // Store the raw message for UI display so notifications can show
+        // the exact reason (e.g. "attendance can only be marked during gym
+        // operating hours") instead of a generic error.
+        _lastBackendErrorMsg =
+            body['message'] as String? ?? 'Unknown server error (${resp.statusCode})';
         // Hard-block: retrying will never help today.
         const hardBlocks = [
           'no active membership',
@@ -521,6 +581,13 @@ class _GeofenceTaskHandler extends TaskHandler {
           'member not found',
           'mock locations are not allowed',
           'attendance can only be marked during gym operating hours',
+          // Auth errors — token is invalid/expired; retrying with the same
+          // token will never succeed.
+          'invalid token',
+          'token missing',
+          'invalid token type',
+          'invalid token format',
+          'user not found',
         ];
         if (hardBlocks.any(msg.contains)) {
           debugPrint('[BGTask] Hard-block: $msg');
@@ -532,6 +599,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       return _kBackendSoftFail;
     } catch (e) {
       debugPrint('[BGTask] HTTP error: $e');
+      _lastBackendErrorMsg = 'Network error: $e';
       return _kBackendSoftFail;
     }
   }
@@ -558,7 +626,8 @@ class _GeofenceTaskHandler extends TaskHandler {
     if (activeDaysRaw.isNotEmpty) {
       const dayNames = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
       final today = dayNames[now.weekday - 1]; // weekday 1=Mon … 7=Sun
-      final activeDays = activeDaysRaw.split(',');
+      // Normalise to lowercase so server values like 'Monday' match 'monday'.
+      final activeDays = activeDaysRaw.split(',').map((d) => d.trim().toLowerCase()).toList();
       if (!activeDays.contains(today)) {
         debugPrint('[BGTask] Today ($today) is not in active days: $activeDays');
         return false;
@@ -568,41 +637,106 @@ class _GeofenceTaskHandler extends TaskHandler {
     // ── Operating hours check ──────────────────────────────────────────────
     final nowMin = now.hour * 60 + now.minute;
 
-    final morningOpen  = _hmm2min(prefs.getString('gym_morning_opening'));
-    final morningClose = _hmm2min(prefs.getString('gym_morning_closing'));
-    final eveningOpen  = _hmm2min(prefs.getString('gym_evening_opening'));
-    final eveningClose = _hmm2min(prefs.getString('gym_evening_closing'));
+    final morningOpenStr  = prefs.getString('gym_morning_opening');
+    final morningCloseStr = prefs.getString('gym_morning_closing');
+    final eveningOpenStr  = prefs.getString('gym_evening_opening');
+    final eveningCloseStr = prefs.getString('gym_evening_closing');
+
+    final morningOpen  = _hmm2min(morningOpenStr);
+    final morningClose = _hmm2min(morningCloseStr);
+    final eveningOpen  = _hmm2min(eveningOpenStr);
+    final eveningClose = _hmm2min(eveningCloseStr);
+
+    debugPrint('[BGTask] Operating hours check — '
+        'now=${now.hour}:${now.minute.toString().padLeft(2, '0')} ($nowMin min) | '
+        'morning=${morningOpenStr ?? 'null'}-${morningCloseStr ?? 'null'} '
+        '($morningOpen-$morningClose) | '
+        'evening=${eveningOpenStr ?? 'null'}-${eveningCloseStr ?? 'null'} '
+        '($eveningOpen-$eveningClose) | '
+        'activeDays=${activeDaysRaw.isEmpty ? 'ALL' : activeDaysRaw}');
 
     // If no shift times stored at all → no restriction
-    if (morningOpen == null && eveningOpen == null) return true;
+    if (morningOpen == null && eveningOpen == null) {
+      debugPrint('[BGTask] No operating hours configured — allowing (no restriction)');
+      return true;
+    }
 
     // Morning shift: require opening; if closing is missing treat as open
     // until end-of-day so a gym with only an opening time is never blocked.
+    // Midnight-crossing: when close < open (e.g. 22:00–02:00), use OR logic.
     bool inMorning = false;
     if (morningOpen != null) {
       if (morningClose != null) {
-        inMorning = nowMin >= morningOpen && nowMin <= morningClose;
+        inMorning = morningClose >= morningOpen
+            ? (nowMin >= morningOpen && nowMin <= morningClose)
+            : (nowMin >= morningOpen || nowMin <= morningClose);
       } else {
-        // Only opening stored — open from morningOpen onwards (no hard close).
         inMorning = nowMin >= morningOpen;
       }
     }
 
-    // Evening shift: same permissive logic.
+    // Evening shift: same permissive logic with midnight-crossing support.
     bool inEvening = false;
     if (eveningOpen != null) {
       if (eveningClose != null) {
-        inEvening = nowMin >= eveningOpen && nowMin <= eveningClose;
+        inEvening = eveningClose >= eveningOpen
+            ? (nowMin >= eveningOpen && nowMin <= eveningClose)
+            : (nowMin >= eveningOpen || nowMin <= eveningClose);
       } else {
         inEvening = nowMin >= eveningOpen;
       }
     }
+
+    debugPrint('[BGTask] inMorning=$inMorning inEvening=$inEvening');
 
     if (!inMorning && !inEvening) {
       debugPrint('[BGTask] Current time ${now.hour}:${now.minute.toString().padLeft(2,'0')} is outside all operating shifts.');
       return false;
     }
     return true;
+  }
+
+  /// Build a human-readable string explaining the current operating hours
+  /// state.  Used in notification text so the user (or developer) can
+  /// immediately see the exact schedule values that caused the outside-hours
+  /// decision — critical for diagnosing "gym shows closed when it's open".
+  String _buildOperatingHoursDebugText(SharedPreferences prefs) {
+    final now = DateTime.now();
+    final nowStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    final morningOpenStr  = prefs.getString('gym_morning_opening');
+    final morningCloseStr = prefs.getString('gym_morning_closing');
+    final eveningOpenStr  = prefs.getString('gym_evening_opening');
+    final eveningCloseStr = prefs.getString('gym_evening_closing');
+    final activeDaysRaw   = prefs.getString('gym_active_days') ?? '';
+
+    // Check if it's an inactive day first
+    if (activeDaysRaw.isNotEmpty) {
+      const dayNames = [
+        'monday', 'tuesday', 'wednesday', 'thursday',
+        'friday', 'saturday', 'sunday'
+      ];
+      final today = dayNames[now.weekday - 1];
+      final activeDays =
+          activeDaysRaw.split(',').map((d) => d.trim().toLowerCase()).toList();
+      if (!activeDays.contains(today)) {
+        return 'Today ($today) is gym off-day. Active: ${activeDays.join(", ")}';
+      }
+    }
+
+    // Build shift description
+    final parts = <String>[];
+    if (morningOpenStr != null) {
+      parts.add('AM ${morningOpenStr}-${morningCloseStr ?? 'open'}');
+    }
+    if (eveningOpenStr != null) {
+      parts.add('PM ${eveningOpenStr}-${eveningCloseStr ?? 'open'}');
+    }
+    if (parts.isEmpty) {
+      return 'No operating hours saved (now $nowStr)';
+    }
+    return 'Now $nowStr | ${parts.join(", ")}';
   }
 
   // ─── helpers ───────────────────────────────────────────────────────────────
@@ -781,11 +915,11 @@ class ForegroundTaskService {
     if (!_initialized) init();
 
     if (await FlutterForegroundTask.isRunningService) {
-      debugPrint('[FGTask] Already running — refreshing notification');
-      await FlutterForegroundTask.updateService(
-        notificationTitle: '📍 Gym Attendance Tracking',
-        notificationText: 'Monitoring your location…',
-      );
+      debugPrint('[FGTask] Already running — keeping existing notification state');
+      // DO NOT overwrite the notification here.  The background isolate owns
+      // the persistent notification and may currently be showing a dwell
+      // countdown, outside-hours diagnostic, or error.  Resetting to
+      // "Monitoring your location…" hides that information.
       return;
     }
 
@@ -862,7 +996,10 @@ class ForegroundTaskService {
       await prefs.remove('gym_evening_closing');
     }
     if (activeDays != null && activeDays.isNotEmpty) {
-      await prefs.setString('gym_active_days', activeDays.join(','));
+      // Normalise to lowercase before persisting so the background-isolate
+      // comparison is always case-insensitive.
+      final normalised = activeDays.map((d) => d.trim().toLowerCase()).toList();
+      await prefs.setString('gym_active_days', normalised.join(','));
     } else {
       await prefs.remove('gym_active_days');
     }

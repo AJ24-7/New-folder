@@ -1041,18 +1041,24 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   // Duration options from the gym's actual membership plan, fallback to hardcoded
   List<Map<String, dynamic>> get _durationOptions {
     final plan = widget.membershipPlan;
-    if (plan != null && plan.monthlyOptions.isNotEmpty) {
-      return plan.monthlyOptions.map((opt) {
-        final months = opt.months;
-        final label = months == 1 ? '1 Month' : months == 12 ? '12 Months' : '$months Months';
-        return <String, dynamic>{
-          'value': label,
-          'months': months,
-          'price': opt.finalPrice,
-          'discount': opt.discount,
-          'isPopular': opt.isPopular,
-        };
-      }).toList();
+    if (plan != null) {
+      // Multi-tier: use the selected tier's options
+      if (plan.isMultiTier && plan.tiers.isNotEmpty) {
+        final tier = plan.tiers.firstWhere((t) => t.name == _plan, orElse: () => plan.tiers.first);
+        if (tier.monthlyOptions.isNotEmpty) {
+          return tier.monthlyOptions.map((opt) {
+            final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
+            return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+          }).toList();
+        }
+      }
+      // Single-tier: use top-level monthlyOptions
+      if (plan.monthlyOptions.isNotEmpty) {
+        return plan.monthlyOptions.map((opt) {
+          final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
+          return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+        }).toList();
+      }
     }
     return <Map<String, dynamic>>[
       <String, dynamic>{'value': '1 Month', 'months': 1, 'price': 0.0},
@@ -1071,10 +1077,15 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   @override
   void initState() {
     super.initState();
-    // Lock plan to gym name when single-tier
-    if (!_isMultiTier && widget.membershipPlan != null) {
-      _plan = widget.membershipPlan!.name;
+    // Lock plan name in single-tier mode; use first tier name in multi-tier mode
+    if (widget.membershipPlan != null) {
+      if (_isMultiTier && widget.membershipPlan!.tiers.isNotEmpty) {
+        _plan = widget.membershipPlan!.tiers.first.name;
+      } else if (!_isMultiTier) {
+        _plan = widget.membershipPlan!.name;
+      }
     }
+    // Pre-select first duration and auto-fill its price
     if (_durationOptions.isNotEmpty) {
       _duration = _durationOptions.first['value'] as String;
       _autoFillAmount();
