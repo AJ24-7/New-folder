@@ -939,9 +939,16 @@ router.get('/member/history', authMiddleware, async (req, res) => {
         }
 
         // Build query to get attendance history within membership period
+        // Include both Member._id and User._id to catch geofence records
+        // that may have been stored with User._id (backward compat)
+        const personIds = [member._id];
+        if (userId.toString() !== member._id.toString()) {
+            personIds.push(userId);
+        }
+
         const query = {
             gymId,
-            personId: member._id,
+            personId: { $in: personIds },
             personType: 'Member',
             date: {
                 $gte: effectiveStartDate,
@@ -955,6 +962,7 @@ router.get('/member/history', authMiddleware, async (req, res) => {
             memberId: member._id,
             memberName: member.memberName,
             gymId,
+            personIds: personIds.map(id => id.toString()),
             membershipPeriod: { effectiveStartDate, effectiveEndDate },
             membershipInfo: {
                 joinDate: member.joinDate,

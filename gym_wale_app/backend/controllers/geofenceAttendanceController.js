@@ -269,17 +269,42 @@ exports.autoMarkEntry = async (req, res) => {
             });
         }
 
+        // ── Resolve Member._id for consistent attendance records ─────────
+        // The admin app and member history routes expect personId to be
+        // Member._id (not User._id).  Look up the Member document by email
+        // so the attendance record is keyed correctly.
+        let resolvedPersonId = memberId; // default: User._id
+        let memberDoc = null;
+        if (memberUser && memberUser.email) {
+            memberDoc = await Member.findOne({
+                gym: gymId,
+                email: memberUser.email
+            }).lean();
+            if (memberDoc) {
+                resolvedPersonId = memberDoc._id;
+            }
+        }
+
         // Get today's date at midnight for consistent date comparison
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Check if attendance already marked today
-        const existingAttendance = await Attendance.findOne({
+        // Check if attendance already marked today (try Member._id first, fall back to User._id)
+        let existingAttendance = await Attendance.findOne({
             gymId: gymId,
-            personId: memberId,
+            personId: resolvedPersonId,
             personType: 'Member',
             date: today
         });
+        // Backward compat: also check by User._id for older records
+        if (!existingAttendance && resolvedPersonId.toString() !== memberId.toString()) {
+            existingAttendance = await Attendance.findOne({
+                gymId: gymId,
+                personId: memberId,
+                personType: 'Member',
+                date: today
+            });
+        }
 
         if (existingAttendance) {
             // If already marked, update the entry time if this is a re-entry
@@ -356,7 +381,7 @@ exports.autoMarkEntry = async (req, res) => {
 
         const newAttendance = new Attendance({
             gymId,
-            personId: memberId,
+            personId: resolvedPersonId,
             personType: 'Member',
             date: today,
             status: 'present',
@@ -471,17 +496,34 @@ exports.autoMarkExit = async (req, res) => {
             }
         }
 
+        // ── Resolve Member._id for consistent lookup ─────────────────────
+        let resolvedPersonId = memberId;
+        if (req.user && req.user.email) {
+            const memberDoc = await Member.findOne({ gym: gymId, email: req.user.email }).lean();
+            if (memberDoc) {
+                resolvedPersonId = memberDoc._id;
+            }
+        }
+
         // Get today's date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Find today's attendance record
-        const attendance = await Attendance.findOne({
+        // Find today's attendance record (try Member._id first, fall back to User._id)
+        let attendance = await Attendance.findOne({
             gymId: gymId,
-            personId: memberId,
+            personId: resolvedPersonId,
             personType: 'Member',
             date: today
         });
+        if (!attendance && resolvedPersonId.toString() !== memberId.toString()) {
+            attendance = await Attendance.findOne({
+                gymId: gymId,
+                personId: memberId,
+                personType: 'Member',
+                date: today
+            });
+        }
 
         if (!attendance) {
             return res.status(404).json({
@@ -591,9 +633,18 @@ exports.getAttendanceHistory = async (req, res) => {
         const memberId = req.user.id;
         const { startDate, endDate, limit = 30 } = req.query;
 
+        // Resolve Member._id so we find records stored with either ID
+        let personIds = [memberId];
+        if (req.user && req.user.email) {
+            const memberDoc = await Member.findOne({ gym: gymId, email: req.user.email }).lean();
+            if (memberDoc && memberDoc._id.toString() !== memberId.toString()) {
+                personIds.push(memberDoc._id);
+            }
+        }
+
         const query = {
             gymId,
-            personId: memberId,
+            personId: { $in: personIds },
             personType: 'Member'
         };
 
@@ -630,12 +681,21 @@ exports.getTodayAttendance = async (req, res) => {
         const { gymId } = req.params;
         const memberId = req.user.id;
 
+        // Resolve Member._id so we find records stored with either ID
+        let personIds = [memberId];
+        if (req.user && req.user.email) {
+            const memberDoc = await Member.findOne({ gym: gymId, email: req.user.email }).lean();
+            if (memberDoc && memberDoc._id.toString() !== memberId.toString()) {
+                personIds.push(memberDoc._id);
+            }
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const attendance = await Attendance.findOne({
             gymId,
-            personId: memberId,
+            personId: { $in: personIds },
             personType: 'Member',
             date: today
         });
@@ -664,6 +724,15 @@ exports.getAttendanceStats = async (req, res) => {
         const memberId = req.user.id;
         const { month, year } = req.query;
 
+        // Resolve Member._id so we find records stored with either ID
+        let personIds = [memberId];
+        if (req.user && req.user.email) {
+            const memberDoc = await Member.findOne({ gym: gymId, email: req.user.email }).lean();
+            if (memberDoc && memberDoc._id.toString() !== memberId.toString()) {
+                personIds.push(memberDoc._id);
+            }
+        }
+
         const currentDate = new Date();
         const targetMonth = month ? parseInt(month) : currentDate.getMonth() + 1;
         const targetYear = year ? parseInt(year) : currentDate.getFullYear();
@@ -673,7 +742,7 @@ exports.getAttendanceStats = async (req, res) => {
 
         const attendanceRecords = await Attendance.find({
             gymId,
-            personId: memberId,
+            personId: { $in: personIds },
             personType: 'Member',
             date: {
                 $gte: startDate,
