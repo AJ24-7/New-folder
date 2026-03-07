@@ -3,6 +3,7 @@ const router = express.Router();
 const Attendance = require('../models/Attendance');
 const Member = require('../models/Member');
 const Trainer = require('../models/trainerModel');
+const User = require('../models/User');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
 const attendanceSettingsController = require('../controllers/attendanceSettingsController');
@@ -327,26 +328,105 @@ router.post('/create-sample-data/:gymId', async (req, res) => {
 router.get('/:date', gymadminAuth, async (req, res) => {
     try {
         const { date } = req.params;
-        const gymId = req.admin.id; // Use req.admin.id from current auth structure
+        const gymId = req.admin.id;
 
+        // Fetch raw records (no populate — personId may ref User or Member)
         const attendance = await Attendance.find({
             gymId,
             date: new Date(date)
-        }).populate('personId', 'memberName firstName lastName membershipId specialty');
+        }).lean();
 
-        const attendanceMap = {};
+        // Collect unique personIds by type for batch lookup
+        const memberPersonIds = [];
+        const trainerPersonIds = [];
         attendance.forEach(record => {
-            if (record.personId && record.personId._id) {
-                attendanceMap[record.personId._id] = {
-                    status: record.status,
-                    checkInTime: record.checkInTime,
-                    checkOutTime: record.checkOutTime,
-                    personType: record.personType
-                };
+            if (record.personType === 'Member') {
+                memberPersonIds.push(record.personId);
+            } else if (record.personType === 'Trainer') {
+                trainerPersonIds.push(record.personId);
             }
         });
 
-        res.json(attendanceMap);
+        // Batch lookup Members, Trainers, and Users (geofence stores User._id)
+        const [members, trainers, users] = await Promise.all([
+            memberPersonIds.length > 0
+                ? Member.find({ _id: { $in: memberPersonIds } }).lean()
+                : [],
+            trainerPersonIds.length > 0
+                ? Trainer.find({ _id: { $in: trainerPersonIds } }).lean()
+                : [],
+            memberPersonIds.length > 0
+                ? User.find({ _id: { $in: memberPersonIds } }).lean()
+                : [],
+        ]);
+
+        // Build lookup maps
+        const memberMap = {};
+        members.forEach(m => { memberMap[m._id.toString()] = m; });
+        const trainerMap = {};
+        trainers.forEach(t => { trainerMap[t._id.toString()] = t; });
+        const userMap = {};
+        users.forEach(u => { userMap[u._id.toString()] = u; });
+
+        // Build response array matching AttendanceRecord.fromJson expectations
+        const attendanceList = attendance.map(record => {
+            const pid = record.personId ? record.personId.toString() : '';
+            let resolvedName = 'Unknown';
+            let resolvedPhoto = null;
+            let resolvedMembershipId = null;
+
+            if (record.personType === 'Member') {
+                const member = memberMap[pid];
+                if (member) {
+                    resolvedName = member.memberName || 'Unknown';
+                    resolvedPhoto = member.profileImage || null;
+                    resolvedMembershipId = member.membershipId || null;
+                } else {
+                    // Geofence records store User._id as personId
+                    const user = userMap[pid];
+                    if (user) {
+                        resolvedName = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username || 'Unknown';
+                        resolvedPhoto = user.profileImage || null;
+                    }
+                }
+            } else if (record.personType === 'Trainer') {
+                const trainer = trainerMap[pid];
+                if (trainer) {
+                    resolvedName = [trainer.firstName, trainer.lastName].filter(Boolean).join(' ') || 'Unknown';
+                    resolvedPhoto = trainer.profileImage || null;
+                }
+            }
+
+            return {
+                _id: record._id,
+                memberId: {
+                    _id: pid,
+                    name: resolvedName,
+                    photo: resolvedPhoto,
+                    membershipId: resolvedMembershipId
+                },
+                memberName: resolvedName,
+                memberPhoto: resolvedPhoto,
+                gymId: record.gymId,
+                personType: record.personType,
+                date: record.date,
+                status: record.status,
+                checkInTime: record.checkInTime,
+                checkOutTime: record.checkOutTime,
+                attendanceType: record.authenticationMethod || 'manual',
+                notes: record.notes || '',
+                createdAt: record.createdAt,
+                updatedAt: record.updatedAt,
+                geofenceEntry: record.geofenceEntry || null,
+                geofenceExit: record.geofenceExit || null,
+                isGeofenceAttendance: record.isGeofenceAttendance || false,
+                isMockLocation: record.geofenceEntry ? record.geofenceEntry.isMockLocation || false : false,
+                durationInMinutes: record.geofenceExit ? record.geofenceExit.durationInside || null : null,
+                location: record.location || null,
+            };
+        });
+
+        res.json({ attendance: attendanceList });
     } catch (error) {
         console.error('Error fetching attendance:', error);
         res.status(500).json({ error: 'Failed to fetch attendance' });
@@ -543,10 +623,11 @@ router.get('/summary/:startDate/:endDate', gymadminAuth, async (req, res) => {
 router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
     try {
         const { month, year } = req.params;
-        const gymId = req.admin.id; // Use req.admin.id from current auth structure
+        const gymId = req.admin.id;
 
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0);
+        endDate.setHours(23, 59, 59, 999);
 
         const attendance = await Attendance.find({
             gymId,
@@ -554,58 +635,116 @@ router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
                 $gte: startDate,
                 $lte: endDate
             }
-        });
+        }).lean();
 
-        const stats = {
-            totalRecords: attendance.length,
-            memberStats: {
-                present: 0,
-                absent: 0,
-                total: 0
-            },
-            trainerStats: {
-                present: 0,
-                absent: 0,
-                total: 0
-            },
-            dailyTrends: {}
-        };
+        // Today's date at midnight for today-specific stats
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0];
+
+        // Compute all stats the admin client expects
+        const uniqueMembers = new Set();
+        const statusBreakdown = { present: 0, absent: 0, late: 0 };
+        const attendanceByType = {};
+        const dailyMap = {};
+        let todayPresent = 0;
+        let todayAbsent = 0;
+        let totalPresent = 0;
 
         attendance.forEach(record => {
             const dateKey = record.date.toISOString().split('T')[0];
-            
-            if (!stats.dailyTrends[dateKey]) {
-                stats.dailyTrends[dateKey] = {
-                    members: { present: 0, absent: 0 },
-                    trainers: { present: 0, absent: 0 }
-                };
+
+            if (record.personType === 'Member') {
+                uniqueMembers.add(record.personId.toString());
             }
 
-            if (record.personType === 'member') {
-                stats.memberStats.total++;
-                if (record.status === 'present') {
-                    stats.memberStats.present++;
-                    stats.dailyTrends[dateKey].members.present++;
-                } else if (record.status === 'absent') {
-                    stats.memberStats.absent++;
-                    stats.dailyTrends[dateKey].members.absent++;
-                }
-            } else if (record.personType === 'trainer') {
-                stats.trainerStats.total++;
-                if (record.status === 'present') {
-                    stats.trainerStats.present++;
-                    stats.dailyTrends[dateKey].trainers.present++;
-                } else if (record.status === 'absent') {
-                    stats.trainerStats.absent++;
-                    stats.dailyTrends[dateKey].trainers.absent++;
-                }
+            // Status breakdown
+            if (record.status === 'present') {
+                statusBreakdown.present++;
+                totalPresent++;
+            } else if (record.status === 'absent') {
+                statusBreakdown.absent++;
+            } else {
+                statusBreakdown.late++;
+            }
+
+            // Attendance by type
+            const aType = record.authenticationMethod || 'manual';
+            attendanceByType[aType] = (attendanceByType[aType] || 0) + 1;
+
+            // Daily data accumulation
+            if (!dailyMap[dateKey]) {
+                dailyMap[dateKey] = { present: 0, absent: 0, late: 0, total: 0 };
+            }
+            dailyMap[dateKey].total++;
+            if (record.status === 'present') dailyMap[dateKey].present++;
+            else if (record.status === 'absent') dailyMap[dateKey].absent++;
+            else dailyMap[dateKey].late++;
+
+            // Today stats
+            if (dateKey === todayStr) {
+                if (record.status === 'present') todayPresent++;
+                else if (record.status === 'absent') todayAbsent++;
             }
         });
 
-        res.json(stats);
+        const totalMembers = uniqueMembers.size || 0;
+        const totalWorkingDays = Object.keys(dailyMap).length;
+        const averagePresent = totalWorkingDays > 0 ? Math.round(totalPresent / totalWorkingDays) : 0;
+        const monthlyAttendanceRate = attendance.length > 0 ? ((totalPresent / attendance.length) * 100) : 0;
+        const attendanceRateToday = totalMembers > 0 ? ((todayPresent / totalMembers) * 100) : 0;
+
+        // Build daily data array for charts
+        const dailyData = Object.entries(dailyMap).map(([dateKey, d]) => ({
+            date: dateKey,
+            present: d.present,
+            absent: d.absent,
+            late: d.late,
+            total: d.total,
+            rate: d.total > 0 ? parseFloat(((d.present / d.total) * 100).toFixed(1)) : 0,
+        })).sort((a, b) => a.date.localeCompare(b.date));
+
+        // Peak hours from checkInTime
+        const hourCounts = {};
+        attendance.forEach(record => {
+            if (record.checkInTime && record.status === 'present') {
+                const hour = parseInt(record.checkInTime.split(':')[0], 10);
+                if (!isNaN(hour)) {
+                    hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+                }
+            }
+        });
+        const maxCount = Math.max(...Object.values(hourCounts), 1);
+        const peakHours = Object.entries(hourCounts).map(([hour, count]) => {
+            const h = parseInt(hour, 10);
+            const level = count >= maxCount * 0.75 ? 'high' : count >= maxCount * 0.4 ? 'medium' : 'low';
+            return {
+                hour: `${h.toString().padStart(2, '0')}:00`,
+                count,
+                label: `${h > 12 ? h - 12 : h} ${h >= 12 ? 'PM' : 'AM'}`,
+                level,
+            };
+        }).sort((a, b) => a.hour.localeCompare(b.hour));
+
+        res.json({
+            success: true,
+            totalMembers,
+            presentToday: todayPresent,
+            absentToday: todayAbsent,
+            attendanceRateToday: parseFloat(attendanceRateToday.toFixed(1)),
+            month: parseInt(month),
+            year: parseInt(year),
+            totalWorkingDays,
+            averagePresent,
+            monthlyAttendanceRate: parseFloat(monthlyAttendanceRate.toFixed(1)),
+            statusBreakdown,
+            attendanceByType,
+            dailyData,
+            peakHours,
+        });
     } catch (error) {
         console.error('Error fetching attendance statistics:', error);
-        res.status(500).json({ error: 'Failed to fetch attendance statistics' });
+        res.status(500).json({ success: false, error: 'Failed to fetch attendance statistics' });
     }
 });
 

@@ -697,8 +697,9 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
     final str = value.toString().trim();
     if (str.isEmpty) return null;
     // Try full ISO-8601 first (e.g. "2025-06-01T14:30:00.000Z")
+    // Always convert to local time so .hour/.minute reflect the user's timezone.
     try {
-      return DateTime.parse(str);
+      return DateTime.parse(str).toLocal();
     } catch (_) {}
     // Try "HH:MM" or "HH:MM:SS" format (stored by the Node.js backend as
     // new Date().toTimeString().split(' ')[0].substring(0,5))

@@ -40,6 +40,7 @@ class _GeofenceTaskHandler extends TaskHandler {
   bool _wasInsideGeofence = false;
   DateTime? _enterTime;
   bool _entryMarkedToday = false;
+  bool _exitMarkedToday = false;
   String? _lastMarkedDateKey; // 'yyyy-MM-dd'
 
   /// Timestamp of the most recent confirmed EXIT, used for short-exit tolerance.
@@ -58,8 +59,8 @@ class _GeofenceTaskHandler extends TaskHandler {
 
   /// GPS jitter protection: require this many consecutive outside-boundary
   /// readings before we consider the user to have truly exited the geofence.
-  /// At a 30-second poll interval this means ~120 s outside before EXIT fires.
-  static const int _exitGraceTicks = 4;
+  /// At a 30-second poll interval this means ~300 s (5 min) outside before EXIT fires.
+  static const int _exitGraceTicks = 10;
   int _consecutiveOutsideCount = 0;
 
   /// Incremental attempt counter for the DWELL mark — resets on success.
@@ -216,6 +217,13 @@ class _GeofenceTaskHandler extends TaskHandler {
           debugPrint('[BGTask] Attendance already marked by in-app provider — synced');
         }
       }
+      if (!_exitMarkedToday) {
+        final externallyExitMarked = prefs.getBool('bg_task_exit_marked') ?? false;
+        if (externallyExitMarked && prefs.getString('bg_task_last_date') == today) {
+          _exitMarkedToday = true;
+          debugPrint('[BGTask] Exit already marked by in-app provider — synced');
+        }
+      }
 
       // ── get current GPS position ─────────────────────────────────────────
       Position position;
@@ -252,8 +260,19 @@ class _GeofenceTaskHandler extends TaskHandler {
 
       debugPrint(
         '[BGTask] tick — dist~${distance.toStringAsFixed(0)} m '
-        'type=$geofenceType inside=$isInside was=$_wasInsideGeofence entryMarked=$_entryMarkedToday',
+        'type=$geofenceType inside=$isInside was=$_wasInsideGeofence entryMarked=$_entryMarkedToday exitMarked=$_exitMarkedToday',
       );
+
+      // ── Skip all processing if both entry and exit are done for today ───
+      // Once both marks are complete, stop all GPS-related logic and
+      // notifications for the rest of the day to save battery.
+      if (_entryMarkedToday && _exitMarkedToday) {
+        _updateFgNotif(
+          title: '✅ Attendance Complete',
+          text: 'Entry and exit recorded for today.',
+        );
+        return;
+      }
 
       // ── state machine ────────────────────────────────────────────────────
       if (isInside && !_wasInsideGeofence) {
@@ -302,16 +321,25 @@ class _GeofenceTaskHandler extends TaskHandler {
           return;
         }
 
-        _updateFgNotif(
-          title: '🏋️ Gym Detected',
-          text: 'Stay 5 min to auto-mark attendance.',
-        );
-        await _showLocalNotif(
-          id: 3001,
-          title: '🏋️ Gym Detected',
-          body: 'Remain inside for 5 minutes to automatically mark your attendance.',
-          importance: Importance.defaultImportance,
-        );
+        // Only show "Gym Detected" notification if attendance hasn't been
+        // marked yet today. Once marked, suppress all detection notifications.
+        if (!_entryMarkedToday) {
+          _updateFgNotif(
+            title: '🏋️ Gym Detected',
+            text: 'Stay 5 min to auto-mark attendance.',
+          );
+          await _showLocalNotif(
+            id: 3001,
+            title: '🏋️ Gym Detected',
+            body: 'Remain inside for 5 minutes to automatically mark your attendance.',
+            importance: Importance.defaultImportance,
+          );
+        } else {
+          _updateFgNotif(
+            title: '✅ Attendance Marked',
+            text: 'Your attendance is recorded for today.',
+          );
+        }
 
       } else if (!isInside && _wasInsideGeofence) {
         // ── EXIT (with GPS jitter protection) ──────────────────────────────
@@ -351,7 +379,7 @@ class _GeofenceTaskHandler extends TaskHandler {
         );
 
         final autoMarkExit = prefs.getBool('geofence_auto_mark_exit') ?? true;
-        if (autoMarkExit && _entryMarkedToday) {
+        if (autoMarkExit && _entryMarkedToday && !_exitMarkedToday) {
           final result = await _callBackend(
             prefs: prefs,
             gymId: gymId,
@@ -359,10 +387,11 @@ class _GeofenceTaskHandler extends TaskHandler {
             isEntry: false,
           );
           if (result == _kBackendOk) {
-            await _showLocalNotif(
-              id: 3003,
-              title: '✅ Gym Exit Recorded',
-              body: 'Your gym session has been saved. See you next time!',
+            _exitMarkedToday = true;
+            debugPrint('[BGTask] Exit marked silently');
+            _updateFgNotif(
+              title: '✅ Attendance Complete',
+              text: 'Entry and exit recorded for today.',
             );
           }
         }
@@ -411,9 +440,14 @@ class _GeofenceTaskHandler extends TaskHandler {
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
 
+                // Cancel the "Gym Detected" notification now that attendance is done
+                try {
+                  await _notifPlugin.cancel(3001);
+                } catch (_) {}
+
                 _updateFgNotif(
                   title: '✅ Attendance Marked',
-                  text: 'Check-in: ${_fmtTime(DateTime.now())}',
+                  text: 'Your attendance is recorded for today.',
                 );
                 await _showLocalNotif(
                   id: 3002,
@@ -493,8 +527,12 @@ class _GeofenceTaskHandler extends TaskHandler {
           }
         }
       } else if (isInside && _wasInsideGeofence && _entryMarkedToday) {
-        // Already marked today — just keep the notification clean.
+        // Already marked today — keep notification clean and suppress tracking.
         _consecutiveOutsideCount = 0;
+        _updateFgNotif(
+          title: '✅ Attendance Marked',
+          text: 'Your attendance is recorded for today.',
+        );
       }
     } catch (e) {
       debugPrint('[BGTask] tick error: $e');
@@ -798,6 +836,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       final today = _todayStr();
       if (_lastMarkedDateKey == today) {
         _entryMarkedToday = prefs.getBool('bg_task_entry_marked') ?? false;
+        _exitMarkedToday = prefs.getBool('bg_task_exit_marked') ?? false;
         // ── Restore timer state so a service restart doesn't reset the 5-min
         //    dwell countdown (the root cause of the "stuck 1-min" bug).
         if (!_entryMarkedToday) {
@@ -823,13 +862,15 @@ class _GeofenceTaskHandler extends TaskHandler {
       } else {
         // New day — clear everything
         _entryMarkedToday = false;
+        _exitMarkedToday = false;
         _lastMarkedDateKey = today;
         await prefs.remove('bg_task_was_inside');
         await prefs.remove('bg_task_enter_time');
         await prefs.remove('bg_task_last_exit_time');
         await prefs.remove('bg_task_saved_enter_time');
+        await prefs.remove('bg_task_exit_marked');
       }
-      debugPrint('[BGTask] Loaded daily state: marked=$_entryMarkedToday wasInside=$_wasInsideGeofence');
+      debugPrint('[BGTask] Loaded daily state: entry=$_entryMarkedToday exit=$_exitMarkedToday wasInside=$_wasInsideGeofence');
     } catch (_) {}
   }
 
@@ -838,6 +879,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('bg_task_last_date', _todayStr());
       await prefs.setBool('bg_task_entry_marked', _entryMarkedToday);
+      await prefs.setBool('bg_task_exit_marked', _exitMarkedToday);
       // Persist the dwell timer so service-restart restores it
       if (_wasInsideGeofence && _enterTime != null && !_entryMarkedToday) {
         await prefs.setBool('bg_task_was_inside', true);

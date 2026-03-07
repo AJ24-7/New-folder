@@ -107,18 +107,18 @@ class AttendanceProvider extends ChangeNotifier {
         _todayAttendance = response['attendance'];
 
         if (_todayAttendance != null) {
-          // Parse check-in time
+          // Parse check-in time (convert UTC to local)
           if (_todayAttendance!['geofenceEntry'] != null &&
               _todayAttendance!['geofenceEntry']['timestamp'] != null) {
             _checkInTime =
-                DateTime.parse(_todayAttendance!['geofenceEntry']['timestamp']);
+                DateTime.parse(_todayAttendance!['geofenceEntry']['timestamp']).toLocal();
           }
 
-          // Parse check-out time
+          // Parse check-out time (convert UTC to local)
           if (_todayAttendance!['geofenceExit'] != null &&
               _todayAttendance!['geofenceExit']['timestamp'] != null) {
             _checkOutTime =
-                DateTime.parse(_todayAttendance!['geofenceExit']['timestamp']);
+                DateTime.parse(_todayAttendance!['geofenceExit']['timestamp']).toLocal();
           }
         }
       }
