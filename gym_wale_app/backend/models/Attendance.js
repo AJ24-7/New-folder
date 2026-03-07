@@ -46,7 +46,7 @@ const attendanceSchema = new mongoose.Schema({
     // Biometric authentication fields
     authenticationMethod: {
         type: String,
-        enum: ['manual', 'fingerprint', 'face_recognition', 'qr_code', 'card'],
+        enum: ['manual', 'fingerprint', 'face_recognition', 'qr_code', 'card', 'geofence'],
         default: 'manual'
     },
     biometricData: {

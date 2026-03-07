@@ -637,24 +637,87 @@ exports.removeMembersByIds = async (req, res) => {
   }
 };
 
-// Remove all members whose membership expired more than 7 days ago
+// Remove all members whose membership expired more than N days ago
+// Accepts optional query param ?days=7 (defaults to 7)
+// Fetches members first and filters in JS to handle inconsistent date formats
 exports.removeExpiredMembers = async (req, res) => {
   try {
     const gymId = (req.admin && (req.admin.gymId || req.admin.id)) || req.body.gymId;
     if (!gymId) return res.status(400).json({ message: 'Gym ID is required.' });
     
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const days = parseInt(req.query.days) || 7;
+    const cutoffDate = new Date();
+    cutoffDate.setHours(0, 0, 0, 0);
+    cutoffDate.setDate(cutoffDate.getDate() - days);
     
-    const result = await Member.deleteMany({
-      gym: gymId,
-      membershipValidUntil: { $lt: sevenDaysAgo }
+    // Fetch all members for this gym
+    const members = await Member.find({ gym: gymId });
+    
+    // Filter members whose membership is truly expired beyond the cutoff
+    const expiredMemberIds = [];
+    for (const member of members) {
+      let validUntil = null;
+      
+      // Parse membershipValidUntil (could be string "YYYY-MM-DD", ISO string, or missing)
+      if (member.membershipValidUntil) {
+        validUntil = new Date(member.membershipValidUntil);
+      }
+      
+      // Fallback: calculate from joinDate + monthlyPlan if membershipValidUntil is missing/invalid
+      if (!validUntil || isNaN(validUntil.getTime())) {
+        if (member.joinDate && member.monthlyPlan) {
+          let months = 1;
+          if (/3\s*Months?/i.test(member.monthlyPlan)) months = 3;
+          else if (/6\s*Months?/i.test(member.monthlyPlan)) months = 6;
+          else if (/12\s*Months?/i.test(member.monthlyPlan)) months = 12;
+          validUntil = new Date(member.joinDate);
+          validUntil.setMonth(validUntil.getMonth() + months);
+        }
+      }
+      
+      // Only mark for deletion if we have a valid date AND it's before the cutoff
+      if (validUntil && !isNaN(validUntil.getTime()) && validUntil < cutoffDate) {
+        expiredMemberIds.push(member._id);
+      }
+    }
+    
+    let deletedCount = 0;
+    if (expiredMemberIds.length > 0) {
+      const result = await Member.deleteMany({ _id: { $in: expiredMemberIds } });
+      deletedCount = result.deletedCount;
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Removed ${deletedCount} member(s) expired more than ${days} days ago.`,
+      deletedCount
     });
-    
-    res.status(200).json({ message: `Removed ${result.deletedCount} expired member(s).`, deletedCount: result.deletedCount });
   } catch (err) {
     console.error('Error removing expired members:', err);
     res.status(500).json({ message: 'Server error while removing expired members.' });
+  }
+};
+
+// Remove a single member by their MongoDB _id
+exports.removeSingleMember = async (req, res) => {
+  try {
+    const { memberId } = req.params;
+    const gymId = (req.admin && (req.admin.gymId || req.admin.id)) || req.body.gymId;
+    if (!gymId) return res.status(400).json({ message: 'Gym ID is required.' });
+    
+    const member = await Member.findOneAndDelete({ _id: memberId, gym: gymId });
+    if (!member) {
+      return res.status(404).json({ message: 'Member not found.' });
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: `Member ${member.memberName} removed successfully.`,
+      deletedCount: 1
+    });
+  } catch (err) {
+    console.error('Error removing member:', err);
+    res.status(500).json({ message: 'Server error while removing member.' });
   }
 };
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { addMember, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
+const { addMember, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, removeSingleMember, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
 const { registerOnlineMember } = require('../controllers/onlineMembershipController');
 const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember } = require('../controllers/qrRegistrationController');
 const gymadminAuth = require('../middleware/gymadminAuth');
@@ -17,8 +17,12 @@ router.get('/test', (req, res) => {
 // Remove members by custom IDs (bulk delete)
 router.delete('/bulk', gymadminAuth, removeMembersByIds);
 
-// Remove all expired members (membership expired > 7 days ago)
+// Remove all expired members (membership expired > N days ago, default 7)
+// Use ?days=7 or ?days=30 query parameter
 router.delete('/expired', gymadminAuth, removeExpiredMembers);
+
+// Remove a single member by MongoDB _id
+router.delete('/single/:memberId', gymadminAuth, removeSingleMember);
 
 // Remove expired members (automatic cleanup)
 router.post('/remove-expired', gymadminAuth, async (req, res) => {

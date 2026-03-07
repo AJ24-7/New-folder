@@ -172,14 +172,25 @@ class _MembersScreenState extends State<MembersScreen> {
             ListTile(
               leading: const FaIcon(FontAwesomeIcons.userSlash, color: AppTheme.errorColor),
               title: const Text('Remove Expired (7+ days)'),
+              subtitle: const Text('Members whose membership expired over 7 days ago'),
               onTap: () {
                 Navigator.pop(context);
-                _showRemoveExpiredConfirmation();
+                _showRemoveExpiredConfirmation(days: 7);
+              },
+            ),
+            ListTile(
+              leading: const FaIcon(FontAwesomeIcons.userXmark, color: AppTheme.errorColor),
+              title: const Text('Remove Expired (30+ days)'),
+              subtitle: const Text('Members whose membership expired over 30 days ago'),
+              onTap: () {
+                Navigator.pop(context);
+                _showRemoveExpiredConfirmation(days: 30);
               },
             ),
             ListTile(
               leading: const FaIcon(FontAwesomeIcons.userGear, color: AppTheme.primaryColor),
               title: const Text('Custom Remove'),
+              subtitle: const Text('Select individual members to remove'),
               onTap: () {
                 Navigator.pop(context);
                 _showCustomRemoveDialog();
@@ -191,13 +202,13 @@ class _MembersScreenState extends State<MembersScreen> {
     );
   }
 
-  void _showRemoveExpiredConfirmation() {
+  void _showRemoveExpiredConfirmation({required int days}) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Remove Expired Members'),
-        content: const Text(
-          'Remove all members whose membership expired more than 7 days ago?',
+        content: Text(
+          'Remove all members whose membership expired more than $days days ago?\n\nThis action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -207,7 +218,7 @@ class _MembersScreenState extends State<MembersScreen> {
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context);
-              await _removeExpiredMembers();
+              await _removeExpiredMembers(days: days);
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
             child: const Text('Remove'),
@@ -217,7 +228,7 @@ class _MembersScreenState extends State<MembersScreen> {
     );
   }
 
-  Future<void> _removeExpiredMembers() async {
+  Future<void> _removeExpiredMembers({required int days}) async {
     try {
       showDialog(
         context: context,
@@ -225,7 +236,7 @@ class _MembersScreenState extends State<MembersScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      final result = await _memberService.removeExpiredMembers();
+      final result = await _memberService.removeExpiredMembers(days: days);
       
       if (mounted) Navigator.pop(context);
 
@@ -242,9 +253,14 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   void _showCustomRemoveDialog() {
-    // TODO: Implement custom member removal dialog
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Custom removal feature coming soon')),
+    showDialog(
+      context: context,
+      builder: (context) => _CustomRemoveMembersDialog(
+        members: _allMembers,
+        onMembersRemoved: () {
+          _loadMembers();
+        },
+      ),
     );
   }
 
@@ -2282,6 +2298,293 @@ class _RenewMembershipDialogState extends State<_RenewMembershipDialog> {
                   child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                 )
               : const Text('Renew'),
+        ),
+      ],
+    );
+  }
+}
+
+// Custom Remove Members Dialog
+class _CustomRemoveMembersDialog extends StatefulWidget {
+  final List<Member> members;
+  final VoidCallback onMembersRemoved;
+
+  const _CustomRemoveMembersDialog({
+    required this.members,
+    required this.onMembersRemoved,
+  });
+
+  @override
+  State<_CustomRemoveMembersDialog> createState() => _CustomRemoveMembersDialogState();
+}
+
+class _CustomRemoveMembersDialogState extends State<_CustomRemoveMembersDialog> {
+  final MemberService _memberService = MemberService();
+  final TextEditingController _searchController = TextEditingController();
+  final _dateFormat = DateFormat('dd MMM yyyy');
+  Set<String> _selectedMemberIds = {};
+  List<Member> _filteredMembers = [];
+  bool _isRemoving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredMembers = widget.members;
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredMembers = widget.members;
+      } else {
+        final lowerQuery = query.toLowerCase();
+        _filteredMembers = widget.members.where((member) {
+          return member.memberName.toLowerCase().contains(lowerQuery) ||
+                 member.email.toLowerCase().contains(lowerQuery) ||
+                 member.phone.contains(query) ||
+                 (member.membershipId?.toLowerCase().contains(lowerQuery) ?? false);
+        }).toList();
+      }
+    });
+  }
+
+  Future<void> _removeSelectedMembers() async {
+    if (_selectedMemberIds.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Removal'),
+        content: Text(
+          'Are you sure you want to remove ${_selectedMemberIds.length} member(s)?\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isRemoving = true);
+
+    int successCount = 0;
+    int failCount = 0;
+
+    for (final memberId in _selectedMemberIds) {
+      try {
+        await _memberService.removeSingleMember(memberId);
+        successCount++;
+      } catch (_) {
+        failCount++;
+      }
+    }
+
+    if (mounted) {
+      setState(() => _isRemoving = false);
+      Navigator.pop(context);
+
+      if (failCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount member(s) removed successfully'),
+            backgroundColor: AppTheme.successColor,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$successCount removed, $failCount failed'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+      }
+      widget.onMembersRemoved();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const FaIcon(FontAwesomeIcons.userGear, color: AppTheme.primaryColor),
+          const SizedBox(width: 12),
+          const Text('Custom Remove'),
+          const Spacer(),
+          if (_selectedMemberIds.isNotEmpty)
+            Chip(
+              label: Text('${_selectedMemberIds.length} selected'),
+              backgroundColor: AppTheme.errorColor.withValues(alpha: 0.1),
+              labelStyle: const TextStyle(color: AppTheme.errorColor, fontSize: 12),
+            ),
+        ],
+      ),
+      content: SizedBox(
+        width: 500,
+        height: 450,
+        child: Column(
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              decoration: InputDecoration(
+                hintText: 'Search members...',
+                prefixIcon: const Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                filled: true,
+                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _selectedMemberIds = _filteredMembers.map((m) => m.id).toSet();
+                    });
+                  },
+                  child: const Text('Select All'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() => _selectedMemberIds.clear());
+                  },
+                  child: const Text('Clear All'),
+                ),
+                const Spacer(),
+                Text(
+                  '${_filteredMembers.length} member(s)',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(),
+            Expanded(
+              child: _filteredMembers.isEmpty
+                  ? const Center(child: Text('No members found'))
+                  : ListView.builder(
+                      itemCount: _filteredMembers.length,
+                      itemBuilder: (context, index) {
+                        final member = _filteredMembers[index];
+                        final isSelected = _selectedMemberIds.contains(member.id);
+                        final isExpired = member.isExpired;
+                        return CheckboxListTile(
+                          value: isSelected,
+                          onChanged: (value) {
+                            setState(() {
+                              if (value == true) {
+                                _selectedMemberIds.add(member.id);
+                              } else {
+                                _selectedMemberIds.remove(member.id);
+                              }
+                            });
+                          },
+                          title: Text(
+                            member.memberName,
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${member.membershipId ?? 'No ID'} • ${member.phone}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    member.membershipValidUntil != null
+                                        ? 'Valid until: ${_dateFormat.format(member.membershipValidUntil!)}'
+                                        : 'No expiry date',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: isExpired ? AppTheme.errorColor : AppTheme.successColor,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  if (isExpired) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.errorColor.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'EXPIRED',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.errorColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                          secondary: CircleAvatar(
+                            backgroundColor: isExpired
+                                ? AppTheme.errorColor.withValues(alpha: 0.2)
+                                : AppTheme.primaryColor.withValues(alpha: 0.2),
+                            child: Text(
+                              member.memberName[0].toUpperCase(),
+                              style: TextStyle(
+                                color: isExpired ? AppTheme.errorColor : AppTheme.primaryColor,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isRemoving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isRemoving || _selectedMemberIds.isEmpty ? null : _removeSelectedMembers,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.errorColor,
+            foregroundColor: Colors.white,
+          ),
+          child: _isRemoving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : Text('Remove (${_selectedMemberIds.length})'),
         ),
       ],
     );

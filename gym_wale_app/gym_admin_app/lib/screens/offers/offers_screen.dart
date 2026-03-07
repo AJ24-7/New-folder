@@ -346,7 +346,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
     final isMobile = size.width <= 600;
     
     return GridView.count(
-      crossAxisCount: isDesktop ? 6 : (isMobile ? 2 : 3),
+      crossAxisCount: isDesktop ? 4 : 2,
       crossAxisSpacing: isMobile ? 8 : 16,
       mainAxisSpacing: isMobile ? 8 : 16,
       shrinkWrap: true,
@@ -368,24 +368,10 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
           trend: null,
         ),
         StatCard(
-          title: 'Membership Offers',
-          value: _stats?.membershipOffers.toString() ?? '0',
-          icon: Icons.card_membership,
-          color: Colors.teal,
-          trend: null,
-        ),
-        StatCard(
           title: 'Total Claims',
           value: _stats?.totalClaims.toString() ?? '0',
           icon: Icons.redeem,
           color: Colors.orange,
-          trend: null,
-        ),
-        StatCard(
-          title: 'Revenue Generated',
-          value: '₹${_stats?.revenue.toStringAsFixed(0) ?? '0'}',
-          icon: Icons.currency_rupee,
-          color: Colors.purple,
           trend: null,
         ),
         StatCard(
@@ -1834,6 +1820,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
         SnackBar(content: Text('Offer ${action}d successfully')),
       );
       _loadOffers();
+      _loadStats();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to update offer status')),
@@ -1867,6 +1854,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
           const SnackBar(content: Text('Offer deleted successfully')),
         );
         _loadOffers();
+        _loadStats();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to delete offer')),
@@ -1901,6 +1889,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
           const SnackBar(content: Text('Coupon deleted successfully')),
         );
         _loadCoupons();
+        _loadStats();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to delete coupon')),

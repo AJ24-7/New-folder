@@ -185,10 +185,13 @@ class MemberService {
     }
   }
 
-  /// Remove all expired members (membership expired > 7 days ago)
-  Future<Map<String, dynamic>> removeExpiredMembers() async {
+  /// Remove all expired members (membership expired > [days] days ago)
+  Future<Map<String, dynamic>> removeExpiredMembers({int days = 7}) async {
     try {
-      final response = await _dio.delete('${ApiConfig.members}/expired');
+      final response = await _dio.delete(
+        '${ApiConfig.members}/expired',
+        queryParameters: {'days': days},
+      );
       
       if (response.statusCode == 200) {
         return {
@@ -201,6 +204,25 @@ class MemberService {
       }
     } catch (e) {
       throw Exception('Error removing expired members: $e');
+    }
+  }
+
+  /// Remove a single member by their MongoDB _id
+  Future<Map<String, dynamic>> removeSingleMember(String memberId) async {
+    try {
+      final response = await _dio.delete('${ApiConfig.members}/single/$memberId');
+      
+      if (response.statusCode == 200) {
+        return {
+          'success': response.data['success'] ?? true,
+          'message': response.data['message'] ?? 'Member removed successfully',
+          'deletedCount': response.data['deletedCount'] ?? 0,
+        };
+      } else {
+        throw Exception(response.data['message'] ?? 'Failed to remove member');
+      }
+    } catch (e) {
+      throw Exception('Error removing member: $e');
     }
   }
 
