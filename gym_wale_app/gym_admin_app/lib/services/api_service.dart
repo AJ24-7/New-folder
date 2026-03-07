@@ -252,7 +252,11 @@ class ApiService {
 
   Future<List<dynamic>> getAllCoupons() async {
     try {
-      final response = await _dio.get(ApiConfig.coupons);
+      final gymId = await _storage.getGymId();
+      final response = await _dio.get(
+        ApiConfig.coupons,
+        queryParameters: gymId != null ? {'gymId': gymId} : null,
+      );
       if (response.statusCode == 200) {
         return response.data['coupons'] ?? response.data ?? [];
       }

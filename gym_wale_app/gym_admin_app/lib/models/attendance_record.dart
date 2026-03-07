@@ -41,24 +41,29 @@ class AttendanceRecord {
   });
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    final rawMember = json['memberId'];
+    final memberIsMap = rawMember is Map;
+    final rawGym = json['gymId'];
+    final gymIsMap = rawGym is Map;
+
     return AttendanceRecord(
-      id: json['_id'] ?? json['id'] ?? '',
-      memberId: json['memberId']?['_id'] ?? json['memberId'] ?? '',
-      memberName: json['memberId']?['name'] ?? json['memberName'] ?? 'Unknown',
-      memberPhoto: json['memberId']?['photo'] ?? json['memberPhoto'],
-      gymId: json['gymId']?['_id'] ?? json['gymId'] ?? '',
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      memberId: (memberIsMap ? rawMember['_id'] : rawMember)?.toString() ?? '',
+      memberName: (memberIsMap ? rawMember['name'] : null)?.toString() ?? json['memberName']?.toString() ?? 'Unknown',
+      memberPhoto: (memberIsMap ? rawMember['photo'] : null)?.toString() ?? json['memberPhoto']?.toString(),
+      gymId: (gymIsMap ? rawGym['_id'] : rawGym)?.toString() ?? '',
       date: DateTime.parse(json['date']),
-      checkInTime: json['checkInTime'],
-      checkOutTime: json['checkOutTime'],
-      status: json['status'] ?? 'absent',
-      attendanceType: json['attendanceType'],
-      notes: json['notes'],
+      checkInTime: json['checkInTime']?.toString(),
+      checkOutTime: json['checkOutTime']?.toString(),
+      status: json['status']?.toString() ?? 'absent',
+      attendanceType: json['attendanceType']?.toString(),
+      notes: json['notes']?.toString(),
       createdAt: DateTime.parse(json['createdAt'] ?? DateTime.now().toIso8601String()),
       updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
-      geofenceEntry: json['geofenceEntry'],
-      geofenceExit: json['geofenceExit'],
-      durationInMinutes: json['durationInMinutes'],
-      isMockLocation: json['isMockLocation'],
+      geofenceEntry: json['geofenceEntry'] is Map<String, dynamic> ? json['geofenceEntry'] : null,
+      geofenceExit: json['geofenceExit'] is Map<String, dynamic> ? json['geofenceExit'] : null,
+      durationInMinutes: json['durationInMinutes'] is num ? (json['durationInMinutes'] as num).toInt() : null,
+      isMockLocation: json['isMockLocation'] is bool ? json['isMockLocation'] : null,
     );
   }
 

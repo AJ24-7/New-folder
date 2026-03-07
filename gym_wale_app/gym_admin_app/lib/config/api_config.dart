@@ -67,9 +67,9 @@ class ApiConfig {
   
   // Offers & Coupons Endpoints
   static const String offers = '$_apiPrefix/offers';
-  static const String coupons = '$_apiPrefix/coupons';
+  static const String coupons = '$_apiPrefix/offers/coupons';
   static String offerById(String id) => '$_apiPrefix/offers/$id';
-  static String couponById(String id) => '$_apiPrefix/coupons/$id';
+  static String couponById(String id) => '$_apiPrefix/offers/coupons/$id';
   
   // Support & Reviews Endpoints
   static const String support = '$_apiPrefix/support';

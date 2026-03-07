@@ -26,6 +26,7 @@ import '../../models/membership_plan.dart';
 import '../../models/gym_activity.dart';
 import '../../models/trial_booking.dart';
 import '../../models/equipment.dart';
+import '../../models/attendance_stats.dart';
 import '../../utils/icon_mapper.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
@@ -64,6 +65,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<TrialBooking> _trialBookings = [];
   List<Equipment> _equipmentGallery = [];
   List<Member> _recentMembers = [];
+  AttendanceStats? _attendanceStats;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -150,6 +152,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Load recent members independently (non-critical)
       _loadRecentMembers();
       
+      // Load attendance stats independently (non-critical)
+      _loadAttendanceStats();
+      
       // TODO: Load additional dashboard data (implement these methods in ApiService)
       // _newMembers = await _apiService.getNewMembers(limit: 5);
       // _trialBookings = await _apiService.getTrialBookings(limit: 5);
@@ -166,6 +171,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _errorMessage = e.toString();
         });
       }
+    }
+  }
+
+  Future<void> _loadAttendanceStats() async {
+    try {
+      final now = DateTime.now();
+      final stats = await _apiService.getMonthlyAttendanceStats(
+        month: now.month,
+        year: now.year,
+      );
+      if (mounted) {
+        setState(() {
+          _attendanceStats = stats;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading attendance stats: $e');
     }
   }
 
@@ -735,10 +757,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         StatCard(
           title: 'Overall Attendance',
-          value: '85.0%',
+          value: _attendanceStats != null
+              ? '${_attendanceStats!.monthlyAttendanceRate.toStringAsFixed(1)}%'
+              : '--',
           icon: Icons.calendar_today,
           color: AppTheme.infoColor,
-          trend: 5.2,
+          trend: _attendanceStats?.monthlyAttendanceRate,
+          onTap: () => Navigator.pushReplacementNamed(context, '/attendance'),
         ),
         StatCard(
           title: 'Active Trainers',
@@ -751,33 +776,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionsRow(bool isDesktop) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      FaIcon(FontAwesomeIcons.bolt, color: AppTheme.primaryColor, size: 18),
-                      SizedBox(width: 12),
-                      Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  _buildQuickActionsGrid(),
-                ],
-              ),
+  Widget _buildActivitiesOfferedCard() {
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+
+    return Card(
+      child: Padding(
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                FaIcon(FontAwesomeIcons.heart, color: AppTheme.errorColor, size: 18),
+                SizedBox(width: 12),
+                Text('Activities Offered', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Spacer(),
+                TextButton.icon(
+                  onPressed: _showManageActivitiesDialog,
+                  icon: FaIcon(FontAwesomeIcons.pen, size: 14),
+                  label: Text('Manage'),
+                ),
+              ],
             ),
-          ),
+            const SizedBox(height: 20),
+            _gymActivities.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          FaIcon(FontAwesomeIcons.dumbbell, size: 48, color: Colors.grey[400]),
+                          SizedBox(height: 12),
+                          Text('No activities added yet', style: TextStyle(color: Colors.grey[600])),
+                          SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: _showManageActivitiesDialog,
+                            icon: FaIcon(FontAwesomeIcons.plus, size: 14),
+                            label: Text('Add Activities'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                : Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: _gymActivities.map((activity) => _buildActivityCard(activity)).toList(),
+                  ),
+          ],
         ),
-        if (isDesktop) ...[
-          const SizedBox(width: 24),
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsRow(bool isDesktop) {
+    if (isDesktop) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
           Expanded(
             child: Card(
               child: Padding(
@@ -785,50 +842,52 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
+                    const Row(
                       children: [
-                        FaIcon(FontAwesomeIcons.heart, color: AppTheme.errorColor, size: 18),
+                        FaIcon(FontAwesomeIcons.bolt, color: AppTheme.primaryColor, size: 18),
                         SizedBox(width: 12),
-                        Text('Activities Offered', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        Spacer(),
-                        TextButton.icon(
-                          onPressed: _showManageActivitiesDialog,
-                          icon: FaIcon(FontAwesomeIcons.pen, size: 14),
-                          label: Text('Manage'),
-                        ),
+                        Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       ],
                     ),
                     const SizedBox(height: 20),
-                    _gymActivities.isEmpty
-                        ? Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(20),
-                              child: Column(
-                                children: [
-                                  FaIcon(FontAwesomeIcons.dumbbell, size: 48, color: Colors.grey[400]),
-                                  SizedBox(height: 12),
-                                  Text('No activities added yet', style: TextStyle(color: Colors.grey[600])),
-                                  SizedBox(height: 8),
-                                  ElevatedButton.icon(
-                                    onPressed: _showManageActivitiesDialog,
-                                    icon: FaIcon(FontAwesomeIcons.plus, size: 14),
-                                    label: Text('Add Activities'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          )
-                        : Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: _gymActivities.map((activity) => _buildActivityCard(activity)).toList(),
-                          ),
+                    _buildQuickActionsGrid(),
                   ],
                 ),
               ),
             ),
           ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: _buildActivitiesOfferedCard(),
+          ),
         ],
+      );
+    }
+
+    // Mobile/Tablet: stack vertically
+    return Column(
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    FaIcon(FontAwesomeIcons.bolt, color: AppTheme.primaryColor, size: 18),
+                    SizedBox(width: 12),
+                    Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                _buildQuickActionsGrid(),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildActivitiesOfferedCard(),
       ],
     );
   }
@@ -1981,40 +2040,109 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   Widget _buildAttendanceChart(AppLocalizations l10n) {
+    final dailyData = _attendanceStats?.dailyData;
+    final hasData = dailyData != null && dailyData.isNotEmpty;
+
+    // Build chart spots from real daily data
+    List<FlSpot> presentSpots;
+    double maxY;
+    if (hasData) {
+      presentSpots = List.generate(dailyData.length, (i) {
+        return FlSpot(i.toDouble(), dailyData[i].present.toDouble());
+      });
+      final maxPresent = dailyData.fold<int>(0, (m, d) => d.present > m ? d.present : m);
+      maxY = (maxPresent + 2).toDouble();
+    } else {
+      presentSpots = [const FlSpot(0, 0)];
+      maxY = 10;
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                FaIcon(FontAwesomeIcons.chartLine, color: AppTheme.primaryColor, size: 18),
-                SizedBox(width: 12),
-                Text('Attendance Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const FaIcon(FontAwesomeIcons.chartLine, color: AppTheme.primaryColor, size: 18),
+                const SizedBox(width: 12),
+                const Text('Attendance Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                if (_attendanceStats != null)
+                  Text(
+                    'Present Today: ${_attendanceStats!.presentToday}',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
               ],
             ),
             const SizedBox(height: 24),
-            SizedBox(
-              height: 300,
-              child: LineChart(
-                LineChartData(
-                  gridData: const FlGridData(show: true),
-                  titlesData: const FlTitlesData(show: true),
-                  borderData: FlBorderData(show: false),
-                  lineBarsData: [
-                    LineChartBarData(
-                      spots: List.generate(10, (i) => FlSpot(i.toDouble(), (i * 5).toDouble())),
-                      isCurved: true,
-                      color: AppTheme.primaryColor,
-                      barWidth: 3,
-                      dotData: const FlDotData(show: false),
-                      belowBarData: BarAreaData(show: true, color: AppTheme.primaryColor.withValues(alpha: 0.1)),
+            if (!hasData)
+              const SizedBox(
+                height: 200,
+                child: Center(child: Text('No attendance data for this month', style: TextStyle(color: Colors.grey))),
+              )
+            else
+              SizedBox(
+                height: 300,
+                child: LineChart(
+                  LineChartData(
+                    minY: 0,
+                    maxY: maxY,
+                    gridData: const FlGridData(show: true, drawVerticalLine: false),
+                    titlesData: FlTitlesData(
+                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32)),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 28,
+                          interval: (dailyData.length / 6).ceilToDouble().clamp(1, 31),
+                          getTitlesWidget: (value, meta) {
+                            final idx = value.toInt();
+                            if (idx < 0 || idx >= dailyData.length) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                '${dailyData[idx].date.day}',
+                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     ),
-                  ],
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: presentSpots,
+                        isCurved: true,
+                        preventCurveOverShooting: true,
+                        color: AppTheme.primaryColor,
+                        barWidth: 3,
+                        dotData: FlDotData(show: dailyData.length <= 15),
+                        belowBarData: BarAreaData(show: true, color: AppTheme.primaryColor.withValues(alpha: 0.1)),
+                      ),
+                    ],
+                    lineTouchData: LineTouchData(
+                      touchTooltipData: LineTouchTooltipData(
+                        getTooltipItems: (spots) {
+                          return spots.map((spot) {
+                            final idx = spot.x.toInt();
+                            if (idx < 0 || idx >= dailyData.length) return null;
+                            final d = dailyData[idx];
+                            return LineTooltipItem(
+                              '${DateFormat('dd MMM').format(d.date)}\nPresent: ${d.present}',
+                              const TextStyle(color: Colors.white, fontSize: 12),
+                            );
+                          }).toList();
+                        },
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
           ],
         ),
       ),

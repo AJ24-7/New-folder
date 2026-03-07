@@ -7,6 +7,7 @@ class StatCard extends Widget {
   final IconData icon;
   final Color color;
   final double? trend;
+  final VoidCallback? onTap;
 
   const StatCard({
     super.key,
@@ -15,6 +16,7 @@ class StatCard extends Widget {
     required this.icon,
     required this.color,
     this.trend,
+    this.onTap,
   });
 
   @override
@@ -44,7 +46,9 @@ class _StatCardElement extends ComponentElement {
             : (constraints.maxWidth > 200 ? 22.0 : 20.0);
         final titleFontSize = isMobile ? 10.0 : 12.0;
         
-        return Card(
+        return GestureDetector(
+          onTap: widget.onTap,
+          child: Card(
           elevation: 2,
           child: Padding(
             padding: EdgeInsets.all(cardPadding),
@@ -137,6 +141,7 @@ class _StatCardElement extends ComponentElement {
                 ),
               ],
             ),
+          ),
           ),
         );
       },

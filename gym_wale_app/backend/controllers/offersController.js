@@ -64,7 +64,7 @@ exports.getOfferStats = async (req, res) => {
       Coupon.countDocuments({ gymId, status: 'active' }),
       CouponUsage.countDocuments({ gymId, status: 'completed' }),
       CouponUsage.aggregate([
-        { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
+        { $match: { gymId: new mongoose.Types.ObjectId(gymId), status: 'completed' } },
         { $group: { _id: null, totalRevenue: { $sum: '$finalAmount' }, totalDiscount: { $sum: '$discountAmount' } } }
       ]),
       Offer.countDocuments({ gymId, status: 'active', category: 'membership' })
@@ -1117,7 +1117,7 @@ exports.getCouponUsageStats = async (req, res) => {
 
     // Get total usage statistics
     const stats = await CouponUsage.aggregate([
-      { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
+      { $match: { gymId: new mongoose.Types.ObjectId(gymId), status: 'completed' } },
       {
         $group: {
           _id: null,
@@ -1131,7 +1131,7 @@ exports.getCouponUsageStats = async (req, res) => {
 
     // Get usage by coupon
     const byCoupon = await CouponUsage.aggregate([
-      { $match: { gymId: mongoose.Types.ObjectId(gymId), status: 'completed' } },
+      { $match: { gymId: new mongoose.Types.ObjectId(gymId), status: 'completed' } },
       {
         $group: {
           _id: '$couponId',
