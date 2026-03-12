@@ -10,9 +10,9 @@ class SessionTimerService extends ChangeNotifier {
   
   final StorageService _storage = StorageService();
 
-  // JWT token expires in 30 minutes (1800 seconds) by default
-  static const int _defaultTokenExpiryDuration = 1800; // 30 minutes in seconds
-  static const int _warningThreshold = 300; // Show warning 5 minutes before expiry
+  // JWT token expires in 60 minutes (3600 seconds) by default, matching backend SecuritySettings default
+  static const int _defaultTokenExpiryDuration = 3600; // 60 minutes in seconds
+  static const int _minWarningThreshold = 300; // Minimum 5 minutes warning
 
   Timer? _sessionTimer;
   Timer? _countdownTimer;
@@ -21,6 +21,12 @@ class SessionTimerService extends ChangeNotifier {
   int _remainingSeconds = _defaultTokenExpiryDuration;
   bool _isActive = false;
   bool _showWarning = false;
+
+  /// Dynamic warning threshold: 5% of total duration, clamped between 5 and 30 minutes.
+  int get _warningThreshold {
+    final threshold = (_tokenExpiryDuration * 0.05).round();
+    return threshold.clamp(_minWarningThreshold, 1800); // 5 min .. 30 min
+  }
   
   // Callbacks
   VoidCallback? _onSessionExpired;

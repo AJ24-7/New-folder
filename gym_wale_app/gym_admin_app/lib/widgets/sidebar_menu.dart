@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:gym_admin_app/l10n/app_localizations.dart';
+import '../config/app_theme.dart';
 
 class SidebarMenu extends StatelessWidget {
   final int selectedIndex;
@@ -25,39 +26,47 @@ class SidebarMenu extends StatelessWidget {
         color: Theme.of(context).cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 12,
             offset: const Offset(2, 0),
           ),
         ],
       ),
       child: Column(
         children: [
-          // Logo
+          // Logo / Brand Header with gradient
           Container(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
             decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isDark 
-                    ? Colors.white.withOpacity(0.1) 
-                    : Colors.black.withOpacity(0.1),
-                ),
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+                    : [AppTheme.primaryColor, AppTheme.secondaryColor],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withOpacity(0.4),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Row(
               children: [
+                // Logo container with white background for contrast
                 Container(
-                  width: 48,
-                  height: 48,
+                  width: 52,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                     boxShadow: [
                       BoxShadow(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                        color: Colors.black.withOpacity(0.2),
                         blurRadius: 8,
-                        offset: const Offset(0, 2),
+                        offset: const Offset(0, 3),
                       ),
                     ],
                   ),
@@ -67,7 +76,7 @@ class SidebarMenu extends StatelessWidget {
                     fit: BoxFit.contain,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,27 +87,39 @@ class SidebarMenu extends StatelessWidget {
                             TextSpan(
                               text: 'Gym',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF225DE8), // Primary blue
+                                color: Colors.white,
+                                letterSpacing: 0.5,
                               ),
                             ),
                             TextSpan(
                               text: '-Wale',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFFFF8C00), // Orange
+                                color: Color(0xFFFFD580), // Warm gold on gradient
+                                letterSpacing: 0.5,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      Text(
-                        'Admin Panel',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Theme.of(context).textTheme.bodySmall?.color,
+                      const SizedBox(height: 3),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text(
+                          'Admin Panel',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: 0.8,
+                          ),
                         ),
                       ),
                     ],

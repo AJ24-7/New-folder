@@ -3,11 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 class ThemeProvider extends ChangeNotifier {
-  static const String _themeKey = 'theme_mode';
-  ThemeMode _themeMode = ThemeMode.light;
+  static const String _themeKey = 'theme_mode_v2';
+  ThemeMode _themeMode = ThemeMode.system;
   
   ThemeMode get themeMode => _themeMode;
   bool get isDarkMode => _themeMode == ThemeMode.dark;
+  bool get isSystemMode => _themeMode == ThemeMode.system;
 
   ThemeProvider() {
     _loadThemePreference();
@@ -15,23 +16,69 @@ class ThemeProvider extends ChangeNotifier {
 
   Future<void> _loadThemePreference() async {
     final prefs = await SharedPreferences.getInstance();
-    final isDark = prefs.getBool(_themeKey) ?? false;
-    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+    final modeStr = prefs.getString(_themeKey) ?? 'system';
+    switch (modeStr) {
+      case 'light':
+        _themeMode = ThemeMode.light;
+        break;
+      case 'dark':
+        _themeMode = ThemeMode.dark;
+        break;
+      default:
+        _themeMode = ThemeMode.system;
+    }
     notifyListeners();
   }
 
   Future<void> toggleTheme() async {
     _themeMode = _themeMode == ThemeMode.light ? ThemeMode.dark : ThemeMode.light;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_themeKey, _themeMode == ThemeMode.dark);
+    await _saveThemePreference();
     notifyListeners();
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
     _themeMode = mode;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_themeKey, mode == ThemeMode.dark);
+    await _saveThemePreference();
     notifyListeners();
+  }
+
+  Future<void> _saveThemePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    String modeStr;
+    switch (_themeMode) {
+      case ThemeMode.light:
+        modeStr = 'light';
+        break;
+      case ThemeMode.dark:
+        modeStr = 'dark';
+        break;
+      case ThemeMode.system:
+        modeStr = 'system';
+        break;
+    }
+    await prefs.setString(_themeKey, modeStr);
+  }
+
+  String getThemeLabel(String lightLabel, String darkLabel, String systemLabel) {
+    switch (_themeMode) {
+      case ThemeMode.light:
+        return lightLabel;
+      case ThemeMode.dark:
+        return darkLabel;
+      case ThemeMode.system:
+        return systemLabel;
+    }
+  }
+
+  IconData get themeIcon {
+    switch (_themeMode) {
+      case ThemeMode.light:
+        return Icons.light_mode;
+      case ThemeMode.dark:
+        return Icons.dark_mode;
+      case ThemeMode.system:
+        return Icons.brightness_auto;
+    }
   }
 
   // Light Theme

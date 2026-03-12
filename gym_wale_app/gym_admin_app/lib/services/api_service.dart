@@ -31,6 +31,9 @@ class ApiService {
     _onAuthError = callback;
   }
 
+  // Flag to prevent concurrent refresh attempts
+  static bool _isRefreshing = false;
+
   void _setupInterceptors() {
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
@@ -58,8 +61,27 @@ class ApiService {
               (errorData['error'] == 'invalid_token' || 
                errorData['details']?.toString().contains('expired') == true);
           
-          if (isTokenExpired) {
-            print('⏰ JWT Token has expired - triggering logout');
+          if (isTokenExpired && !_isRefreshing) {
+            // Attempt to refresh the token before logging out
+            _isRefreshing = true;
+            try {
+              final refreshed = await _attemptTokenRefresh();
+              if (refreshed) {
+                print('🔄 Token refreshed — retrying original request');
+                // Retry original request with new token
+                final newToken = await _storage.getToken();
+                final opts = error.requestOptions;
+                opts.headers['Authorization'] = 'Bearer $newToken';
+                final response = await _dio.fetch(opts);
+                _isRefreshing = false;
+                return handler.resolve(response);
+              }
+            } catch (e) {
+              print('❌ Token refresh failed: $e');
+            }
+            _isRefreshing = false;
+            
+            print('⏰ JWT Token has expired and refresh failed - triggering logout');
             
             // Clear all stored data
             await _storage.deleteToken();
@@ -68,7 +90,7 @@ class ApiService {
             
             // Trigger auth error callback to logout and redirect
             _onAuthError?.call();
-          } else {
+          } else if (!isTokenExpired) {
             print('⚠️ Invalid authentication - clearing storage');
             await _storage.deleteToken();
           }
@@ -76,6 +98,49 @@ class ApiService {
         return handler.next(error);
       },
     ));
+  }
+
+  /// Attempt to refresh the JWT token using the refresh-token endpoint.
+  /// Returns true if refresh succeeded and new token was saved.
+  Future<bool> _attemptTokenRefresh() async {
+    try {
+      final currentToken = await _storage.getToken();
+      if (currentToken == null) return false;
+
+      // Use a separate Dio instance to avoid interceptor recursion
+      final refreshDio = Dio(BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: ApiConfig.connectTimeout,
+        receiveTimeout: ApiConfig.receiveTimeout,
+      ));
+
+      final response = await refreshDio.post(
+        ApiConfig.refreshToken,
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $currentToken',
+            'Content-Type': 'application/json',
+          },
+        ),
+      );
+
+      if (response.statusCode == 200 && response.data['success'] == true) {
+        final newToken = response.data['token'] as String?;
+        final expiresInMinutes = response.data['tokenExpiresInMinutes'] as int?;
+        if (newToken != null) {
+          await _storage.saveToken(newToken);
+          if (expiresInMinutes != null && expiresInMinutes > 0) {
+            await _storage.saveSessionTimeoutDuration(expiresInMinutes);
+          }
+          print('✅ Token refreshed successfully, expires in $expiresInMinutes minutes');
+          return true;
+        }
+      }
+      return false;
+    } catch (e) {
+      print('❌ Token refresh error: $e');
+      return false;
+    }
   }
 
   // Dashboard

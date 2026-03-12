@@ -243,7 +243,8 @@ class _SupportScreenState extends State<SupportScreen>
     final topPadding = MediaQuery.of(context).padding.top;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -252,12 +253,18 @@ class _SupportScreenState extends State<SupportScreen>
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).shadowColor.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -265,7 +272,7 @@ class _SupportScreenState extends State<SupportScreen>
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -275,7 +282,7 @@ class _SupportScreenState extends State<SupportScreen>
               children: [
                 FaIcon(
                   FontAwesomeIcons.headset,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -285,6 +292,7 @@ class _SupportScreenState extends State<SupportScreen>
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -297,6 +305,7 @@ class _SupportScreenState extends State<SupportScreen>
             icon: Icon(
               _autoRefreshEnabled ? Icons.sync : Icons.sync_disabled,
               size: isMobile ? 20 : 24,
+              color: Colors.white,
             ),
             onPressed: () {
               setState(() {
@@ -311,7 +320,7 @@ class _SupportScreenState extends State<SupportScreen>
             constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
           ),
           IconButton(
-            icon: Icon(Icons.refresh, size: isMobile ? 20 : 24),
+            icon: Icon(Icons.refresh, size: isMobile ? 20 : 24, color: Colors.white),
             onPressed: _loadAllData,
             tooltip: '${l10n.refresh} now',
             padding: EdgeInsets.zero,

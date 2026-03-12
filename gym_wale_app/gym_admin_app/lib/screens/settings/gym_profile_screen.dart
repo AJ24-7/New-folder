@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/gym_profile.dart';
 import '../../services/gym_service.dart';
 import '../../config/app_theme.dart';
@@ -238,45 +239,108 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Gym Profile'),
-        actions: [
-          if (!_isEditing && !_isLoading)
-            IconButton(
-              icon: const Icon(Icons.edit),
-              onPressed: () => setState(() => _isEditing = true),
-              tooltip: 'Edit Profile',
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
+      body: Column(
+        children: [
+          // Top Navigation Bar
+          Container(
+            padding: EdgeInsets.only(
+              top: topPadding > 0 ? topPadding + 8 : 16,
+              bottom: 16,
+              left: 12,
+              right: 12,
             ),
-          if (_isEditing) ...[
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _isEditing = false;
-                  _populateFields();
-                  _currentPasswordController.clear();
-                  _logoFile = null;
-                  _logoBytes = null;
-                });
-              },
-              child: const Text('Cancel'),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+                    : [AppTheme.primaryColor, AppTheme.secondaryColor],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            TextButton(
-              onPressed: _isSaving ? null : _saveProfile,
-              child: _isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Save'),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 20, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      FaIcon(
+                        FontAwesomeIcons.building,
+                        color: Colors.white,
+                        size: isMobile ? 20 : 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          'Gym Profile',
+                          style: TextStyle(
+                            fontSize: isMobile ? 18 : 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (!_isEditing && !_isLoading)
+                  IconButton(
+                    icon: const FaIcon(FontAwesomeIcons.penToSquare, size: 20, color: Colors.white),
+                    onPressed: () => setState(() => _isEditing = true),
+                    tooltip: 'Edit Profile',
+                  ),
+                if (_isEditing) ...[
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _isEditing = false;
+                        _populateFields();
+                        _currentPasswordController.clear();
+                        _logoFile = null;
+                        _logoBytes = null;
+                      });
+                    },
+                    child: const Text('Cancel', style: TextStyle(color: Colors.white)),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _isSaving ? null : _saveProfile,
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Save', style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(width: 16),
-          ],
-        ],
-      ),
-      body: _isLoading
+          ),
+          // Content
+          Expanded(
+            child: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _gymProfile == null
               ? const Center(child: Text('Failed to load profile'))
@@ -305,6 +369,9 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
                     ),
                   ),
                 ),
+          ),
+        ],
+      ),
     );
   }
   

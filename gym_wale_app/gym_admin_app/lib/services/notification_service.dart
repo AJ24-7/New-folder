@@ -23,7 +23,7 @@ class NotificationService {
     try {
       final headers = await _getHeaders();
       final body = json.encode({
-        'fcmToken': fcmToken,
+        'token': fcmToken,
         'platform': 'admin_app',
       });
 
@@ -58,7 +58,7 @@ class NotificationService {
       final response = await http.delete(
         Uri.parse('$baseUrl/admin/fcm-token'),
         headers: headers,
-        body: json.encode({'fcmToken': fcmToken}),
+        body: json.encode({'token': fcmToken}),
       );
 
       if (response.statusCode == 200) {

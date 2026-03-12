@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/admin.dart';
 import '../services/auth_service.dart';
 import '../services/session_timer_service.dart';
+import '../services/storage_service.dart';
 import '../services/api_service.dart';
 
 /// Authentication Provider
@@ -51,10 +52,33 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Start session timer
-  Future<void> _startSessionTimer({bool restoreExisting = true}) async {
-    // Load session timeout configuration from backend
-    final timeoutConfig = await _authService.getSessionTimeout();
-    final durationInMinutes = timeoutConfig['timeoutMinutes'] ?? 30;
+  Future<void> _startSessionTimer({bool restoreExisting = true, int? tokenExpiresInMinutes}) async {
+    // Priority for duration:
+    // 1. Explicit value from login/2FA response (tokenExpiresInMinutes)
+    // 2. Locally saved duration from storage (set during login)
+    // 3. API call to backend (may fail on app restart if token is near expiry)
+    // 4. Default fallback (60 minutes)
+    int? durationInMinutes = tokenExpiresInMinutes;
+    
+    if (durationInMinutes == null || durationInMinutes <= 0) {
+      // Try locally saved value first — this was persisted at login time
+      final stored = StorageService().getSessionTimeoutDuration();
+      if (stored != null && stored > 0) {
+        durationInMinutes = stored;
+        debugPrint('⏱️ Using stored session timeout: $durationInMinutes minutes');
+      }
+    }
+    
+    if (durationInMinutes == null || durationInMinutes <= 0) {
+      // Fallback: try API call (non-critical — if it fails, use default)
+      try {
+        final timeoutConfig = await _authService.getSessionTimeout();
+        durationInMinutes = timeoutConfig['timeoutMinutes'] as int? ?? 60;
+      } catch (e) {
+        debugPrint('⚠️ Could not fetch session timeout from API: $e');
+        durationInMinutes = 60;
+      }
+    }
     
     debugPrint('⏱️ Starting session timer with $durationInMinutes minutes (restore: $restoreExisting)');
     
@@ -64,9 +88,21 @@ class AuthProvider extends ChangeNotifier {
         debugPrint('⏰ Session expired - auto logout triggered');
         _handleSessionExpired();
       },
-      onWarning: () {
-        // Show warning when threshold is reached
-        debugPrint('⚠️ Session warning - 5 minutes remaining');
+      onWarning: () async {
+        // Session warning reached — proactively attempt token refresh
+        debugPrint('⚠️ Session warning — attempting proactive token refresh');
+        try {
+          final refreshed = await _authService.refreshToken();
+          if (refreshed) {
+            debugPrint('🔄 Proactive token refresh succeeded — resetting session timer');
+            await _sessionTimer.resetTimer();
+            // Update login time in storage for accurate restore on restart
+            return; // Skip showing the warning since we refreshed
+          }
+        } catch (e) {
+          debugPrint('⚠️ Proactive token refresh failed: $e');
+        }
+        // Refresh failed — show warning to user
         _onSessionWarningCallback?.call();
         notifyListeners();
       },
@@ -115,7 +151,8 @@ class AuthProvider extends ChangeNotifier {
           _isLoggedIn = true;
           _currentAdmin = Admin.fromJson(result['admin']);
           // Start session timer after successful login without 2FA (fresh session)
-          await _startSessionTimer(restoreExisting: false);
+          final expiryMinutes = result['tokenExpiresInMinutes'] as int?;
+          await _startSessionTimer(restoreExisting: false, tokenExpiresInMinutes: expiryMinutes);
         }
       } else {
         _error = result['message'];
@@ -147,7 +184,8 @@ class AuthProvider extends ChangeNotifier {
 
       if (result['success'] == true) {
         // Start session timer after successful 2FA verification (fresh session)
-        await _startSessionTimer(restoreExisting: false);
+        final expiryMinutes = result['tokenExpiresInMinutes'] as int?;
+        await _startSessionTimer(restoreExisting: false, tokenExpiresInMinutes: expiryMinutes);
         _isLoggedIn = true;
         _currentAdmin = Admin.fromJson(result['admin']);
       } else {

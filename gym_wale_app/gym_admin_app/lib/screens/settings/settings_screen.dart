@@ -926,46 +926,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Expanded(
             child: Column(
               children: [
-                // Top bar for mobile/tablet with menu button
-                if (!isDesktop)
-                  Container(
-                    padding: EdgeInsets.only(
-                      top: MediaQuery.of(context).padding.top > 0 
-                          ? MediaQuery.of(context).padding.top + 8 
-                          : 12,
-                      bottom: 12,
-                      left: 12,
-                      right: 12,
+                // Top bar (all screen sizes)
+                Container(
+                  padding: EdgeInsets.only(
+                    top: isDesktop
+                        ? 24
+                        : (MediaQuery.of(context).padding.top > 0
+                            ? MediaQuery.of(context).padding.top + 8
+                            : 16),
+                    bottom: isDesktop ? 24 : 16,
+                    left: isDesktop ? 24 : 12,
+                    right: isDesktop ? 24 : 12,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: Theme.of(context).brightness == Brightness.dark
+                          ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+                          : [AppTheme.primaryColor, AppTheme.secondaryColor],
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
                     ),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).cardColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      if (!isDesktop)
                         IconButton(
-                          icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+                          icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
                           onPressed: () {
                             _scaffoldKey.currentState?.openDrawer();
                           },
                           padding: const EdgeInsets.all(8),
                           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          l10n.settings,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
+                      if (!isDesktop) const SizedBox(width: 4),
+                      FaIcon(
+                        FontAwesomeIcons.gear,
+                        color: Colors.white,
+                        size: isDesktop ? 24 : 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        l10n.settings,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: isDesktop ? 24 : 18,
+                          color: Colors.white,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
+                ),
                 // Settings content
                 Expanded(
                   child: SingleChildScrollView(
@@ -974,24 +991,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Header
-                        Text(
-                          l10n.settings,
-                          style: Theme.of(context).textTheme.headlineLarge
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Manage your preferences and settings',
-                          style: Theme.of(context).textTheme.bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).textTheme.bodySmall?.color,
-                              ),
-                        ),
-                        const SizedBox(height: 32),
-
                         // Appearance Section
                         _buildSectionCard(
                           context,
@@ -1001,21 +1000,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             _buildSettingTile(
                               context,
                               title: l10n.theme,
-                              subtitle: themeProvider.isDarkMode
-                                  ? l10n.darkMode
-                                  : l10n.lightMode,
+                              subtitle: themeProvider.getThemeLabel(
+                                l10n.lightMode,
+                                l10n.darkMode,
+                                l10n.systemDefault,
+                              ),
                               leading: Icon(
-                                themeProvider.isDarkMode
-                                    ? Icons.dark_mode
-                                    : Icons.light_mode,
+                                themeProvider.themeIcon,
                                 color: Theme.of(context).colorScheme.primary,
                               ),
-                              trailing: Switch(
-                                value: themeProvider.isDarkMode,
-                                onChanged: (value) {
-                                  themeProvider.toggleTheme();
-                                },
-                              ),
+                              onTap: () => _showThemeDialog(context, themeProvider, l10n),
                             ),
                             const Divider(height: 1),
                             _buildSettingTile(
@@ -1748,6 +1742,69 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing:
           trailing ?? (onTap != null ? const Icon(Icons.chevron_right) : null),
       onTap: onTap,
+    );
+  }
+
+  void _showThemeDialog(
+    BuildContext context,
+    ThemeProvider themeProvider,
+    AppLocalizations l10n,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.theme),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.system,
+              groupValue: themeProvider.themeMode,
+              title: Text(l10n.systemDefault),
+              secondary: const Icon(Icons.brightness_auto),
+              activeColor: Theme.of(dialogContext).colorScheme.primary,
+              onChanged: (value) {
+                if (value != null) {
+                  themeProvider.setThemeMode(value);
+                  Navigator.pop(dialogContext);
+                }
+              },
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.light,
+              groupValue: themeProvider.themeMode,
+              title: Text(l10n.lightMode),
+              secondary: const Icon(Icons.light_mode),
+              activeColor: Theme.of(dialogContext).colorScheme.primary,
+              onChanged: (value) {
+                if (value != null) {
+                  themeProvider.setThemeMode(value);
+                  Navigator.pop(dialogContext);
+                }
+              },
+            ),
+            RadioListTile<ThemeMode>(
+              value: ThemeMode.dark,
+              groupValue: themeProvider.themeMode,
+              title: Text(l10n.darkMode),
+              secondary: const Icon(Icons.dark_mode),
+              activeColor: Theme.of(dialogContext).colorScheme.primary,
+              onChanged: (value) {
+                if (value != null) {
+                  themeProvider.setThemeMode(value);
+                  Navigator.pop(dialogContext);
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(l10n.cancel),
+          ),
+        ],
+      ),
     );
   }
 

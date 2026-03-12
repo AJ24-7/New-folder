@@ -322,7 +322,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -331,12 +332,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -344,7 +351,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -354,7 +361,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               children: [
                 FaIcon(
                   FontAwesomeIcons.creditCard,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -364,6 +371,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -379,8 +387,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
               label: Text(l10n.addPayment),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.primaryColor,
               ),
             )
           else if (!isMobile)
@@ -389,9 +397,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               onPressed: _showAddPaymentDialog,
               icon: const FaIcon(FontAwesomeIcons.plus, size: 20),
               tooltip: l10n.addPayment,
-              color: Colors.white,
+              color: AppTheme.primaryColor,
               style: IconButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
+                backgroundColor: Colors.white,
                 padding: const EdgeInsets.all(12),
               ),
             )
@@ -399,8 +407,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             // Mobile: Small FAB
             FloatingActionButton.small(
               onPressed: _showAddPaymentDialog,
-              backgroundColor: AppTheme.primaryColor,
-              child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 20),
+              backgroundColor: Colors.white,
+              child: const FaIcon(FontAwesomeIcons.plus, color: AppTheme.primaryColor, size: 20),
             ),
         ],
       ),

@@ -223,7 +223,8 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final topPadding = MediaQuery.of(context).padding.top;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -232,12 +233,18 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -245,7 +252,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -255,7 +262,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               children: [
                 Icon(
                   FontAwesomeIcons.clipboardCheck,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -265,6 +272,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -279,7 +287,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               label: Text(_settings?.mode.toString().split('.').last.toUpperCase() ?? 'MANUAL'),
               backgroundColor: _getModeBadgeColor(),
               textColor: Colors.white,
-              child: Icon(Icons.settings, size: isMobile ? 20 : 24),
+              child: Icon(Icons.settings, size: isMobile ? 20 : 24, color: Colors.white),
             ),
             onPressed: () {
               // Navigate to settings screen with attendance section
@@ -606,7 +614,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                     const Divider(height: 1),
                 itemBuilder: (context, i) {
                   final r = autoMarked[i];
-                  final checkIn = r.checkInTime ?? '--:--';
+                  final checkIn = _formatAttendanceTime(r.geofenceEntry?['timestamp'] ?? r.checkInTime);
                   final dur = r.durationInMinutes ?? 0;
                   final checkedOut = r.checkOutTime != null;
                   return ListTile(
@@ -689,6 +697,28 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final h = minutes ~/ 60;
     final m = minutes % 60;
     return m > 0 ? '${h}h ${m}m' : '${h}h';
+  }
+
+  /// Parses a time value (ISO-8601 UTC string or "HH:MM" shorthand) and
+  /// returns a local-time "HH:mm" string so the displayed time matches the
+  /// user's timezone instead of UTC.
+  String _formatAttendanceTime(dynamic value) {
+    if (value == null) return '--:--';
+    final str = value.toString().trim();
+    if (str.isEmpty) return '--:--';
+    // Full ISO-8601 (e.g. "2025-06-01T09:01:00.000Z") → convert UTC to local
+    try {
+      final dt = DateTime.parse(str).toLocal();
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {}
+    // Already in "HH:MM" or "HH:MM:SS" format — return as-is
+    if (str.contains(':')) {
+      final parts = str.split(':');
+      if (parts.length >= 2) {
+        return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+      }
+    }
+    return str;
   }
 
   // ── Location Services Off ────────────────────────────────────────────────────

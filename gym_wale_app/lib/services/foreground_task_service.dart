@@ -1,4 +1,4 @@
-// lib/services/foreground_task_service.dart
+﻿// lib/services/foreground_task_service.dart
 //
 // Keeps geofence-based auto-attendance running even when the app is
 // force-killed from the task switcher.
@@ -71,6 +71,14 @@ class _GeofenceTaskHandler extends TaskHandler {
   /// diagnosis instead of silently retrying.
   String? _lastBackendErrorMsg;
 
+  // ─── drawable notification icon constants ────────────────────────────────
+  // Each metaDataName must match a <meta-data android:name="..."> entry in
+  // AndroidManifest.xml that references the corresponding drawable resource.
+  static const _iconLocation = NotificationIcon(metaDataName: 'com.gymwale.notif.ic_location');
+  static const _iconDumbell  = NotificationIcon(metaDataName: 'com.gymwale.notif.ic_dumbell');
+  static const _iconCheck    = NotificationIcon(metaDataName: 'com.gymwale.notif.ic_check');
+  static const _iconGym      = NotificationIcon(metaDataName: 'com.gymwale.notif.ic_gym');
+
   // Local notification plugin for the background isolate
   final FlutterLocalNotificationsPlugin _notifPlugin =
       FlutterLocalNotificationsPlugin();
@@ -95,6 +103,7 @@ class _GeofenceTaskHandler extends TaskHandler {
     required String title,
     required String body,
     Importance importance = Importance.high,
+    String? icon,
   }) async {
     await _ensureNotifInit();
     try {
@@ -109,6 +118,7 @@ class _GeofenceTaskHandler extends TaskHandler {
             channelDescription: 'Automatic gym attendance notifications',
             importance: importance,
             priority: Priority.high,
+            icon: icon,
           ),
         ),
       );
@@ -268,8 +278,9 @@ class _GeofenceTaskHandler extends TaskHandler {
       // notifications for the rest of the day to save battery.
       if (_entryMarkedToday && _exitMarkedToday) {
         _updateFgNotif(
-          title: '✅ Attendance Complete',
+          title: 'Attendance Complete',
           text: 'Entry and exit recorded for today.',
+          icon: _iconCheck,
         );
         return;
       }
@@ -315,8 +326,9 @@ class _GeofenceTaskHandler extends TaskHandler {
           final reason = _buildOperatingHoursDebugText(prefs);
           debugPrint('[BGTask] ENTER outside operating hours — timer running, awaiting gym opening');
           _updateFgNotif(
-            title: '🏋️ Inside Gym (Outside Hours)',
+            title: 'Inside Gym (Outside Hours)',
             text: reason,
+            icon: _iconDumbell,
           );
           return;
         }
@@ -325,19 +337,22 @@ class _GeofenceTaskHandler extends TaskHandler {
         // marked yet today. Once marked, suppress all detection notifications.
         if (!_entryMarkedToday) {
           _updateFgNotif(
-            title: '🏋️ Gym Detected',
+            title: 'Gym Detected',
             text: 'Stay 5 min to auto-mark attendance.',
+            icon: _iconDumbell,
           );
           await _showLocalNotif(
             id: 3001,
-            title: '🏋️ Gym Detected',
+            title: 'Gym Detected',
             body: 'Remain inside for 5 minutes to automatically mark your attendance.',
             importance: Importance.defaultImportance,
+            icon: 'ic_dumbell',
           );
         } else {
           _updateFgNotif(
-            title: '✅ Attendance Marked',
+            title: 'Attendance Marked',
             text: 'Your attendance is recorded for today.',
+            icon: _iconCheck,
           );
         }
 
@@ -355,10 +370,11 @@ class _GeofenceTaskHandler extends TaskHandler {
             final remainSec = 300 - elapsed.inSeconds;
             if (remainSec > 0) {
               _updateFgNotif(
-                title: '🏋️ Inside Gym',
+                title: 'Inside Gym',
                 text: remainSec > 60
                     ? 'Auto-attendance in ~${(remainSec / 60).ceil()} min…'
                     : 'Auto-attendance in ~${remainSec}s…',
+                icon: _iconDumbell,
               );
             }
           }
@@ -374,8 +390,9 @@ class _GeofenceTaskHandler extends TaskHandler {
         debugPrint('[BGTask] EXIT confirmed after grace period');
 
         _updateFgNotif(
-          title: '📍 Gym Attendance Tracking',
+          title: 'Gym Attendance Tracking',
           text: 'Monitoring your location…',
+          icon: _iconLocation,
         );
 
         final autoMarkExit = prefs.getBool('geofence_auto_mark_exit') ?? true;
@@ -390,8 +407,9 @@ class _GeofenceTaskHandler extends TaskHandler {
             _exitMarkedToday = true;
             debugPrint('[BGTask] Exit marked silently');
             _updateFgNotif(
-              title: '✅ Attendance Complete',
+              title: 'Attendance Complete',
               text: 'Entry and exit recorded for today.',
+              icon: _iconCheck,
             );
           }
         }
@@ -418,8 +436,9 @@ class _GeofenceTaskHandler extends TaskHandler {
               final reason = _buildOperatingHoursDebugText(prefs);
               debugPrint('[BGTask] DWELL skipped — outside operating hours (timer kept, will mark when hours start)');
               _updateFgNotif(
-                title: '🏋️ Inside Gym (Outside Hours)',
+                title: 'Inside Gym (Outside Hours)',
                 text: reason,
+                icon: _iconDumbell,
               );
               return;
             }
@@ -446,14 +465,16 @@ class _GeofenceTaskHandler extends TaskHandler {
                 } catch (_) {}
 
                 _updateFgNotif(
-                  title: '✅ Attendance Marked',
+                  title: 'Attendance Marked',
                   text: 'Your attendance is recorded for today.',
+                  icon: _iconCheck,
                 );
                 await _showLocalNotif(
                   id: 3002,
-                  title: '✅ Attendance Marked!',
+                  title: 'Attendance Marked',
                   body:
-                      'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout! 💪',
+                      'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout!',
+                  icon: 'ic_check',
                 );
               } else if (result == _kBackendHardBlock) {
                 // Permanent error (no membership, geofence disabled, mock
@@ -464,8 +485,9 @@ class _GeofenceTaskHandler extends TaskHandler {
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
                 _updateFgNotif(
-                  title: '⚠️ Attendance Blocked',
+                  title: 'Attendance Blocked',
                   text: 'Check membership or gym settings.',
+                  icon: _iconGym,
                 );
               } else if (_dwellMarkAttempts < _maxDwellMarkAttempts) {
                 // Soft transient failure — show error IMMEDIATELY in both
@@ -475,14 +497,16 @@ class _GeofenceTaskHandler extends TaskHandler {
                 debugPrint('[BGTask] Soft-fail (attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts) — will retry next tick');
                 final errText = _lastBackendErrorMsg ?? 'Server error — retrying…';
                 _updateFgNotif(
-                  title: '⚠️ Auto-Mark Retrying…',
+                  title: 'Auto-Mark Retrying…',
                   text: errText,
+                  icon: _iconGym,
                 );
                 await _showLocalNotif(
                   id: 3006,
-                  title: '⚠️ Auto-Attendance Error',
+                  title: 'Auto-Attendance Error',
                   body: 'Attempt $_dwellMarkAttempts/$_maxDwellMarkAttempts failed: $errText',
                   importance: Importance.high,
+                  icon: 'ic_gym',
                 );
               } else {
                 // ── Max soft retries exceeded ─────────────────────────────────
@@ -500,18 +524,20 @@ class _GeofenceTaskHandler extends TaskHandler {
                 await _saveDailyState();
 
                 _updateFgNotif(
-                  title: '⚠️ Auto-Attendance Failed',
+                  title: 'Auto-Attendance Failed',
                   text: 'Could not reach the server after $_maxDwellMarkAttempts attempts. Please mark manually.',
+                  icon: _iconGym,
                 );
                 await _showLocalNotif(
                   id: 3004,
-                  title: '⚠️ Auto-Attendance Failed',
+                  title: 'Auto-Attendance Failed',
                   body: 'Gym presence was detected but attendance could not be '
                       'marked automatically after $_maxDwellMarkAttempts attempts. '
                       'Possible causes: weak network, low GPS accuracy, or a '
                       'temporary server issue. Please mark your attendance '
                       'manually from the app.',
                   importance: Importance.high,
+                  icon: 'ic_gym',
                 );
               }
             }
@@ -519,10 +545,11 @@ class _GeofenceTaskHandler extends TaskHandler {
             // Show precise countdown in the persistent notification
             final remainSec = 300 - elapsed.inSeconds;
             _updateFgNotif(
-              title: '🏋️ Inside Gym',
+              title: 'Inside Gym',
               text: remainSec > 60
                   ? 'Auto-attendance in ~${(remainSec / 60).ceil()} min…'
                   : 'Auto-attendance in ~${remainSec}s…',
+              icon: _iconDumbell,
             );
           }
         }
@@ -530,8 +557,9 @@ class _GeofenceTaskHandler extends TaskHandler {
         // Already marked today — keep notification clean and suppress tracking.
         _consecutiveOutsideCount = 0;
         _updateFgNotif(
-          title: '✅ Attendance Marked',
+          title: 'Attendance Marked',
           text: 'Your attendance is recorded for today.',
+          icon: _iconCheck,
         );
       }
     } catch (e) {
@@ -778,11 +806,16 @@ class _GeofenceTaskHandler extends TaskHandler {
   }
 
   // ─── helpers ───────────────────────────────────────────────────────────────
-  void _updateFgNotif({required String title, required String text}) {
+  void _updateFgNotif({
+    required String title,
+    required String text,
+    NotificationIcon? icon,
+  }) {
     try {
       FlutterForegroundTask.updateService(
         notificationTitle: title,
         notificationText: text,
+        notificationIcon: icon,
       );
     } catch (_) {}
   }
@@ -968,8 +1001,9 @@ class ForegroundTaskService {
     debugPrint('[FGTask] Starting foreground service');
     final result = await FlutterForegroundTask.startService(
       serviceId: 7001,
-      notificationTitle: '📍 Gym Attendance Tracking',
+      notificationTitle: 'Gym Attendance Tracking',
       notificationText: 'Monitoring your location…',
+      notificationIcon: const NotificationIcon(metaDataName: 'com.gymwale.notif.ic_location'),
       callback: startCallback,
     );
     debugPrint('[FGTask] startService result: $result');

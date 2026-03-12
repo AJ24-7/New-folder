@@ -281,6 +281,13 @@ class AuthService {
           debugPrint('✅ Gym ID saved: ${data['gymId']}');
         }
 
+        // Save token expiry duration from backend response
+        final tokenExpiresInMinutes = data['tokenExpiresInMinutes'] as int?;
+        if (tokenExpiresInMinutes != null && tokenExpiresInMinutes > 0) {
+          await _storage.saveSessionTimeoutDuration(tokenExpiresInMinutes);
+          debugPrint('✅ Token expiry saved: $tokenExpiresInMinutes minutes');
+        }
+
         await _storage.saveRememberMe(rememberMe);
 
         return {
@@ -288,6 +295,7 @@ class AuthService {
           'admin': data['admin'],
           'token': data['token'],
           'gymId': data['gymId'],
+          'tokenExpiresInMinutes': tokenExpiresInMinutes,
         };
       } else {
         debugPrint('❌ Login failed: ${response.data}');
@@ -372,11 +380,19 @@ class AuthService {
           debugPrint('✅ Gym ID saved: ${data['gymId']}');
         }
 
+        // Save token expiry duration from backend response
+        final tokenExpiresInMinutes = data['tokenExpiresInMinutes'] as int?;
+        if (tokenExpiresInMinutes != null && tokenExpiresInMinutes > 0) {
+          await _storage.saveSessionTimeoutDuration(tokenExpiresInMinutes);
+          debugPrint('✅ Token expiry saved: $tokenExpiresInMinutes minutes');
+        }
+
         return {
           'success': true,
           'admin': data['admin'],
           'token': data['token'],
           'gymId': data['gymId'],
+          'tokenExpiresInMinutes': tokenExpiresInMinutes,
         };
       } else {
         debugPrint('❌ 2FA verification failed: ${response.data}');
@@ -435,23 +451,34 @@ class AuthService {
     }
   }
 
-  /// Refresh Token
+  /// Refresh Token — calls the gym admin refresh-token endpoint with the current JWT.
+  /// The backend issues a new token with the same session timeout.
   Future<bool> refreshToken() async {
     try {
-      final refreshToken = await _storage.getRefreshToken();
-      if (refreshToken == null) return false;
+      final currentToken = await _storage.getToken();
+      if (currentToken == null) return false;
 
       final response = await _dio.post(
         ApiConfig.refreshToken,
-        data: {'refreshToken': refreshToken},
+        options: Options(
+          headers: {
+            'Authorization': 'Bearer $currentToken',
+          },
+        ),
       );
 
       if (response.statusCode == 200 && response.data['success'] == true) {
         await _storage.saveToken(response.data['token']);
+        final expiresInMinutes = response.data['tokenExpiresInMinutes'] as int?;
+        if (expiresInMinutes != null && expiresInMinutes > 0) {
+          await _storage.saveSessionTimeoutDuration(expiresInMinutes);
+        }
+        debugPrint('🔄 Token refreshed, expires in $expiresInMinutes minutes');
         return true;
       }
       return false;
     } catch (e) {
+      debugPrint('❌ Token refresh failed: $e');
       return false;
     }
   }

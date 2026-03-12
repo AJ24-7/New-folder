@@ -19,6 +19,14 @@ class AuthProvider extends ChangeNotifier {
   Future<void> init() async {
     await ApiService.init();
     if (ApiService.isAuthenticated) {
+      // First restore the cached user so the session is valid immediately,
+      // even before the network request completes.
+      final cachedUser = await ApiService.getCachedUser();
+      if (cachedUser != null) {
+        _user = cachedUser;
+        notifyListeners();
+      }
+      // Then try to refresh user data from the server in the background.
       await loadUser();
     }
   }
@@ -36,6 +44,8 @@ class AuthProvider extends ChangeNotifier {
       if (result['success']) {
         _user = result['user'];
         _error = null;
+        // Persist user data locally so the session survives restarts.
+        if (_user != null) await ApiService.cacheUser(_user!);
         notifyListeners();
         return true;
       } else {
@@ -64,6 +74,7 @@ class AuthProvider extends ChangeNotifier {
       if (result['success']) {
         _user = result['user'];
         _error = null;
+        if (_user != null) await ApiService.cacheUser(_user!);
         notifyListeners();
         return true;
       } else {
@@ -92,6 +103,7 @@ class AuthProvider extends ChangeNotifier {
       if (result['success']) {
         _user = result['user'];
         _error = null;
+        if (_user != null) await ApiService.cacheUser(_user!);
         notifyListeners();
         return true;
       } else {
@@ -129,10 +141,15 @@ class AuthProvider extends ChangeNotifier {
       final user = await ApiService.getProfile();
       if (user != null) {
         _user = user;
+        // Keep local cache in sync with the latest server data.
+        await ApiService.cacheUser(user);
         notifyListeners();
       }
+      // If getProfile() returns null (network/token issue) we intentionally
+      // keep the previously loaded _user so the session stays alive.
     } catch (e) {
       print('Error loading user: $e');
+      // Don't clear _user on error — keep the cached session alive.
     }
   }
 
@@ -157,6 +174,7 @@ class AuthProvider extends ChangeNotifier {
       if (result['success']) {
         _user = result['user'];
         _error = null;
+        if (_user != null) await ApiService.cacheUser(_user!);
         notifyListeners();
         return true;
       } else {

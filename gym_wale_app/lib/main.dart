@@ -26,6 +26,7 @@ import 'l10n/app_localizations.dart';
 import 'services/location_service.dart';
 import 'services/firebase_notification_service.dart';
 import 'services/api_service.dart';
+import 'widgets/floating_icons_background.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -121,10 +122,45 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _fadeController;
+  late final AnimationController _slideController;
+  late final AnimationController _pulseController;
+  late final Animation<double> _fadeAnim;
+  late final Animation<Offset> _slideAnim;
+  late final Animation<double> _pulseAnim;
+
   @override
   void initState() {
     super.initState();
+
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    );
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
+
+    _slideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+    _slideAnim = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic));
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.6, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    _fadeController.forward();
+    _slideController.forward();
+
     _initializeApp();
   }
 
@@ -195,6 +231,14 @@ class _SplashScreenState extends State<SplashScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _fadeController.dispose();
+    _slideController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
   /// Request necessary permissions for the app
   Future<void> _requestPermissions() async {
     try {
@@ -218,78 +262,182 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: AppTheme.primaryGradient,
-        ),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // App Logo
-              Container(
-                width: 150,
-                height: 150,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
+      body: FloatingIconsBackground(
+        gradientColors: const [Color(0xFF264653), Color(0xFF2A9D8F)],
+        child: SafeArea(
+          child: Center(
+            child: FadeTransition(
+              opacity: _fadeAnim,
+              child: SlideTransition(
+                position: _slideAnim,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Feature highlights row
+                    _buildFeatureRow(
+                      Icons.fitness_center_rounded,
+                      Icons.show_chart_rounded,
+                      Icons.location_on_rounded,
+                    ),
+
+                    const SizedBox(height: 40),
+
+                    // App Name
+                    const Text(
+                      'Gym-wale',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 46,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                        height: 1.1,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    // Subtitle chip
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 18, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.3),
+                        ),
+                      ),
+                      child: const Text(
+                        'Your Fitness Partner',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(height: 48),
+
+                    // Feature pills
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: const [
+                        _SplashPill(Icons.explore_rounded, 'Find Gyms'),
+                        _SplashPill(Icons.calendar_month_rounded, 'Book Plans'),
+                        _SplashPill(Icons.bolt_rounded, 'Track Progress'),
+                      ],
+                    ),
+
+                    const SizedBox(height: 56),
+
+                    // Loading indicator
+                    AnimatedBuilder(
+                      animation: _pulseAnim,
+                      builder: (_, __) => Opacity(
+                        opacity: _pulseAnim.value,
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: 180,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: const LinearProgressIndicator(
+                                  backgroundColor: Colors.white24,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white),
+                                  minHeight: 3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            Text(
+                              'Getting things ready...',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.7),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                padding: const EdgeInsets.all(20),
-                child: ClipOval(
-                  child: Image.asset(
-                    'assets/images/logo.png',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(
-                        Icons.fitness_center,
-                        size: 80,
-                        color: AppTheme.primaryColor,
-                      );
-                    },
-                  ),
-                ),
               ),
-              
-              const SizedBox(height: 32),
-              
-              // App Name
-              const Text(
-                'Gym-wale',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 42,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              
-              const SizedBox(height: 8),
-              
-              const Text(
-                'Your Fitness Partner',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 18,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              
-              const SizedBox(height: 48),
-              
-              // Loading Indicator
-              const CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow(IconData a, IconData b, IconData c) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _buildGlowIcon(a, 56),
+        const SizedBox(width: 20),
+        _buildGlowIcon(b, 64),
+        const SizedBox(width: 20),
+        _buildGlowIcon(c, 56),
+      ],
+    );
+  }
+
+  Widget _buildGlowIcon(IconData icon, double size) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.white.withOpacity(0.08),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Icon(icon, color: Colors.white, size: size * 0.48),
+    );
+  }
+}
+
+class _SplashPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  const _SplashPill(this.icon, this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 16),
+          const SizedBox(width: 7),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

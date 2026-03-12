@@ -87,7 +87,7 @@ class AttendanceListItem extends StatelessWidget {
                 Icon(Icons.login, size: 14, color: Colors.grey[600]),
                 const SizedBox(width: 4),
                 Text(
-                  record.checkInTime!,
+                  _formatTime(record.geofenceEntry?['timestamp'] ?? record.checkInTime),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -96,7 +96,7 @@ class AttendanceListItem extends StatelessWidget {
                 Icon(Icons.logout, size: 14, color: Colors.grey[600]),
                 const SizedBox(width: 4),
                 Text(
-                  record.checkOutTime!,
+                  _formatTime(record.geofenceExit?['timestamp'] ?? record.checkOutTime),
                   style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                 ),
               ],
@@ -230,5 +230,27 @@ class AttendanceListItem extends StatelessWidget {
 
   String _getStatusText(String status) {
     return status.substring(0, 1).toUpperCase() + status.substring(1);
+  }
+
+  /// Parses a time value (ISO-8601 UTC string or "HH:MM" shorthand) and
+  /// returns a local-time "HH:mm" string so the displayed time matches the
+  /// user's timezone instead of UTC.
+  String _formatTime(dynamic value) {
+    if (value == null) return '--:--';
+    final str = value.toString().trim();
+    if (str.isEmpty) return '--:--';
+    // Full ISO-8601 (e.g. "2025-06-01T09:01:00.000Z") → convert UTC to local
+    try {
+      final dt = DateTime.parse(str).toLocal();
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {}
+    // Already in "HH:MM" or "HH:MM:SS" format — return as-is
+    if (str.contains(':')) {
+      final parts = str.split(':');
+      if (parts.length >= 2) {
+        return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+      }
+    }
+    return str;
   }
 }

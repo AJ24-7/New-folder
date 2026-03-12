@@ -331,6 +331,17 @@ class FCMService {
       stringData.channel ||
       this._mapTypeToChannel(stringData.type);
 
+    // Extract only valid Android-level keys from options to avoid leaking
+    // properties like channelId to the android root (Firebase rejects them).
+    const {
+      channelId: _ignoreChannelId,
+      notification: androidNotifOverrides,
+      ...validAndroidOpts
+    } = options.android || {};
+
+    // Same for APNS – keep aps separated from the rest.
+    const { aps: apnsApsOverrides, ...validApnsOpts } = options.apns || {};
+
     const message = {
       ...target,
       notification: {
@@ -340,25 +351,25 @@ class FCMService {
       data: stringData,
       android: {
         priority: 'high',
+        ...validAndroidOpts,
         notification: {
           channelId: resolvedChannelId,
           sound: 'default',
           priority: 'high',
           defaultVibrateTimings: true,
-          ...(options.android?.notification || {}),
+          ...(androidNotifOverrides || {}),
         },
-        ...(options.android || {}),
       },
       apns: {
+        ...validApnsOpts,
         payload: {
           aps: {
             sound: 'default',
             badge: 1,
             contentAvailable: true,
-            ...(options.apns?.aps || {}),
+            ...(apnsApsOverrides || {}),
           },
         },
-        ...(options.apns || {}),
       },
     };
 

@@ -135,6 +135,13 @@
             </intent-filter>
         </receiver>
             
+        <!-- ─────────────────────────────────────────────────────────
+             IMAGE CROPPER — required by image_cropper package (CanHub)
+        ──────────────────────────────────────────────────────────── -->
+        <activity
+            android:name="com.canhub.cropper.CropImageActivity"
+            android:theme="@style/Base.Theme.AppCompat" />
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -150,6 +157,20 @@
         <meta-data
             android:name="com.google.firebase.messaging.default_notification_icon"
             android:resource="@mipmap/ic_launcher" />
+            
+        <!-- Foreground task notification icons -->
+        <meta-data
+            android:name="com.gymwale.notif.ic_location"
+            android:resource="@drawable/ic_location" />
+        <meta-data
+            android:name="com.gymwale.notif.ic_dumbell"
+            android:resource="@drawable/ic_dumbell" />
+        <meta-data
+            android:name="com.gymwale.notif.ic_check"
+            android:resource="@drawable/ic_check" />
+        <meta-data
+            android:name="com.gymwale.notif.ic_gym"
+            android:resource="@drawable/ic_gym" />
             
         <!-- Notification Color -->
         <meta-data

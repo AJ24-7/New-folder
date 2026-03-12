@@ -5,7 +5,8 @@ import '../providers/notification_provider.dart';
 import '../screens/notifications/notification_list_screen.dart';
 
 class NotificationBell extends StatefulWidget {
-  const NotificationBell({super.key});
+  final Color? iconColor;
+  const NotificationBell({super.key, this.iconColor});
 
   @override
   State<NotificationBell> createState() => _NotificationBellState();
@@ -30,7 +31,7 @@ class _NotificationBellState extends State<NotificationBell> {
       alignment: Alignment.center,
       children: [
         IconButton(
-          icon: const Icon(Icons.notifications_outlined),
+          icon: Icon(Icons.notifications_outlined, color: widget.iconColor),
           onPressed: () {
             Navigator.push(
               context,

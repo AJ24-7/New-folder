@@ -1,6 +1,8 @@
 // lib/screens/notifications/bug_report_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import '../../config/app_theme.dart';
 import '../../providers/notification_provider.dart';
 
 class BugReportScreen extends StatefulWidget {
@@ -73,14 +75,79 @@ class _BugReportScreenState extends State<BugReportScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final isMobile = size.width <= 600;
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Report to Super Admin'),
-      ),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
+      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
+      body: Column(
+        children: [
+          // Top Navigation Bar
+          Container(
+            padding: EdgeInsets.only(
+              top: topPadding > 0 ? topPadding + 8 : 16,
+              bottom: 16,
+              left: 12,
+              right: 12,
+            ),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: isDark
+                    ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+                    : [AppTheme.primaryColor, AppTheme.secondaryColor],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.primaryColor.withValues(alpha: 0.35),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 20, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+                ),
+                Expanded(
+                  child: Row(
+                    children: [
+                      FaIcon(
+                        FontAwesomeIcons.bug,
+                        color: Colors.white,
+                        size: isMobile ? 20 : 24,
+                      ),
+                      const SizedBox(width: 12),
+                      Flexible(
+                        child: Text(
+                          'Report to Super Admin',
+                          style: TextStyle(
+                            fontSize: isMobile ? 18 : 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Content
+          Expanded(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.all(16),
           children: [
             Card(
               child: Padding(
@@ -252,7 +319,10 @@ class _BugReportScreenState extends State<BugReportScreen> {
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
-        ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

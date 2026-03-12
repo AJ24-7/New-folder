@@ -175,6 +175,9 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 600;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputFillColor = isDark ? const Color(0xFF334155) : const Color(0xFFF8FAFC);
+    final inputBorderColor = isDark ? const Color(0xFF475569) : const Color(0xFFE5E7EB);
 
     return Scaffold(
       body: Container(
@@ -182,10 +185,12 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppTheme.primaryColor.withValues(alpha: 0.05),
-              AppTheme.secondaryColor.withValues(alpha: 0.02),
-            ],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    AppTheme.primaryColor.withValues(alpha: 0.05),
+                    AppTheme.secondaryColor.withValues(alpha: 0.02),
+                  ],
           ),
         ),
         child: Center(
@@ -195,11 +200,11 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
               width: isDesktop ? 480 : double.infinity,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -214,14 +219,13 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                     Icon(
                       Icons.lock_reset,
                       size: 64,
-                      color: AppTheme.primaryColor,
+                      color: Theme.of(context).colorScheme.primary,
                     ),
                     const SizedBox(height: 24),
                     Text(
                       'Verify OTP',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.textPrimaryColor,
                           ),
                       textAlign: TextAlign.center,
                     ),
@@ -229,7 +233,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                     Text(
                       'Enter the OTP sent to ${widget.email} and your new password.',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: AppTheme.textSecondaryColor,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
                           ),
                       textAlign: TextAlign.center,
                     ),
@@ -245,19 +249,19 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                         hintText: 'Enter 6-digit OTP',
                         prefixIcon: const Icon(Icons.pin_outlined),
                         filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
+                        fillColor: inputFillColor,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.primaryColor,
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
                             width: 2,
                           ),
                         ),
@@ -281,7 +285,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                       child: TextButton(
                         onPressed: _isLoading ? null : _resendOTP,
                         style: TextButton.styleFrom(
-                          foregroundColor: AppTheme.primaryColor,
+                          foregroundColor: Theme.of(context).colorScheme.primary,
                         ),
                         child: const Text('Resend OTP'),
                       ),
@@ -297,19 +301,19 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                         hintText: 'Enter new password',
                         prefixIcon: const Icon(Icons.lock_outlined),
                         filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
+                        fillColor: inputFillColor,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.primaryColor,
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
                             width: 2,
                           ),
                         ),
@@ -334,7 +338,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.05),
+                        color: Theme.of(context).colorScheme.primary.withValues(alpha: isDark ? 0.15 : 0.05),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Column(
@@ -344,7 +348,6 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                             'Password Requirements:',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   fontWeight: FontWeight.bold,
-                                  color: AppTheme.textPrimaryColor,
                                 ),
                           ),
                           const SizedBox(height: 4),
@@ -367,19 +370,19 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                         hintText: 'Re-enter new password',
                         prefixIcon: const Icon(Icons.lock_outlined),
                         filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
+                        fillColor: inputFillColor,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                          borderSide: BorderSide(color: inputBorderColor),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppTheme.primaryColor,
+                          borderSide: BorderSide(
+                            color: Theme.of(context).colorScheme.primary,
                             width: 2,
                           ),
                         ),
@@ -466,7 +469,7 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
                       icon: const Icon(Icons.arrow_back),
                       label: const Text('Back to Login'),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppTheme.primaryColor,
+                        foregroundColor: Theme.of(context).colorScheme.primary,
                       ),
                     ),
                   ],
@@ -484,17 +487,15 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen> {
       padding: const EdgeInsets.only(top: 2),
       child: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.check_circle_outline,
             size: 14,
-            color: AppTheme.textSecondaryColor,
+            color: Theme.of(context).textTheme.bodySmall?.color,
           ),
           const SizedBox(width: 6),
           Text(
             text,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppTheme.textSecondaryColor,
-                ),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),

@@ -46,8 +46,28 @@ class ApiService {
     await prefs.remove('auth_token');
     await prefs.remove('user_id');
     await prefs.remove('user_email');
+    await prefs.remove('cached_user');
     // Signal the geofence background isolate to halt on next tick.
     await prefs.setBool('geofence_has_active_membership', false);
+  }
+
+  /// Cache user data locally so the session survives app restarts even when
+  /// the network is unavailable or the token hasn't been refreshed yet.
+  static Future<void> cacheUser(User user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('cached_user', jsonEncode(user.toJson()));
+  }
+
+  /// Restore the previously cached [User], or null if nothing was cached.
+  static Future<User?> getCachedUser() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('cached_user');
+    if (raw == null) return null;
+    try {
+      return User.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
   }
 
   static bool get isAuthenticated => _token != null;

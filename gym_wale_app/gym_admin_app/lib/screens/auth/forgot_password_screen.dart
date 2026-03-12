@@ -71,6 +71,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 600;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: Container(
@@ -78,10 +79,12 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              AppTheme.primaryColor.withValues(alpha: 0.05),
-              AppTheme.secondaryColor.withValues(alpha: 0.02),
-            ],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [
+                    AppTheme.primaryColor.withValues(alpha: 0.05),
+                    AppTheme.secondaryColor.withValues(alpha: 0.02),
+                  ],
           ),
         ),
         child: Center(
@@ -91,11 +94,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               width: isDesktop ? 480 : double.infinity,
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.1),
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                     blurRadius: 20,
                     offset: const Offset(0, 10),
                   ),
@@ -110,6 +113,9 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Widget _buildFormView() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputFillColor = isDark ? const Color(0xFF334155) : const Color(0xFFF8FAFC);
+    final inputBorderColor = isDark ? const Color(0xFF475569) : const Color(0xFFE5E7EB);
     return Form(
       key: _formKey,
       child: Column(
@@ -119,14 +125,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           Icon(
             Icons.lock_reset,
             size: 64,
-            color: AppTheme.primaryColor,
+            color: Theme.of(context).colorScheme.primary,
           ),
           const SizedBox(height: 24),
           Text(
             'Forgot Password?',
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimaryColor,
                 ),
             textAlign: TextAlign.center,
           ),
@@ -134,7 +139,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           Text(
             'Enter your admin email address and we\'ll send you an OTP to reset your password.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondaryColor,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
                 ),
             textAlign: TextAlign.center,
           ),
@@ -149,19 +154,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               hintText: 'Enter your admin email',
               prefixIcon: const Icon(Icons.email_outlined),
               filled: true,
-              fillColor: const Color(0xFFF8FAFC),
+              fillColor: inputFillColor,
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                borderSide: BorderSide(color: inputBorderColor),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                borderSide: BorderSide(color: inputBorderColor),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: AppTheme.primaryColor,
+                borderSide: BorderSide(
+                  color: Theme.of(context).colorScheme.primary,
                   width: 2,
                 ),
               ),
@@ -230,7 +235,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             icon: const Icon(Icons.arrow_back),
             label: const Text('Back to Login'),
             style: TextButton.styleFrom(
-              foregroundColor: AppTheme.primaryColor,
+              foregroundColor: Theme.of(context).colorScheme.primary,
             ),
           ),
         ],

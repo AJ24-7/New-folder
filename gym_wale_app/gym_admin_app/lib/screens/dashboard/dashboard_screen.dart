@@ -506,7 +506,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final topPadding = MediaQuery.of(context).padding.top;
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -515,12 +516,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -528,7 +535,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -538,7 +545,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 FaIcon(
                   FontAwesomeIcons.gaugeHigh,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -548,6 +555,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -557,7 +565,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(width: 8),
           // Notification Bell
-          const NotificationBell(),
+          const NotificationBell(iconColor: Colors.white),
           SizedBox(width: isDesktop ? 16 : 8),
           _buildProfileMenu(context, l10n, admin, isDesktop, isTablet),
         ],
@@ -575,25 +583,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return PopupMenuButton<String>(
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundImage: _gymLogoUrl != null
-                ? NetworkImage(_gymLogoUrl!)
-                : null,
-            backgroundColor: AppTheme.primaryColor,
-            child: _gymLogoUrl == null
-                ? const Icon(
-                    Icons.fitness_center,
-                    color: Colors.white,
-                    size: 18,
-                  )
-                : null,
+          Container(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 2),
+            ),
+            child: CircleAvatar(
+              radius: 17,
+              backgroundImage: _gymLogoUrl != null
+                  ? NetworkImage(_gymLogoUrl!)
+                  : null,
+              backgroundColor: Colors.white.withValues(alpha: 0.25),
+              child: _gymLogoUrl == null
+                  ? const Icon(
+                      Icons.fitness_center,
+                      color: Colors.white,
+                      size: 18,
+                    )
+                  : null,
+            ),
           ),
           if (isDesktop || isTablet) ...[
             const SizedBox(width: 8),
-            Text(admin?.name ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.w600)),
+            Text(admin?.name ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down, size: 18),
+            const Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.white),
           ],
         ],
       ),

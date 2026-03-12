@@ -114,16 +114,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              Colors.white,
-              const Color(0xFFF8FAFC),
-            ],
+            colors: isDark
+                ? [const Color(0xFF0F172A), const Color(0xFF1E293B)]
+                : [Colors.white, const Color(0xFFF8FAFC)],
           ),
         ),
         child: SafeArea(
@@ -163,6 +163,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       child: Row(
@@ -175,11 +176,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
+                      color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
                       blurRadius: 10,
                       offset: const Offset(0, 2),
                     ),
@@ -223,7 +224,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Text(
                 'Skip',
                 style: TextStyle(
-                  color: AppTheme.textSecondaryColor,
+                  color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
                   fontWeight: FontWeight.w600,
                   fontSize: 16,
                 ),
@@ -247,7 +248,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           decoration: BoxDecoration(
             color: _currentPage == index
                 ? _onboardingPages[index].color
-                : Colors.grey.shade300,
+                : Theme.of(context).brightness == Brightness.dark
+                    ? Colors.grey.shade700
+                    : Colors.grey.shade300,
             borderRadius: BorderRadius.circular(4),
           ),
         ),
@@ -296,10 +299,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             // Title
             Text(
               page.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimaryColor,
+                color: Theme.of(context).textTheme.headlineSmall?.color,
               ),
               textAlign: TextAlign.center,
             ),
@@ -311,7 +314,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               page.description,
               style: TextStyle(
                 fontSize: 16,
-                color: AppTheme.textSecondaryColor,
+                color: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.7),
                 height: 1.6,
               ),
               textAlign: TextAlign.center,
@@ -320,18 +323,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             // Registration Info for last page
             if (page.isLast) ...[
               const SizedBox(height: 32),
-              Container(
+              Builder(builder: (context) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
-                    color: orange.withOpacity(0.2),
+                    color: orange.withOpacity(isDark ? 0.3 : 0.2),
                     width: 2,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
                       blurRadius: 20,
                       offset: const Offset(0, 5),
                     ),
@@ -354,7 +359,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -363,12 +368,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
+                                  color: Theme.of(context).textTheme.bodyLarge?.color,
                                 ),
                               ),
                               Text(
                                 'support@gymwale.com',
                                 style: TextStyle(
-                                  color: AppTheme.textSecondaryColor,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
                                   fontSize: 13,
                                 ),
                               ),
@@ -381,14 +387,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: navyBlue.withOpacity(0.05),
+                        color: navyBlue.withOpacity(isDark ? 0.15 : 0.05),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Row(
                         children: [
-                          const FaIcon(
+                          FaIcon(
                             FontAwesomeIcons.circleInfo,
-                            color: navyBlue,
+                            color: isDark ? const Color(0xFF60A5FA) : navyBlue,
                             size: 16,
                           ),
                           const SizedBox(width: 8),
@@ -397,7 +403,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                               'Registration includes setup assistance and training',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: navyBlue.withOpacity(0.8),
+                                color: isDark ? const Color(0xFF93C5FD) : navyBlue.withOpacity(0.8),
                               ),
                             ),
                           ),
@@ -406,7 +412,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                   ],
                 ),
-              ),
+              );
+              }),
             ],
           ],
         ),
@@ -434,7 +441,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               icon: const Icon(Icons.arrow_back),
               label: const Text('Back'),
               style: TextButton.styleFrom(
-                foregroundColor: AppTheme.textSecondaryColor,
+                foregroundColor: Theme.of(context).textTheme.bodyMedium?.color?.withOpacity(0.6),
               ),
             )
           else

@@ -215,7 +215,8 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -224,12 +225,18 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -237,7 +244,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -247,7 +254,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
               children: [
                 FaIcon(
                   FontAwesomeIcons.tags,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -257,6 +264,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -274,8 +282,8 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
               icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
               label: Text(_tabController.index == 0 ? 'Create Offer' : 'Create Coupon'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.primaryColor,
               ),
             )
           else if (!isMobile)
@@ -286,9 +294,9 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                   : _showCreateCouponDialog(),
               icon: const FaIcon(FontAwesomeIcons.plus, size: 20),
               tooltip: _tabController.index == 0 ? 'Create Offer' : 'Create Coupon',
-              color: Colors.white,
+              color: AppTheme.primaryColor,
               style: IconButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
+                backgroundColor: Colors.white,
                 padding: const EdgeInsets.all(12),
               ),
             )
@@ -298,8 +306,8 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
               onPressed: () => _tabController.index == 0 
                   ? _showCreateOfferDialog() 
                   : _showCreateCouponDialog(),
-              backgroundColor: AppTheme.primaryColor,
-              child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 20),
+              backgroundColor: Colors.white,
+              child: const FaIcon(FontAwesomeIcons.plus, color: AppTheme.primaryColor, size: 20),
             ),
         ],
       ),
@@ -2097,7 +2105,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                           ),
                           const SizedBox(height: 12),
                           DropdownButtonFormField<String>(
-                            value: applicableTo,
+                            initialValue: applicableTo,
                             decoration: const InputDecoration(
                               labelText: 'Apply Offer To',
                               border: OutlineInputBorder(),

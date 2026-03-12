@@ -756,6 +756,56 @@ router.post('/verify-login-2fa', tempAuth, async (req, res) => {
 });
 
 
+// Refresh token — issues a new JWT with the same session timeout duration
+// Called proactively by the app before the current token expires.
+router.post('/refresh-token', gymadminAuth, async (req, res) => {
+  try {
+    const gymId = req.admin?.id;
+    if (!gymId) {
+      return res.status(401).json({ success: false, message: 'Invalid authentication' });
+    }
+
+    const gym = await Gym.findById(gymId);
+    if (!gym || gym.status !== 'approved') {
+      return res.status(403).json({ success: false, message: 'Gym not found or not approved' });
+    }
+
+    // Read session timeout from security settings (same logic as login)
+    let sessionTimeout = 60;
+    try {
+      const settings = await SecuritySettings.findOne({ gymId: gym._id });
+      if (settings?.sessionTimeout?.enabled && settings.sessionTimeout.timeoutMinutes) {
+        sessionTimeout = settings.sessionTimeout.timeoutMinutes;
+      }
+    } catch (err) {
+      console.log('⚠️ Could not fetch session timeout for refresh, using default:', err.message);
+    }
+
+    const payload = {
+      admin: {
+        id: gym.id,
+        email: gym.email
+      }
+    };
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: `${sessionTimeout}m` });
+
+    const tokenExpiresAt = new Date(Date.now() + sessionTimeout * 60 * 1000);
+
+    console.log(`🔄 Token refreshed for ${gym.email}, expires in ${sessionTimeout} minutes`);
+
+    res.json({
+      success: true,
+      token,
+      tokenExpiresAt: tokenExpiresAt.toISOString(),
+      tokenExpiresInMinutes: sessionTimeout,
+    });
+  } catch (error) {
+    console.error('❌ Error refreshing token:', error);
+    res.status(500).json({ success: false, message: 'Failed to refresh token' });
+  }
+});
+
+
 // Verify 2FA code for email-based authentication (settings management)
 router.post('/verify-2fa-email', gymadminAuth, async (req, res) => {
   try {

@@ -160,6 +160,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
     final isDesktop = size.width > 900;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       body: Stack(
@@ -176,11 +177,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 maxHeight: isDesktop ? 550 : size.height * 0.95,
               ),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: isDark ? const Color(0xFF1E293B) : Colors.white,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.25),
+                    color: Colors.black.withOpacity(isDark ? 0.4 : 0.25),
                     blurRadius: 50,
                     offset: const Offset(0, 25),
                   ),
@@ -214,16 +215,15 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildAnimatedBackground() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.white,
-            const Color(0xFFF8FAFC),
-            Colors.white,
-          ],
+          colors: isDark
+              ? [const Color(0xFF0F172A), const Color(0xFF1E293B), const Color(0xFF0F172A)]
+              : [Colors.white, const Color(0xFFF8FAFC), Colors.white],
         ),
       ),
       child: Stack(
@@ -319,16 +319,16 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildMobileHeader() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 24),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppTheme.primaryColor.withOpacity(0.1),
-            AppTheme.secondaryColor.withOpacity(0.05),
-          ],
+          colors: isDark
+              ? [AppTheme.primaryColor.withOpacity(0.15), AppTheme.secondaryColor.withOpacity(0.1)]
+              : [AppTheme.primaryColor.withOpacity(0.1), AppTheme.secondaryColor.withOpacity(0.05)],
         ),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24),
@@ -341,11 +341,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             width: 60,
             height: 60,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? const Color(0xFF334155) : Colors.white,
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.primaryColor.withOpacity(0.2),
+                  color: AppTheme.primaryColor.withOpacity(isDark ? 0.3 : 0.2),
                   blurRadius: 20,
                   offset: const Offset(0, 5),
                 ),
@@ -386,17 +386,23 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   }
 
   Widget _buildLoginForm(bool isDesktop) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final inputFillColor = isDark ? const Color(0xFF334155) : Colors.white;
+    final inputBorderColor = isDark ? const Color(0xFF475569) : const Color(0xFFE5E7EB);
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: isDesktop ? 40 : 24,
         vertical: isDesktop ? 48 : 32,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.white, Color(0xFFFAFAFA)],
-          stops: [0.0, 1.0],
+          colors: isDark
+              ? [const Color(0xFF1E293B), const Color(0xFF1A2332)]
+              : [Colors.white, const Color(0xFFFAFAFA)],
+          stops: const [0.0, 1.0],
         ),
       ),
       child: Form(
@@ -410,7 +416,6 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 'Welcome Back',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimaryColor,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -418,7 +423,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               Text(
                 'Please enter your admin credentials',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppTheme.textSecondaryColor,
+                  color: Theme.of(context).textTheme.bodySmall?.color,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -434,18 +439,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 hintText: 'Enter your admin email',
                 prefixIcon: const Icon(Icons.email_outlined),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: inputFillColor,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  borderSide: BorderSide(color: inputBorderColor),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  borderSide: BorderSide(color: inputBorderColor),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
                 ),
               ),
               validator: (value) {
@@ -469,18 +474,18 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 hintText: 'Enter your password',
                 prefixIcon: const Icon(Icons.lock_outlined),
                 filled: true,
-                fillColor: Colors.white,
+                fillColor: inputFillColor,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  borderSide: BorderSide(color: inputBorderColor),
                 ),
                 enabledBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE5E7EB)),
+                  borderSide: BorderSide(color: inputBorderColor),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppTheme.primaryColor, width: 2),
+                  borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
                 ),
                 suffixIcon: IconButton(
                   icon: Icon(
@@ -564,10 +569,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   ),
                 );
               },
-              child: const Text(
+              child: Text(
                 'Forgot your password?',
                 style: TextStyle(
-                  color: AppTheme.primaryColor,
+                  color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.w500,
                 ),
               ),

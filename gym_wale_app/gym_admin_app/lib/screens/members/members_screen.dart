@@ -410,7 +410,8 @@ class _MembersScreenState extends State<MembersScreen> {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
     final isTablet = size.width > 600 && size.width <= 900;
-    
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: EdgeInsets.only(
         top: isDesktop ? 24 : (topPadding > 0 ? topPadding + 8 : 16),
@@ -419,12 +420,18 @@ class _MembersScreenState extends State<MembersScreen> {
         right: isDesktop ? 24 : 12,
       ),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF3730A3), const Color(0xFF5B21B6)]
+              : [AppTheme.primaryColor, AppTheme.secondaryColor],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Theme.of(context).shadowColor.withValues(alpha: 0.1),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+            color: AppTheme.primaryColor.withValues(alpha: 0.35),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
@@ -432,7 +439,7 @@ class _MembersScreenState extends State<MembersScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24),
+              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -442,7 +449,7 @@ class _MembersScreenState extends State<MembersScreen> {
               children: [
                 FaIcon(
                   FontAwesomeIcons.users,
-                  color: AppTheme.primaryColor,
+                  color: Colors.white,
                   size: isMobile ? 20 : 24,
                 ),
                 const SizedBox(width: 12),
@@ -452,6 +459,7 @@ class _MembersScreenState extends State<MembersScreen> {
                     style: TextStyle(
                       fontSize: isMobile ? 18 : 24,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -466,13 +474,20 @@ class _MembersScreenState extends State<MembersScreen> {
               onPressed: _showAddMemberDialog,
               icon: const FaIcon(FontAwesomeIcons.userPlus, size: 16),
               label: const Text('Add Member'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.primaryColor,
+              ),
             ),
             const SizedBox(width: 12),
             OutlinedButton.icon(
               onPressed: _showRemoveMembersMenu,
               icon: const FaIcon(FontAwesomeIcons.userMinus, size: 16),
               label: const Text('Remove Members'),
-              style: OutlinedButton.styleFrom(foregroundColor: AppTheme.errorColor),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white70),
+              ),
             ),
           ] else if (isTablet) ...[
             // Tablet: Show compact icon buttons
@@ -480,9 +495,9 @@ class _MembersScreenState extends State<MembersScreen> {
               onPressed: _showAddMemberDialog,
               icon: const FaIcon(FontAwesomeIcons.userPlus, size: 20),
               tooltip: 'Add Member',
-              color: Colors.white,
+              color: AppTheme.primaryColor,
               style: IconButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
+                backgroundColor: Colors.white,
                 padding: const EdgeInsets.all(12),
               ),
             ),
@@ -491,16 +506,16 @@ class _MembersScreenState extends State<MembersScreen> {
               onPressed: _showRemoveMembersMenu,
               icon: const FaIcon(FontAwesomeIcons.userMinus, size: 20),
               tooltip: 'Remove Members',
-              color: AppTheme.errorColor,
+              color: Colors.white,
               style: IconButton.styleFrom(
-                side: const BorderSide(color: AppTheme.errorColor),
+                backgroundColor: AppTheme.errorColor.withValues(alpha: 0.85),
                 padding: const EdgeInsets.all(12),
               ),
             ),
           ] else ...[
             // Mobile: Show menu with actions
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
+              icon: const Icon(Icons.more_vert, color: Colors.white),
               tooltip: 'More actions',
               onSelected: (value) {
                 switch (value) {
