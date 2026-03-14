@@ -302,11 +302,13 @@ class ApiService {
     }
   }
 
-  Future<bool> toggleOfferStatus(String offerId, String action) async {
+  Future<bool> toggleOfferStatus(String offerId, String action, {String? newEndDate}) async {
     try {
+      final data = <String, dynamic>{'action': action};
+      if (newEndDate != null) data['newEndDate'] = newEndDate;
       final response = await _dio.patch(
         '${ApiConfig.offers}/$offerId/toggle',
-        data: {'action': action},
+        data: data,
       );
       return response.statusCode == 200;
     } catch (e) {

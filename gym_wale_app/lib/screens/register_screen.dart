@@ -8,6 +8,11 @@ import '../config/app_theme.dart';
 import '../widgets/floating_icons_background.dart';
 import 'home_screen.dart';
 
+// Brand colors — shared with splash / onboarding
+const Color _brandIndigo = Color(0xFF3F51B5);
+const Color _brandOrange = Color(0xFFF4A261);
+const Color _tealAccent = Color(0xFF2A9D8F);
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
 
@@ -59,8 +64,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
-      // On web, clientId must be set (Google Identity Services reads it).
-      // On Android, serverClientId is needed to receive an idToken for backend verification.
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
         clientId: kIsWeb
@@ -72,7 +75,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       );
 
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) return; // User cancelled
+      if (googleUser == null) return;
 
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
@@ -108,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _handleRegister() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
+
       final success = await authProvider.register({
         'name': _nameController.text.trim(),
         'email': _emailController.text.trim(),
@@ -135,23 +138,26 @@ class _RegisterScreenState extends State<RegisterScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: FloatingIconsBackground(
-        gradientColors: const [Color(0xFF2A9D8F), Color(0xFF52B788)],
+        gradientColors: const [Color(0xFF1A1A2E), Color(0xFF16213E)],
+        iconColor: _tealAccent,
+        showGlowOverlays: true,
         child: SafeArea(
           child: Column(
             children: [
-              // Back button row
+              // ── Back button ─────────────────────────────────────────────
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
                     icon: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
+                        color: Colors.white.withOpacity(0.08),
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withOpacity(0.2),
                         ),
                       ),
                       child: const Icon(
@@ -164,9 +170,11 @@ class _RegisterScreenState extends State<RegisterScreen>
                   ),
                 ),
               ),
+
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 4),
                   child: FadeTransition(
                     opacity: _fadeAnim,
                     child: SlideTransition(
@@ -174,62 +182,149 @@ class _RegisterScreenState extends State<RegisterScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Header
+                          // ── Brand header ─────────────────────────────────
                           Column(
                             children: [
+                              // Logo circle with teal gradient + glow
                               Container(
-                                width: 64,
-                                height: 64,
+                                width: 90,
+                                height: 90,
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
                                   shape: BoxShape.circle,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      _tealAccent.withOpacity(0.2),
+                                      _brandIndigo.withOpacity(0.15),
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
                                   border: Border.all(
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: _tealAccent.withOpacity(0.4),
                                     width: 2,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _tealAccent.withOpacity(0.25),
+                                      blurRadius: 30,
+                                      spreadRadius: 5,
+                                    ),
+                                  ],
                                 ),
-                                child: const Icon(
-                                  Icons.person_add_rounded,
-                                  size: 32,
-                                  color: Colors.white,
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                    width: 56,
+                                    height: 56,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.fitness_center_rounded,
+                                      size: 44,
+                                      color: _tealAccent,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 16),
+
+                              // Brand name: Gym-wale
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Text(
+                                    'Gym',
+                                    style: TextStyle(
+                                      color: _brandIndigo,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                  Text(
+                                    '-',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.5),
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w300,
+                                    ),
+                                  ),
+                                  Text(
+                                    'wale',
+                                    style: TextStyle(
+                                      color: _brandOrange,
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1.0,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+
+                              // Subtitle chip
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: _tealAccent.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                      color: _tealAccent.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  'Create Account',
+                                  style: TextStyle(
+                                    color: _tealAccent,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+
+                              // Title
                               const Text(
-                                'Create Account',
+                                'Join Gym-wale',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 28,
+                                  fontSize: 34,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.5,
+                                  height: 1.15,
                                 ),
+                                textAlign: TextAlign.center,
                               ),
-                              const SizedBox(height: 6),
+                              const SizedBox(height: 8),
                               Text(
-                                'Sign up to get started',
+                                'Start your fitness journey today',
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.8),
+                                  color: Colors.white.withOpacity(0.7),
                                   fontSize: 15,
+                                  height: 1.6,
                                 ),
+                                textAlign: TextAlign.center,
                               ),
                             ],
                           ),
 
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 28),
 
-                          // Glassmorphic card
+                          // ── Glassmorphic form card ────────────────────────
                           Container(
                             padding: const EdgeInsets.all(24),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
+                              color: Colors.white.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(24),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.25),
+                                color: Colors.white.withOpacity(0.15),
                                 width: 1.2,
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.15),
+                                  color: Colors.black.withOpacity(0.2),
                                   blurRadius: 30,
                                   offset: const Offset(0, 10),
                                 ),
@@ -294,11 +389,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         _obscurePassword
                                             ? Icons.visibility_outlined
                                             : Icons.visibility_off_outlined,
-                                        color: Colors.white70,
+                                        color: Colors.white54,
                                         size: 20,
                                       ),
                                       onPressed: () => setState(
-                                          () => _obscurePassword = !_obscurePassword),
+                                          () => _obscurePassword =
+                                              !_obscurePassword),
                                     ),
                                     validator: (value) {
                                       if (value == null || value.isEmpty) {
@@ -321,7 +417,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                                         _obscureConfirmPassword
                                             ? Icons.visibility_outlined
                                             : Icons.visibility_off_outlined,
-                                        color: Colors.white70,
+                                        color: Colors.white54,
                                         size: 20,
                                       ),
                                       onPressed: () => setState(() =>
@@ -340,24 +436,25 @@ class _RegisterScreenState extends State<RegisterScreen>
                                   ),
                                   const SizedBox(height: 24),
 
-                                  // Register Button
+                                  // Register button — teal fill matching onboarding CTA
                                   Consumer<AuthProvider>(
                                     builder: (context, authProvider, _) {
                                       return SizedBox(
                                         width: double.infinity,
-                                        height: 54,
+                                        height: 58,
                                         child: ElevatedButton(
                                           onPressed: authProvider.isLoading
                                               ? null
                                               : _handleRegister,
                                           style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.white,
-                                            foregroundColor:
-                                                const Color(0xFF2A9D8F),
-                                            elevation: 0,
+                                            backgroundColor: _tealAccent,
+                                            foregroundColor: Colors.white,
+                                            elevation: 8,
+                                            shadowColor: _tealAccent
+                                                .withOpacity(0.4),
                                             shape: RoundedRectangleBorder(
                                               borderRadius:
-                                                  BorderRadius.circular(14),
+                                                  BorderRadius.circular(16),
                                             ),
                                           ),
                                           child: authProvider.isLoading
@@ -367,14 +464,15 @@ class _RegisterScreenState extends State<RegisterScreen>
                                                   child:
                                                       CircularProgressIndicator(
                                                     strokeWidth: 2.5,
-                                                    color: Color(0xFF2A9D8F),
+                                                    color: Colors.white,
                                                   ),
                                                 )
                                               : const Text(
                                                   'Create Account',
                                                   style: TextStyle(
-                                                    fontSize: 16,
+                                                    fontSize: 17,
                                                     fontWeight: FontWeight.w700,
+                                                    color: Colors.white,
                                                   ),
                                                 ),
                                         ),
@@ -386,23 +484,22 @@ class _RegisterScreenState extends State<RegisterScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                          // OR divider
+                          // ── OR divider ────────────────────────────────────
                           Row(
                             children: [
                               Expanded(
                                 child: Divider(
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
+                                    color: Colors.white.withOpacity(0.2)),
                               ),
                               Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 16),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16),
                                 child: Text(
                                   'OR',
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.7),
+                                    color: Colors.white.withOpacity(0.5),
                                     fontSize: 13,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -410,15 +507,14 @@ class _RegisterScreenState extends State<RegisterScreen>
                               ),
                               Expanded(
                                 child: Divider(
-                                  color: Colors.white.withOpacity(0.3),
-                                ),
+                                    color: Colors.white.withOpacity(0.2)),
                               ),
                             ],
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                          // Google button
+                          // ── Google sign-up ────────────────────────────────
                           SizedBox(
                             width: double.infinity,
                             height: 54,
@@ -426,12 +522,13 @@ class _RegisterScreenState extends State<RegisterScreen>
                               onPressed: _handleGoogleSignIn,
                               style: OutlinedButton.styleFrom(
                                 side: BorderSide(
-                                  color: Colors.white.withOpacity(0.4),
-                                ),
+                                    color: Colors.white.withOpacity(0.3)),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
                                 foregroundColor: Colors.white,
+                                backgroundColor:
+                                    Colors.white.withOpacity(0.05),
                               ),
                               icon: const FaIcon(
                                 FontAwesomeIcons.google,
@@ -449,14 +546,15 @@ class _RegisterScreenState extends State<RegisterScreen>
                             ),
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                          // Terms
+                          // ── Terms ─────────────────────────────────────────
                           Text(
                             'By signing up, you agree to our Terms of Service and Privacy Policy',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
+                              color: Colors.white.withOpacity(0.45),
                               fontSize: 12,
+                              height: 1.5,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -494,22 +592,22 @@ class _RegisterScreenState extends State<RegisterScreen>
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-        prefixIcon: Icon(icon, color: Colors.white70, size: 20),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+        prefixIcon: Icon(icon, color: Colors.white54, size: 20),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.08),
+        fillColor: Colors.white.withOpacity(0.07),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
+          borderSide: BorderSide(color: _tealAccent, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

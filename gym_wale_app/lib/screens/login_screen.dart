@@ -10,6 +10,11 @@ import 'register_screen.dart';
 import 'home_screen.dart';
 import 'forgot_password_screen.dart';
 
+// Brand colors — shared with splash / onboarding
+const Color _brandIndigo = Color(0xFF3F51B5);
+const Color _brandOrange = Color(0xFFF4A261);
+const Color _tealAccent = Color(0xFF2A9D8F);
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
 
@@ -53,7 +58,7 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      
+
       final success = await authProvider.login(
         _emailController.text.trim(),
         _passwordController.text,
@@ -76,11 +81,8 @@ class _LoginScreenState extends State<LoginScreen>
 
   Future<void> _handleGoogleSignIn() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    
+
     try {
-      // On web, clientId must be set (Google Identity Services reads it).
-      // On Android, serverClientId is needed to receive an idToken for backend verification.
-      // Both use the same Web OAuth 2.0 client (type 3) from google-services.json.
       final GoogleSignIn googleSignIn = GoogleSignIn(
         scopes: ['email', 'profile'],
         clientId: kIsWeb
@@ -90,16 +92,16 @@ class _LoginScreenState extends State<LoginScreen>
             ? null
             : '12577918948-crvmkn4j2dcfpcai33vegoq7f9u7839q.apps.googleusercontent.com',
       );
-      
+
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
-      if (googleUser == null) return; // User cancelled
-      
+      if (googleUser == null) return;
+
       final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
-      
+
       if (idToken != null) {
         final success = await authProvider.googleSignIn(idToken);
-        
+
         if (success && mounted) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(builder: (_) => const HomeScreen()),
@@ -129,7 +131,9 @@ class _LoginScreenState extends State<LoginScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: FloatingIconsBackground(
-        gradientColors: const [Color(0xFF264653), Color(0xFF2A9D8F)],
+        gradientColors: const [Color(0xFF1A1A2E), Color(0xFF16213E)],
+        iconColor: _tealAccent,
+        showGlowOverlays: true,
         child: SafeArea(
           child: Center(
             child: SingleChildScrollView(
@@ -141,63 +145,148 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Header
+                      // ── Brand header ────────────────────────────────────
                       Column(
                         children: [
+                          // Logo circle with teal gradient + glow
                           Container(
-                            width: 72,
-                            height: 72,
+                            width: 90,
+                            height: 90,
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.15),
                               shape: BoxShape.circle,
+                              gradient: LinearGradient(
+                                colors: [
+                                  _tealAccent.withOpacity(0.2),
+                                  _brandIndigo.withOpacity(0.15),
+                                ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
                               border: Border.all(
-                                color: Colors.white.withOpacity(0.3),
+                                color: _tealAccent.withOpacity(0.4),
                                 width: 2,
                               ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: _tealAccent.withOpacity(0.25),
+                                  blurRadius: 30,
+                                  spreadRadius: 5,
+                                ),
+                              ],
                             ),
-                            child: const Icon(
-                              Icons.fitness_center_rounded,
-                              size: 36,
-                              color: Colors.white,
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                width: 56,
+                                height: 56,
+                                errorBuilder: (_, __, ___) => Icon(
+                                  Icons.fitness_center_rounded,
+                                  size: 44,
+                                  color: _tealAccent,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 16),
-                          const Text(
-                            'Welcome Back!',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.5,
+
+                          // Brand name: Gym-wale
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(
+                                'Gym',
+                                style: TextStyle(
+                                  color: _brandIndigo,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                              Text(
+                                '-',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w300,
+                                ),
+                              ),
+                              Text(
+                                'wale',
+                                style: TextStyle(
+                                  color: _brandOrange,
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Subtitle chip
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: _tealAccent.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: _tealAccent.withOpacity(0.3)),
+                            ),
+                            child: Text(
+                              'Welcome Back',
+                              style: TextStyle(
+                                color: _tealAccent,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.8,
+                              ),
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Sign in to continue your fitness journey',
+                          const SizedBox(height: 12),
+
+                          // Title
+                          const Text(
+                            'Sign In',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.8),
+                              color: Colors.white,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.5,
+                              height: 1.15,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Continue your fitness journey',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.7),
                               fontSize: 15,
+                              height: 1.6,
                             ),
                             textAlign: TextAlign.center,
                           ),
                         ],
                       ),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 28),
 
-                      // Glassmorphic card
+                      // ── Glassmorphic form card ───────────────────────────
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
+                          color: Colors.white.withOpacity(0.08),
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.25),
+                            color: Colors.white.withOpacity(0.15),
                             width: 1.2,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.15),
+                              color: Colors.black.withOpacity(0.2),
                               blurRadius: 30,
                               offset: const Offset(0, 10),
                             ),
@@ -241,7 +330,7 @@ class _LoginScreenState extends State<LoginScreen>
                                         _obscurePassword
                                             ? Icons.visibility_outlined
                                             : Icons.visibility_off_outlined,
-                                        color: Colors.white70,
+                                        color: Colors.white54,
                                         size: 20,
                                       ),
                                       onPressed: () => setState(
@@ -268,14 +357,14 @@ class _LoginScreenState extends State<LoginScreen>
                                         ),
                                       ),
                                       style: TextButton.styleFrom(
-                                        foregroundColor: Colors.white,
+                                        foregroundColor: _tealAccent,
                                         padding: const EdgeInsets.symmetric(
                                             horizontal: 4, vertical: 6),
                                       ),
                                       child: Text(
                                         'Forgot Password?',
                                         style: TextStyle(
-                                          color: Colors.white.withOpacity(0.85),
+                                          color: _tealAccent.withOpacity(0.9),
                                           fontSize: 13,
                                           fontWeight: FontWeight.w600,
                                         ),
@@ -285,19 +374,21 @@ class _LoginScreenState extends State<LoginScreen>
 
                                   const SizedBox(height: 8),
 
-                                  // Login Button
+                                  // Login button — teal fill matching onboarding CTA
                                   SizedBox(
                                     width: double.infinity,
-                                    height: 54,
+                                    height: 58,
                                     child: ElevatedButton(
                                       onPressed: isLoading ? null : _handleLogin,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        foregroundColor: const Color(0xFF264653),
-                                        elevation: 0,
+                                        backgroundColor: _tealAccent,
+                                        foregroundColor: Colors.white,
+                                        elevation: 8,
+                                        shadowColor:
+                                            _tealAccent.withOpacity(0.4),
                                         shape: RoundedRectangleBorder(
                                           borderRadius:
-                                              BorderRadius.circular(14),
+                                              BorderRadius.circular(16),
                                         ),
                                       ),
                                       child: isLoading
@@ -306,14 +397,15 @@ class _LoginScreenState extends State<LoginScreen>
                                               height: 22,
                                               child: CircularProgressIndicator(
                                                 strokeWidth: 2.5,
-                                                color: Color(0xFF264653),
+                                                color: Colors.white,
                                               ),
                                             )
                                           : const Text(
                                               'Login',
                                               style: TextStyle(
-                                                fontSize: 16,
+                                                fontSize: 17,
                                                 fontWeight: FontWeight.w700,
+                                                color: Colors.white,
                                               ),
                                             ),
                                     ),
@@ -327,36 +419,33 @@ class _LoginScreenState extends State<LoginScreen>
 
                       const SizedBox(height: 24),
 
-                      // OR divider
+                      // ── OR divider ───────────────────────────────────────
                       Row(
                         children: [
                           Expanded(
-                            child: Divider(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
+                            child: Divider(color: Colors.white.withOpacity(0.2)),
                           ),
                           Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
                               'OR',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withOpacity(0.5),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                           ),
                           Expanded(
-                            child: Divider(
-                              color: Colors.white.withOpacity(0.3),
-                            ),
+                            child: Divider(color: Colors.white.withOpacity(0.2)),
                           ),
                         ],
                       ),
 
                       const SizedBox(height: 24),
 
-                      // Google button
+                      // ── Google sign-in ───────────────────────────────────
                       SizedBox(
                         width: double.infinity,
                         height: 54,
@@ -364,12 +453,12 @@ class _LoginScreenState extends State<LoginScreen>
                           onPressed: _handleGoogleSignIn,
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
-                              color: Colors.white.withOpacity(0.4),
-                            ),
+                                color: Colors.white.withOpacity(0.3)),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),
                             ),
                             foregroundColor: Colors.white,
+                            backgroundColor: Colors.white.withOpacity(0.05),
                           ),
                           icon: const FaIcon(
                             FontAwesomeIcons.google,
@@ -389,14 +478,14 @@ class _LoginScreenState extends State<LoginScreen>
 
                       const SizedBox(height: 28),
 
-                      // Register link
+                      // ── Register link ────────────────────────────────────
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
                             "Don't have an account? ",
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.75),
+                              color: Colors.white.withOpacity(0.65),
                               fontSize: 14,
                             ),
                           ),
@@ -405,14 +494,14 @@ class _LoginScreenState extends State<LoginScreen>
                               MaterialPageRoute(
                                   builder: (_) => const RegisterScreen()),
                             ),
-                            child: const Text(
+                            child: Text(
                               'Sign Up',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: _tealAccent,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 decoration: TextDecoration.underline,
-                                decorationColor: Colors.white,
+                                decorationColor: _tealAccent,
                               ),
                             ),
                           ),
@@ -448,22 +537,22 @@ class _LoginScreenState extends State<LoginScreen>
       validator: validator,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
-        prefixIcon: Icon(icon, color: Colors.white70, size: 20),
+        hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+        prefixIcon: Icon(icon, color: Colors.white54, size: 20),
         suffixIcon: suffixIcon,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.08),
+        fillColor: Colors.white.withOpacity(0.07),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.15)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Colors.white, width: 1.5),
+          borderSide: BorderSide(color: _tealAccent, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),

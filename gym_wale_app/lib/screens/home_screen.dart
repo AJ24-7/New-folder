@@ -10,6 +10,7 @@ import '../providers/attendance_provider.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/geofencing_service.dart';
+import '../services/foreground_task_service.dart';
 import '../models/gym.dart';
 import '../models/trainer.dart';
 import '../models/banner_offer.dart';
@@ -52,6 +53,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String? _currentAddress;
   bool _showCenterFAB = true; // Default to showing FAB
   Set<String> _activeGymIds = {}; // Track gyms user is an active member of
+  List<Map<String, dynamic>> _activeMembershipsData = []; // Full data for membership card
+  List<Map<String, dynamic>> _nearbyOffers = []; // Nearby gym offers for top offers section
 
   // ── Location permission warning for geofence-enabled gyms ───────────────────
   bool _showLocationWarning = false;
@@ -180,6 +183,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
 
         if (geofenceEnabled) {
+          // ── Frozen membership check ─────────────────────────────────────────
+          // Persist the frozen state so the background isolate skips geofence
+          // processing entirely when the membership is frozen.
+          final isFrozen = membership['currentlyFrozen'] == true;
+          await ForegroundTaskService.persistFrozenMembership(isFrozen);
+          if (isFrozen) {
+            debugPrint('[HOME] Membership frozen for gym $gymId — geofence paused');
+            continue;
+          }
+
           // Track that at least one active gym uses geofencing so the inline
           // location warning banner is shown/refreshed on the home screen.
           if (mounted && !_geofenceIsActive) {
@@ -338,7 +351,289 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// Load user's active memberships to filter gyms
+  /// Dynamic active membership card shown at the top of the home screen
+  Widget _buildActiveMembershipCard() {
+    if (_activeMembershipsData.isEmpty) return const SizedBox.shrink();
+
+    final membership = _activeMembershipsData.first;
+    final extraCount = _activeMembershipsData.length - 1;
+
+    final gymName = membership['gym']?['gymName'] ??
+        membership['gym']?['name'] ??
+        'Your Gym';
+    final gymLogo = membership['gym']?['logo'];
+
+    final planDisplayName = membership['plan']?['name'] ??
+        membership['planSelected'] ??
+        'Standard';
+    final monthlyPlan = membership['monthlyPlan'] ?? '1 Month';
+
+    final daysRemaining = ((membership['daysRemaining'] ?? 0) as num).toInt();
+    final currentlyFrozen = membership['currentlyFrozen'] == true;
+
+    // Compute effective end date
+    DateTime effectiveEnd;
+    try {
+      if (membership['validUntil'] != null &&
+          membership['validUntil'].toString().isNotEmpty) {
+        effectiveEnd = DateTime.parse(membership['validUntil']);
+      } else if (membership['endDate'] != null &&
+          membership['endDate'].toString().isNotEmpty) {
+        effectiveEnd = DateTime.parse(membership['endDate']);
+      } else {
+        effectiveEnd = DateTime.now().add(Duration(days: daysRemaining));
+      }
+    } catch (_) {
+      effectiveEnd = DateTime.now().add(Duration(days: daysRemaining));
+    }
+
+    // Approximate total plan duration for the progress bar
+    int totalDays = 30;
+    try {
+      final parts = monthlyPlan.split(' ');
+      final months = int.tryParse(parts.first) ?? 1;
+      totalDays = months * 30;
+    } catch (_) {}
+    final progress = totalDays > 0
+        ? (daysRemaining / totalDays).clamp(0.0, 1.0)
+        : 0.0;
+
+    final validUntilFormatted =
+        '${effectiveEnd.day} ${_monthAbbr(effectiveEnd.month)} ${effectiveEnd.year}';
+
+    // Urgency colour for the days label
+    final Color daysColor;
+    if (currentlyFrozen) {
+      daysColor = AppTheme.accentColor;
+    } else if (daysRemaining <= 7) {
+      daysColor = AppTheme.dangerColor;
+    } else if (daysRemaining <= 30) {
+      daysColor = AppTheme.warningColor;
+    } else {
+      daysColor = Colors.white70;
+    }
+
+    return GestureDetector(
+      onTap: () => setState(() => _selectedIndex = 2),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 20),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF264653), Color(0xFF2A9D8F)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryColor.withValues(alpha: 0.35),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Top row: gym identity + status badge ──────────────────
+              Row(
+                children: [
+                  // Gym logo / placeholder
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: gymLogo != null && gymLogo.toString().isNotEmpty
+                        ? CachedNetworkImage(
+                            imageUrl: gymLogo.toString(),
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => const Icon(
+                              Icons.fitness_center,
+                              color: Colors.white70,
+                              size: 24,
+                            ),
+                          )
+                        : const Icon(
+                            Icons.fitness_center,
+                            color: Colors.white70,
+                            size: 24,
+                          ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          gymName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 17,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.3,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$planDisplayName · $monthlyPlan',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  // Status badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: currentlyFrozen
+                          ? AppTheme.accentColor.withValues(alpha: 0.25)
+                          : Colors.greenAccent.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: currentlyFrozen
+                            ? AppTheme.accentColor
+                            : Colors.greenAccent,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      currentlyFrozen ? '❄️ FROZEN' : '✓ ACTIVE',
+                      style: TextStyle(
+                        color: currentlyFrozen
+                            ? AppTheme.accentColor
+                            : Colors.greenAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 18),
+
+              // ── Progress bar ──────────────────────────────────────────
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: Colors.white.withValues(alpha: 0.15),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    currentlyFrozen
+                        ? AppTheme.accentColor
+                        : daysRemaining <= 7
+                            ? AppTheme.dangerColor
+                            : Colors.greenAccent,
+                  ),
+                  minHeight: 6,
+                ),
+              ),
+
+              const SizedBox(height: 10),
+
+              // ── Days remain + valid until ─────────────────────────────
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    currentlyFrozen
+                        ? 'Membership paused'
+                        : '$daysRemaining day${daysRemaining == 1 ? '' : 's'} remaining',
+                    style: TextStyle(
+                      color: daysColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Until $validUntilFormatted',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Bottom row: extra count chip + CTA button ─────────────
+              Row(
+                children: [
+                  if (extraCount > 0) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '+$extraCount more membership${extraCount > 1 ? 's' : ''}',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                  ] else
+                    const Spacer(),
+                  // CTA button
+                  TextButton.icon(
+                    onPressed: () => setState(() => _selectedIndex = 2),
+                    icon: const Icon(Icons.arrow_forward_ios,
+                        size: 14, color: Colors.white),
+                    label: const Text(
+                      'View Subscription',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white.withValues(alpha: 0.18),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Returns a 3-letter month abbreviation for display on the membership card
+  String _monthAbbr(int month) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
+    return months[(month - 1).clamp(0, 11)];
+  }
   Future<void> _loadActiveMemberships() async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -347,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       }
 
       final activeMemberships = await ApiService.getActiveMemberships();
-      
+
       setState(() {
         _activeGymIds = activeMemberships
             .map((membership) {
@@ -360,6 +655,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             .where((id) => id != null)
             .cast<String>()
             .toSet();
+        _activeMembershipsData = activeMemberships;
       });
       
       print('[HOME] Loaded ${_activeGymIds.length} active gym memberships');
@@ -444,19 +740,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  /// Get default activities for filtering
+  /// Get default activities for filtering — matches PredefinedActivities in admin app
   List<Activity> _getDefaultActivities() {
     return [
-      Activity(name: 'Yoga', icon: 'fa-yoga', description: 'Mind and body wellness'),
-      Activity(name: 'Gym', icon: 'fa-dumbbell', description: 'Strength training'),
-      Activity(name: 'Zumba', icon: 'fa-music', description: 'Dance fitness'),
-      Activity(name: 'CrossFit', icon: 'fa-crossfit', description: 'High intensity training'),
-      Activity(name: 'Cardio', icon: 'fa-heartbeat', description: 'Cardiovascular exercises'),
-      Activity(name: 'Pilates', icon: 'fa-spa', description: 'Core strengthening'),
-      Activity(name: 'Boxing', icon: 'fa-boxing-glove', description: 'Combat training'),
-      Activity(name: 'Swimming', icon: 'fa-swimmer', description: 'Water exercises'),
-      Activity(name: 'Cycling', icon: 'fa-bicycle', description: 'Indoor cycling'),
-      Activity(name: 'Martial Arts', icon: 'fa-fist-raised', description: 'Self defense training'),
+      Activity(name: 'Yoga',              icon: 'fa-person-praying',   description: 'Mind and body wellness'),
+      Activity(name: 'Zumba',             icon: 'fa-music',            description: 'Dance fitness'),
+      Activity(name: 'CrossFit',          icon: 'fa-dumbbell',         description: 'High intensity training'),
+      Activity(name: 'Weight Training',   icon: 'fa-weight-hanging',   description: 'Strength training'),
+      Activity(name: 'Cardio',            icon: 'fa-heartbeat',        description: 'Cardiovascular exercises'),
+      Activity(name: 'Pilates',           icon: 'fa-child',            description: 'Core strengthening'),
+      Activity(name: 'HIIT',              icon: 'fa-bolt',             description: 'High intensity interval training'),
+      Activity(name: 'Aerobics',          icon: 'fa-running',          description: 'Aerobic exercises'),
+      Activity(name: 'Martial Arts',      icon: 'fa-hand-fist',        description: 'Self defense training'),
+      Activity(name: 'Spin Class',        icon: 'fa-bicycle',          description: 'Indoor cycling'),
+      Activity(name: 'Swimming',          icon: 'fa-person-swimming',  description: 'Water exercises'),
+      Activity(name: 'Boxing',            icon: 'fa-hand-rock',        description: 'Combat training'),
+      Activity(name: 'Personal Training', icon: 'fa-user-tie',         description: 'One-on-one training'),
+      Activity(name: 'Bootcamp',          icon: 'fa-shoe-prints',      description: 'Group fitness bootcamp'),
+      Activity(name: 'Stretching',        icon: 'fa-arrows-up-down',   description: 'Flexibility training'),
     ];
   }
 
@@ -538,6 +839,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _loadNearbyGyms();
         // Reload offers for this city
         _loadOffers();
+        // Load nearby gym offers for top offers section
+        _loadNearbyOffers();
       } else {
         print('Position is null or widget not mounted');
         // Set a fallback message
@@ -645,7 +948,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     
     return result;
   }
-  
+
+  /// Load nearby offers based on user location (within 4 km radius)
+  Future<void> _loadNearbyOffers() async {
+    if (_currentPosition == null) return;
+    try {
+      final offersData = await ApiService.getNearbyOffers(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        radiusKm: 4,
+      );
+      if (mounted) {
+        setState(() {
+          _nearbyOffers = List<Map<String, dynamic>>.from(offersData);
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading nearby offers: $e');
+    }
+  }
+
   /// Handle offer/banner tap with navigation
   void _handleOfferTap(BannerOffer offer) {
     switch (offer.type) {
@@ -828,7 +1150,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final authProvider = Provider.of<AuthProvider>(context);
     
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: () async {
+        await _loadActiveMemberships();
+        await _loadData();
+        _loadNearbyOffers();
+      },
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         child: Column(
@@ -1272,7 +1598,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   
                   if (!_showCenterFAB) const SizedBox(height: 32),
-                  
+
+                  // ── Active Membership Card (shown when user has an active membership) ──
+                  _buildActiveMembershipCard(),
+
                   // Search Card
                   Container(
                     padding: const EdgeInsets.all(24),
@@ -1466,9 +1795,62 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       },
                     ),
                   ],
-                  
+
                   const SizedBox(height: 32),
-                  
+
+                  // Top Offers Near You
+                  if (_nearbyOffers.isNotEmpty) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.local_offer_outlined,
+                              size: 24,
+                              color: AppTheme.primaryColor,
+                            ),
+                            const SizedBox(width: 8),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Top Offers Near You',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).textTheme.titleLarge?.color,
+                                  ),
+                                ),
+                                Text(
+                                  'Deals from gyms within 4 km',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      height: 190,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: _nearbyOffers.length,
+                        itemBuilder: (context, index) {
+                          final offer = _nearbyOffers[index];
+                          return _buildNearbyOfferCard(offer);
+                        },
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 32),
+
                   // Trainer Spotlight
                   if (_topTrainers.isNotEmpty) ...[
                     Row(
@@ -1584,6 +1966,187 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNearbyOfferCard(Map<String, dynamic> offer) {
+    final title = offer['title'] ?? 'Special Offer';
+    final gymName = offer['gymName'] ?? 'Gym';
+    final type = offer['type'] ?? 'percentage';
+    final value = (offer['value'] ?? 0).toDouble();
+    final distance = offer['distance']?.toString() ?? '';
+    final category = offer['category'] ?? 'membership';
+    final endDateStr = offer['endDate'];
+    final gymId = offer['gymId']?.toString();
+
+    // Format discount label
+    final discountLabel = type == 'percentage'
+        ? '${value.toInt()}% OFF'
+        : '\u20B9${value.toInt()} OFF';
+
+    // Days remaining
+    String daysLeft = '';
+    if (endDateStr != null) {
+      try {
+        final end = DateTime.parse(endDateStr);
+        final remaining = end.difference(DateTime.now()).inDays;
+        daysLeft = remaining <= 1 ? 'Ends today' : '$remaining days left';
+      } catch (_) {}
+    }
+
+    // Category icon
+    IconData categoryIcon;
+    switch (category) {
+      case 'membership':
+        categoryIcon = Icons.card_membership;
+        break;
+      case 'training':
+        categoryIcon = Icons.fitness_center;
+        break;
+      case 'supplement':
+        categoryIcon = Icons.local_pharmacy;
+        break;
+      default:
+        categoryIcon = Icons.local_offer;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        if (gymId != null) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => GymDetailScreen(gymId: gymId),
+            ),
+          );
+        }
+      },
+      child: Container(
+        width: 280,
+        margin: const EdgeInsets.only(right: 16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFF264653), Color(0xFF2A9D8F)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primaryColor.withOpacity(0.25),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: discount badge + distance
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      discountLabel,
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                  if (distance.isNotEmpty)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white70, size: 14),
+                        const SizedBox(width: 2),
+                        Text(
+                          '$distance km',
+                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Offer title
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.3,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 6),
+              // Gym name row
+              Row(
+                children: [
+                  Icon(categoryIcon, color: Colors.white60, size: 14),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      gymName,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              // Bottom row: days remaining + arrow
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (daysLeft.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        daysLeft,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward,
+                      color: Colors.white,
+                      size: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

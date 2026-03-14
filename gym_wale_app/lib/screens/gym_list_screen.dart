@@ -111,20 +111,22 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
 
   Future<void> _loadGyms() async {
     setState(() => _isLoading = true);
-    
+
     try {
-      // Get gyms from real backend API
+      // Pass activities and price to backend for server-side filtering
       final gyms = await ApiService.getGyms(
         city: _cityController.text.isNotEmpty ? _cityController.text : null,
         search: _searchController.text.isNotEmpty ? _searchController.text : null,
+        activities: _selectedActivities.isNotEmpty ? _selectedActivities : null,
+        maxPrice: _priceRange < 10000 ? _priceRange : null,
       );
       
       if (mounted) {
         setState(() {
           _gyms = gyms;
-          _applyFilters();
           _isLoading = false;
         });
+        _applyFilters();
       }
     } catch (e) {
       print('Error loading gyms: $e');
@@ -166,9 +168,9 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
       if (mounted) {
         setState(() {
           _gyms = nearbyGyms;
-          _applyFilters();
         });
-        
+        _applyFilters();
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Found ${nearbyGyms.length} gyms nearby'),
@@ -176,8 +178,6 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           ),
         );
       }
-      
-      _applyFilters();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,80 +190,71 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   void _applyFilters() {
     print('[GYM_LIST] Applying filters...');
     print('[GYM_LIST] Total gyms: ${_gyms.length}');
-    print('[GYM_LIST] Active gym IDs: $_activeGymIds');
-    print('[GYM_LIST] Is manual search: $_isManualSearch');
-    
+    print('[GYM_LIST] Selected activities: $_selectedActivities');
+
     setState(() {
       _filteredGyms = _gyms.where((gym) {
-        // Price filter
-        bool matchesPrice = true; // Would check gym's lowest membership price
-        
         // Search filter
-        bool matchesSearch = _searchController.text.isEmpty ||
+        final matchesSearch = _searchController.text.isEmpty ||
             gym.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             (gym.city?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false);
-        
-        // Activities filter - check if gym has any of the selected activities
-        bool matchesActivities = true;
-        if (_selectedActivities.isNotEmpty) {
-          // Gym must have at least one of the selected activities
-          matchesActivities = _selectedActivities.any((selectedActivity) => 
-            gym.activities.any((gymActivity) => 
-              gymActivity.toLowerCase() == selectedActivity.toLowerCase()
-            )
-          );
-        }
-        
+
+        // Activities filter — gym must offer at least one of the selected activities
+        final matchesActivities = _selectedActivities.isEmpty ||
+            _selectedActivities.any((selected) =>
+                gym.activities.any((a) => a.toLowerCase() == selected.toLowerCase()));
+
         // Filter out active member gyms UNLESS user is manually searching
-        bool notActiveMember = !_activeGymIds.contains(gym.id) || _isManualSearch;
+        final notActiveMember = !_activeGymIds.contains(gym.id) || _isManualSearch;
         if (_activeGymIds.contains(gym.id)) {
           print('[GYM_LIST] Gym ${gym.name} (${gym.id}) - Active member: ${_isManualSearch ? "shown (manual search)" : "hidden"}');
         }
-        
-        return matchesPrice && matchesSearch && matchesActivities && notActiveMember;
+
+        return matchesSearch && matchesActivities && notActiveMember;
       }).toList();
-      
-      print('[GYM_LIST] Filtered gyms: ${_filteredGyms.length}');
-      
-      // Apply sort
-      _sortGyms(_selectedFilter);
-    });
-  }
 
-  /// Get default activities for filtering
-  List<Activity> _getDefaultActivities() {
-    return [
-      Activity(name: 'Yoga', icon: 'fa-yoga', description: 'Mind and body wellness'),
-      Activity(name: 'Gym', icon: 'fa-dumbbell', description: 'Strength training'),
-      Activity(name: 'Zumba', icon: 'fa-music', description: 'Dance fitness'),
-      Activity(name: 'CrossFit', icon: 'fa-crossfit', description: 'High intensity training'),
-      Activity(name: 'Cardio', icon: 'fa-heartbeat', description: 'Cardiovascular exercises'),
-      Activity(name: 'Pilates', icon: 'fa-spa', description: 'Core strengthening'),
-      Activity(name: 'Boxing', icon: 'fa-boxing-glove', description: 'Combat training'),
-      Activity(name: 'Swimming', icon: 'fa-swimmer', description: 'Water exercises'),
-      Activity(name: 'Cycling', icon: 'fa-bicycle', description: 'Indoor cycling'),
-      Activity(name: 'Martial Arts', icon: 'fa-fist-raised', description: 'Self defense training'),
-    ];
-  }
-
-  void _sortGyms(String sortType) {
-    setState(() {
-      _selectedFilter = sortType;
-      switch (sortType) {
+      // Apply current sort inline (avoids recursive setState issues)
+      switch (_selectedFilter) {
         case 'Rating':
           _filteredGyms.sort((a, b) => b.rating.compareTo(a.rating));
           break;
         case 'Distance':
-          _filteredGyms.sort((a, b) => 
-            (a.distance ?? double.infinity).compareTo(b.distance ?? double.infinity));
+          _filteredGyms.sort((a, b) =>
+              (a.distance ?? double.infinity).compareTo(b.distance ?? double.infinity));
           break;
         case 'Name':
           _filteredGyms.sort((a, b) => a.name.compareTo(b.name));
           break;
-        default:
-          _filteredGyms = List.from(_gyms);
       }
+
+      print('[GYM_LIST] Filtered gyms: ${_filteredGyms.length}');
     });
+  }
+
+  /// Get default activities for filtering — matches PredefinedActivities in admin app
+  List<Activity> _getDefaultActivities() {
+    return [
+      Activity(name: 'Yoga',              icon: 'fa-person-praying',   description: 'Mind and body wellness'),
+      Activity(name: 'Zumba',             icon: 'fa-music',            description: 'Dance fitness'),
+      Activity(name: 'CrossFit',          icon: 'fa-dumbbell',         description: 'High intensity training'),
+      Activity(name: 'Weight Training',   icon: 'fa-weight-hanging',   description: 'Strength training'),
+      Activity(name: 'Cardio',            icon: 'fa-heartbeat',        description: 'Cardiovascular exercises'),
+      Activity(name: 'Pilates',           icon: 'fa-child',            description: 'Core strengthening'),
+      Activity(name: 'HIIT',              icon: 'fa-bolt',             description: 'High intensity interval training'),
+      Activity(name: 'Aerobics',          icon: 'fa-running',          description: 'Aerobic exercises'),
+      Activity(name: 'Martial Arts',      icon: 'fa-hand-fist',        description: 'Self defense training'),
+      Activity(name: 'Spin Class',        icon: 'fa-bicycle',          description: 'Indoor cycling'),
+      Activity(name: 'Swimming',          icon: 'fa-person-swimming',  description: 'Water exercises'),
+      Activity(name: 'Boxing',            icon: 'fa-hand-rock',        description: 'Combat training'),
+      Activity(name: 'Personal Training', icon: 'fa-user-tie',         description: 'One-on-one training'),
+      Activity(name: 'Bootcamp',          icon: 'fa-shoe-prints',      description: 'Group fitness bootcamp'),
+      Activity(name: 'Stretching',        icon: 'fa-arrows-up-down',   description: 'Flexibility training'),
+    ];
+  }
+
+  void _sortGyms(String sortType) {
+    setState(() => _selectedFilter = sortType);
+    _applyFilters();
   }
 
   @override
@@ -475,7 +466,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                               _priceRange = 5000;
                               _showFilters = false;
                             });
-                            _applyFilters();
+                            _loadGyms(); // Reload without filters
                           },
                           child: const Text('Clear Filters'),
                         ),
@@ -485,7 +476,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                         child: ElevatedButton(
                           onPressed: () {
                             setState(() => _showFilters = false);
-                            _applyFilters();
+                            _loadGyms(); // Reload from backend with current filters
                           },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,

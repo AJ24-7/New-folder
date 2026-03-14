@@ -18,8 +18,8 @@ exports.getOffers = async (req, res) => {
       return res.status(400).json({ message: 'Gym ID is required' });
     }
 
-    // Build query
-    const query = { gymId };
+    // Build query – always exclude soft-deleted offers
+    const query = { gymId, status: { $ne: 'deleted' } };
     if (status) query.status = status;
     if (category && category !== 'all') query.category = category;
 
@@ -250,11 +250,6 @@ exports.deleteOffer = async (req, res) => {
       return res.status(404).json({ message: 'Offer not found' });
     }
 
-    // Soft delete by updating status
-    offer.status = 'deleted';
-    offer.isActive = false;
-    await offer.save();
-
     // Also disable associated coupon if exists
     if (offer.couponCode) {
       await Coupon.findOneAndUpdate(
@@ -262,6 +257,9 @@ exports.deleteOffer = async (req, res) => {
         { status: 'disabled', isActive: false }
       );
     }
+
+    // Hard delete the offer
+    await Offer.findByIdAndDelete(id);
 
     res.json({ message: 'Offer deleted successfully' });
   } catch (error) {
@@ -274,7 +272,7 @@ exports.deleteOffer = async (req, res) => {
 exports.toggleOfferStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action } = req.body; // 'pause' or 'resume'
+    const { action, newEndDate } = req.body; // 'pause' or 'resume'; newEndDate required for expired offers
 
     const offer = await Offer.findById(id);
     if (!offer) {
@@ -284,20 +282,124 @@ exports.toggleOfferStatus = async (req, res) => {
     if (action === 'pause') {
       offer.status = 'paused';
     } else if (action === 'resume') {
+      // If the offer was expired, a new end date is required to extend it
+      if (offer.status === 'expired' || new Date() > offer.endDate) {
+        if (!newEndDate) {
+          return res.status(400).json({ message: 'New end date is required to resume an expired offer' });
+        }
+        const parsedEndDate = new Date(newEndDate);
+        if (parsedEndDate <= new Date()) {
+          return res.status(400).json({ message: 'New end date must be in the future' });
+        }
+        offer.endDate = parsedEndDate;
+        // If start date is also in the past and before the new window, update it to now
+        if (offer.startDate > parsedEndDate) {
+          offer.startDate = new Date();
+        }
+      }
       offer.status = 'active';
+      offer.isActive = true;
     } else {
       return res.status(400).json({ message: 'Invalid action. Use "pause" or "resume"' });
     }
 
     await offer.save();
 
-    res.json({ 
-      message: `Offer ${action}d successfully`, 
+    res.json({
+      message: `Offer ${action}d successfully`,
       offer: await offer.populate('createdBy', 'name email')
     });
   } catch (error) {
     console.error('Error toggling offer status:', error);
     res.status(500).json({ message: 'Failed to update offer status', error: error.message });
+  }
+};
+
+// Get nearby offers based on user location
+exports.getNearbyOffers = async (req, res) => {
+  try {
+    const { lat, lng, radius = 4 } = req.query; // radius in km, default 4
+
+    if (!lat || !lng) {
+      return res.status(400).json({ message: 'Latitude and longitude are required' });
+    }
+
+    const userLat = parseFloat(lat);
+    const userLng = parseFloat(lng);
+    const maxRadius = parseFloat(radius);
+
+    const now = new Date();
+
+    // Find all active, non-expired offers
+    const offers = await Offer.find({
+      status: 'active',
+      startDate: { $lte: now },
+      endDate: { $gte: now }
+    })
+    .populate('gymId', 'gymName location logoUrl activities')
+    .sort({ highlightOffer: -1, createdAt: -1 });
+
+    // Filter by distance using Haversine formula
+    const nearbyOffers = offers.filter(offer => {
+      if (!offer.gymId || !offer.gymId.location) return false;
+      const gymLat = offer.gymId.location.lat;
+      const gymLng = offer.gymId.location.lng;
+      if (!gymLat || !gymLng) return false;
+
+      const R = 6371; // Earth radius in km
+      const dLat = (gymLat - userLat) * Math.PI / 180;
+      const dLng = (gymLng - userLng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(userLat * Math.PI / 180) * Math.cos(gymLat * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+
+      offer._doc.distance = Math.round(distance * 10) / 10; // round to 1 decimal
+
+      return distance <= maxRadius;
+    });
+
+    // Sort by distance
+    nearbyOffers.sort((a, b) => (a._doc.distance || 99) - (b._doc.distance || 99));
+
+    // Map response
+    const result = nearbyOffers.map(offer => ({
+      _id: offer._id,
+      title: offer.title,
+      description: offer.description,
+      type: offer.type,
+      value: offer.value,
+      category: offer.category,
+      startDate: offer.startDate,
+      endDate: offer.endDate,
+      templateId: offer.templateId,
+      features: offer.features,
+      gymId: offer.gymId._id,
+      gymName: offer.gymId.gymName,
+      gymLogo: offer.gymId.logoUrl,
+      gymLocation: offer.gymId.location,
+      distance: offer._doc.distance,
+      maxUses: offer.maxUses,
+      usageCount: offer.usageCount,
+      couponCode: offer.couponCode,
+      highlightOffer: offer.highlightOffer
+    }));
+
+    res.json({
+      success: true,
+      offers: result,
+      count: result.length,
+      radius: maxRadius
+    });
+
+  } catch (error) {
+    console.error('Error fetching nearby offers:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch nearby offers',
+      error: error.message
+    });
   }
 };
 

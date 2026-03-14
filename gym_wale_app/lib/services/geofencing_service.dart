@@ -215,6 +215,7 @@ class GeofencingService extends ChangeNotifier {
       await prefs.remove('geofence_polygon_coordinates');
       // Signal the background isolate to halt — no active membership/login.
       await ForegroundTaskService.persistActiveMembership(false);
+      await ForegroundTaskService.persistFrozenMembership(false);
 
       notifyListeners();
       debugPrint('[GEOFENCE] All geofences removed');
@@ -400,10 +401,10 @@ class GeofencingService extends ChangeNotifier {
   }
 
   /// Load and configure geofence based on gym's attendance settings
-  Future<bool> configureFromSettings(String gymId) async {
+  Future<bool> configureFromSettings(String gymId, {bool isFrozen = false}) async {
     try {
       debugPrint('[GEOFENCE] Loading attendance settings for gym: $gymId');
-      
+
       // Load attendance settings
       _attendanceSettings = await _settingsService.loadSettings(gymId);
 
@@ -414,6 +415,13 @@ class GeofencingService extends ChangeNotifier {
 
       debugPrint('[GEOFENCE] Settings loaded - Mode: ${_attendanceSettings!.mode}');
       debugPrint('[GEOFENCE] Geofence enabled: ${_attendanceSettings!.geofenceEnabled}');
+
+      // Persist frozen membership state for the background isolate
+      await ForegroundTaskService.persistFrozenMembership(isFrozen);
+      if (isFrozen) {
+        debugPrint('[GEOFENCE] Membership is frozen — geofence paused');
+        return false;
+      }
 
       // Check if geofence is enabled and properly configured
       if (!_attendanceSettings!.geofenceEnabled) {

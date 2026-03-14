@@ -7,13 +7,21 @@ class FloatingIconsBackground extends StatefulWidget {
   /// Gradient colors for the background. Defaults to the onboarding palette.
   final List<Color> gradientColors;
 
+  /// Color used for the floating icons. Defaults to white.
+  final Color iconColor;
+
   /// Optional child rendered above the background.
   final Widget? child;
+
+  /// Whether to show the radial glow overlay effects.
+  final bool showGlowOverlays;
 
   const FloatingIconsBackground({
     Key? key,
     this.gradientColors = const [Color(0xFF264653), Color(0xFF2A9D8F)],
+    this.iconColor = Colors.white,
     this.child,
+    this.showGlowOverlays = false,
   }) : super(key: key);
 
   @override
@@ -72,9 +80,47 @@ class _FloatingIconsBackgroundState extends State<FloatingIconsBackground>
                   size: size,
                   painter: _FloatingIconsPainter(
                     progress: _floatController.value,
+                    iconColor: widget.iconColor,
                   ),
                 ),
               ),
+              // Radial glow overlays for premium feel
+              if (widget.showGlowOverlays) ...[
+                Positioned(
+                  top: -size.height * 0.15,
+                  left: -size.width * 0.2,
+                  child: Container(
+                    width: size.width * 0.7,
+                    height: size.width * 0.7,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF2A9D8F).withOpacity(0.18),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  bottom: -size.height * 0.1,
+                  right: -size.width * 0.15,
+                  child: Container(
+                    width: size.width * 0.6,
+                    height: size.width * 0.6,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          const Color(0xFF3F51B5).withOpacity(0.12),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
               // Subtle wave overlay
               Positioned(
                 bottom: -100 + (t * 30),
@@ -131,8 +177,9 @@ class _FloatingIcon {
 
 class _FloatingIconsPainter extends CustomPainter {
   final double progress;
+  final Color iconColor;
 
-  const _FloatingIconsPainter({required this.progress});
+  const _FloatingIconsPainter({required this.progress, required this.iconColor});
 
   // Pre-defined floating icons with deterministic positions
   static final List<_FloatingIcon> _icons = [
@@ -176,7 +223,7 @@ class _FloatingIconsPainter extends CustomPainter {
         style: TextStyle(
           fontSize: icon.size.toDouble(),
           fontFamily: 'MaterialIcons',
-          color: Colors.white.withOpacity(opacity),
+          color: iconColor.withOpacity(opacity),
         ),
       );
       textPainter.layout();
@@ -185,5 +232,6 @@ class _FloatingIconsPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_FloatingIconsPainter old) => old.progress != progress;
+  bool shouldRepaint(_FloatingIconsPainter old) =>
+      old.progress != progress || old.iconColor != iconColor;
 }

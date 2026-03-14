@@ -41,6 +41,9 @@ class _GeofenceTaskHandler extends TaskHandler {
   DateTime? _enterTime;
   bool _entryMarkedToday = false;
   bool _exitMarkedToday = false;
+  /// True only when entry was genuinely confirmed by the backend (200/201).
+  /// Distinguishes real marks from hard-block "stop retrying" flags.
+  bool _entryReallyMarked = false;
   String? _lastMarkedDateKey; // 'yyyy-MM-dd'
 
   /// Timestamp of the most recent confirmed EXIT, used for short-exit tolerance.
@@ -210,29 +213,64 @@ class _GeofenceTaskHandler extends TaskHandler {
       final today = _todayStr();
       if (_lastMarkedDateKey != today) {
         _entryMarkedToday = false;
+        _exitMarkedToday = false;
+        _entryReallyMarked = false;
         _lastMarkedDateKey = today;
+        _wasInsideGeofence = false;
+        _enterTime = null;
+        _consecutiveOutsideCount = 0;
+        _dwellMarkAttempts = 0;
+        _lastExitTime = null;
+        _savedEnterTimeAcrossExit = null;
+        _lastBackendErrorMsg = null;
         await prefs.remove('bg_task_entry_marked');
-        debugPrint('[BGTask] Daily state reset for $today');
+        await prefs.remove('bg_task_exit_marked');
+        await prefs.remove('bg_task_entry_really_marked');
+        await prefs.remove('bg_task_app_entry_marked');
+        await prefs.remove('bg_task_app_exit_marked');
+        await prefs.remove('bg_task_was_inside');
+        await prefs.remove('bg_task_enter_time');
+        await prefs.remove('bg_task_last_exit_time');
+        await prefs.remove('bg_task_saved_enter_time');
+        debugPrint('[BGTask] Daily state fully reset for $today');
       }
 
       // ── Cross-system sync ────────────────────────────────────────────────
       // The in-app AttendanceProvider may have marked attendance via its own
-      // ApiService call (when the app is open).  It writes bg_task_entry_marked
-      // = true to SharedPreferences.  After prefs.reload() above, re-read the
-      // flag so both systems stay in sync and the bg task stops retrying.
+      // ApiService call (when the app is open).  It writes
+      // bg_task_app_entry_marked = true to SharedPreferences.
+      // IMPORTANT: We use separate keys (bg_task_app_entry_marked /
+      // bg_task_app_exit_marked) to distinguish app-side marks from the
+      // background task's own bg_task_entry_marked flag.  Previously both
+      // systems wrote the same key, causing the bg task to read its own
+      // hard-block flag back as "externally marked" → false positive.
       if (!_entryMarkedToday) {
-        final externallyMarked = prefs.getBool('bg_task_entry_marked') ?? false;
+        final externallyMarked = prefs.getBool('bg_task_app_entry_marked') ?? false;
         if (externallyMarked && prefs.getString('bg_task_last_date') == today) {
           _entryMarkedToday = true;
+          _entryReallyMarked = true;
           debugPrint('[BGTask] Attendance already marked by in-app provider — synced');
         }
       }
       if (!_exitMarkedToday) {
-        final externallyExitMarked = prefs.getBool('bg_task_exit_marked') ?? false;
+        final externallyExitMarked = prefs.getBool('bg_task_app_exit_marked') ?? false;
         if (externallyExitMarked && prefs.getString('bg_task_last_date') == today) {
           _exitMarkedToday = true;
           debugPrint('[BGTask] Exit already marked by in-app provider — synced');
         }
+      }
+
+      // ── Guard: frozen membership ─────────────────────────────────────────
+      // If the membership is frozen, skip all geofence processing.
+      final isFrozen = prefs.getBool('geofence_membership_frozen') ?? false;
+      if (isFrozen) {
+        debugPrint('[BGTask] Membership is frozen — skipping geofence processing');
+        _updateFgNotif(
+          title: 'Attendance Paused',
+          text: 'Your membership is currently frozen.',
+          icon: _iconGym,
+        );
+        return;
       }
 
       // ── get current GPS position ─────────────────────────────────────────
@@ -348,11 +386,18 @@ class _GeofenceTaskHandler extends TaskHandler {
             importance: Importance.defaultImportance,
             icon: 'ic_dumbell',
           );
-        } else {
+        } else if (_entryReallyMarked) {
           _updateFgNotif(
             title: 'Attendance Marked',
             text: 'Your attendance is recorded for today.',
             icon: _iconCheck,
+          );
+        } else {
+          // Hard-block case: entry processing stopped but not genuinely marked
+          _updateFgNotif(
+            title: 'Inside Gym',
+            text: _lastBackendErrorMsg ?? 'Auto-attendance unavailable today.',
+            icon: _iconGym,
           );
         }
 
@@ -386,8 +431,14 @@ class _GeofenceTaskHandler extends TaskHandler {
         _wasInsideGeofence = false;
         // Save enter time and exit timestamp for short-exit tolerance on re-enter.
         _savedEnterTimeAcrossExit = _enterTime;
-        _lastExitTime = DateTime.now();
-        debugPrint('[BGTask] EXIT confirmed after grace period');
+        final now = DateTime.now();
+        _lastExitTime = now;
+        // The actual departure time is ~5 min ago (exitGraceTicks * 30s),
+        // since we waited for consecutive outside readings to confirm exit.
+        final actualExitTime = now.subtract(
+          Duration(seconds: _exitGraceTicks * 30),
+        );
+        debugPrint('[BGTask] EXIT confirmed after grace period — actual exit time: ${_fmtTime(actualExitTime)}');
 
         _updateFgNotif(
           title: 'Gym Attendance Tracking',
@@ -395,21 +446,30 @@ class _GeofenceTaskHandler extends TaskHandler {
           icon: _iconLocation,
         );
 
+        // Only mark exit if entry was GENUINELY marked by the backend (not
+        // just a hard-block that set _entryMarkedToday to stop retrying).
         final autoMarkExit = prefs.getBool('geofence_auto_mark_exit') ?? true;
-        if (autoMarkExit && _entryMarkedToday && !_exitMarkedToday) {
+        if (autoMarkExit && _entryReallyMarked && !_exitMarkedToday) {
           final result = await _callBackend(
             prefs: prefs,
             gymId: gymId,
             position: position,
             isEntry: false,
+            overrideTimestamp: actualExitTime,
           );
           if (result == _kBackendOk) {
             _exitMarkedToday = true;
-            debugPrint('[BGTask] Exit marked silently');
+            debugPrint('[BGTask] Exit marked at ${_fmtTime(actualExitTime)}');
             _updateFgNotif(
               title: 'Attendance Complete',
               text: 'Entry and exit recorded for today.',
               icon: _iconCheck,
+            );
+            await _showLocalNotif(
+              id: 3003,
+              title: 'Exit Recorded',
+              body: 'Auto check-out at ${_fmtTime(actualExitTime)} — see you next time!',
+              icon: 'ic_check',
             );
           }
         }
@@ -456,6 +516,7 @@ class _GeofenceTaskHandler extends TaskHandler {
               );
               if (result == _kBackendOk) {
                 _entryMarkedToday = true;
+                _entryReallyMarked = true;
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
 
@@ -478,10 +539,11 @@ class _GeofenceTaskHandler extends TaskHandler {
                 );
               } else if (result == _kBackendHardBlock) {
                 // Permanent error (no membership, geofence disabled, mock
-                // location fraud). Mark as done for today so the task stops
-                // cycling and burning battery.
+                // location fraud). Stop retrying but do NOT set
+                // _entryReallyMarked — so exit won't be marked either.
                 debugPrint('[BGTask] Hard-block from backend — stopping for today');
                 _entryMarkedToday = true;
+                // _entryReallyMarked stays false — no genuine entry recorded
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
                 _updateFgNotif(
@@ -554,13 +616,21 @@ class _GeofenceTaskHandler extends TaskHandler {
           }
         }
       } else if (isInside && _wasInsideGeofence && _entryMarkedToday) {
-        // Already marked today — keep notification clean and suppress tracking.
+        // Already processed today — keep notification clean and suppress tracking.
         _consecutiveOutsideCount = 0;
-        _updateFgNotif(
-          title: 'Attendance Marked',
-          text: 'Your attendance is recorded for today.',
-          icon: _iconCheck,
-        );
+        if (_entryReallyMarked) {
+          _updateFgNotif(
+            title: 'Attendance Marked',
+            text: 'Your attendance is recorded for today.',
+            icon: _iconCheck,
+          );
+        } else {
+          _updateFgNotif(
+            title: 'Inside Gym',
+            text: _lastBackendErrorMsg ?? 'Auto-attendance unavailable today.',
+            icon: _iconGym,
+          );
+        }
       }
     } catch (e) {
       debugPrint('[BGTask] tick error: $e');
@@ -580,6 +650,7 @@ class _GeofenceTaskHandler extends TaskHandler {
     required String gymId,
     required Position position,
     required bool isEntry,
+    DateTime? overrideTimestamp,
   }) async {
     try {
       final token   = prefs.getString('auth_token');
@@ -607,6 +678,8 @@ class _GeofenceTaskHandler extends TaskHandler {
               'longitude':     position.longitude,
               'accuracy':      position.accuracy,
               'isMockLocation': position.isMocked,
+              if (overrideTimestamp != null)
+                'timestamp': overrideTimestamp.toIso8601String(),
             }),
           )
           .timeout(const Duration(seconds: 30));
@@ -646,7 +719,6 @@ class _GeofenceTaskHandler extends TaskHandler {
           'auto-mark exit is disabled',
           'member not found',
           'mock locations are not allowed',
-          'attendance can only be marked during gym operating hours',
           // Auth errors — token is invalid/expired; retrying with the same
           // token will never succeed.
           'invalid token',
@@ -654,7 +726,14 @@ class _GeofenceTaskHandler extends TaskHandler {
           'invalid token type',
           'invalid token format',
           'user not found',
+          'membership is frozen',
         ];
+        // NOTE: "attendance can only be marked during gym operating hours"
+        // is intentionally NOT a hard-block — the client-side operating
+        // hours check handles this, but a slight clock skew between
+        // client and server can cause this rejection transiently.
+        // Treating it as soft-fail lets the task retry on the next tick
+        // once the server's clock crosses into operating hours.
         if (hardBlocks.any(msg.contains)) {
           debugPrint('[BGTask] Hard-block: $msg');
           return _kBackendHardBlock;
@@ -870,6 +949,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       if (_lastMarkedDateKey == today) {
         _entryMarkedToday = prefs.getBool('bg_task_entry_marked') ?? false;
         _exitMarkedToday = prefs.getBool('bg_task_exit_marked') ?? false;
+        _entryReallyMarked = prefs.getBool('bg_task_entry_really_marked') ?? false;
         // ── Restore timer state so a service restart doesn't reset the 5-min
         //    dwell countdown (the root cause of the "stuck 1-min" bug).
         if (!_entryMarkedToday) {
@@ -896,14 +976,16 @@ class _GeofenceTaskHandler extends TaskHandler {
         // New day — clear everything
         _entryMarkedToday = false;
         _exitMarkedToday = false;
+        _entryReallyMarked = false;
         _lastMarkedDateKey = today;
         await prefs.remove('bg_task_was_inside');
         await prefs.remove('bg_task_enter_time');
         await prefs.remove('bg_task_last_exit_time');
         await prefs.remove('bg_task_saved_enter_time');
         await prefs.remove('bg_task_exit_marked');
+        await prefs.remove('bg_task_entry_really_marked');
       }
-      debugPrint('[BGTask] Loaded daily state: entry=$_entryMarkedToday exit=$_exitMarkedToday wasInside=$_wasInsideGeofence');
+      debugPrint('[BGTask] Loaded daily state: entry=$_entryMarkedToday reallyMarked=$_entryReallyMarked exit=$_exitMarkedToday wasInside=$_wasInsideGeofence');
     } catch (_) {}
   }
 
@@ -913,6 +995,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       await prefs.setString('bg_task_last_date', _todayStr());
       await prefs.setBool('bg_task_entry_marked', _entryMarkedToday);
       await prefs.setBool('bg_task_exit_marked', _exitMarkedToday);
+      await prefs.setBool('bg_task_entry_really_marked', _entryReallyMarked);
       // Persist the dwell timer so service-restart restores it
       if (_wasInsideGeofence && _enterTime != null && !_entryMarkedToday) {
         await prefs.setBool('bg_task_was_inside', true);
@@ -1095,5 +1178,16 @@ class ForegroundTaskService {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('geofence_has_active_membership', active);
     debugPrint('[FGTask] Active membership flag persisted: $active');
+  }
+
+  /// Persist whether the user's membership is currently frozen.
+  ///
+  /// When true, the background isolate skips all geofence processing
+  /// (no GPS polling, no attendance marking, no notifications) until
+  /// the freeze is lifted.
+  static Future<void> persistFrozenMembership(bool frozen) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('geofence_membership_frozen', frozen);
+    debugPrint('[FGTask] Frozen membership flag persisted: $frozen');
   }
 }

@@ -1226,10 +1226,22 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                             Icon(
                                 offer.status == 'active'
                                     ? Icons.pause
-                                    : Icons.play_arrow,
-                                size: 18),
+                                    : offer.status == 'expired'
+                                        ? Icons.update
+                                        : Icons.play_arrow,
+                                size: 18,
+                                color: offer.status == 'expired' ? Colors.orange : null),
                             const SizedBox(width: 8),
-                            Text(offer.status == 'active' ? 'Pause' : 'Resume'),
+                            Text(
+                              offer.status == 'active'
+                                  ? 'Pause'
+                                  : offer.status == 'expired'
+                                      ? 'Extend & Resume'
+                                      : 'Resume',
+                              style: TextStyle(
+                                color: offer.status == 'expired' ? Colors.orange : null,
+                              ),
+                            ),
                           ]),
                         ),
                         const PopupMenuItem(
@@ -1821,8 +1833,55 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
 
   Future<void> _toggleOfferStatus(GymOffer offer) async {
     final action = offer.status == 'active' ? 'pause' : 'resume';
+
+    // If the offer is expired, show a date picker to extend the end date
+    if (offer.status == 'expired' && action == 'resume') {
+      final newEndDate = await showDatePicker(
+        context: context,
+        initialDate: DateTime.now().add(const Duration(days: 7)),
+        firstDate: DateTime.now().add(const Duration(days: 1)),
+        lastDate: DateTime.now().add(const Duration(days: 365)),
+        helpText: 'Select new end date to extend offer',
+        confirmText: 'Extend & Resume',
+        builder: (context, child) {
+          return Theme(
+            data: Theme.of(context).copyWith(
+              colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: AppTheme.primaryColor,
+              ),
+            ),
+            child: child!,
+          );
+        },
+      );
+
+      if (newEndDate == null) return; // User cancelled
+
+      final success = await _apiService.toggleOfferStatus(
+        offer.id,
+        action,
+        newEndDate: newEndDate.toIso8601String(),
+      );
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Offer extended until ${DateFormat('dd MMM yyyy').format(newEndDate)} and resumed'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        _loadOffers();
+        _loadStats();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to extend and resume offer'), backgroundColor: Colors.red),
+        );
+      }
+      return;
+    }
+
     final success = await _apiService.toggleOfferStatus(offer.id, action);
-    
+
     if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Offer ${action}d successfully')),

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/geofencing_service.dart';
 import '../services/api_service.dart';
 import '../services/attendance_settings_service.dart';
@@ -121,6 +122,11 @@ class AttendanceProvider extends ChangeNotifier {
                 DateTime.parse(_todayAttendance!['geofenceExit']['timestamp']).toLocal();
           }
         }
+
+        // ── Sync attendance state to background isolate ──────────────────
+        // Write separate app-side keys so the background task knows the
+        // in-app provider already marked attendance (avoids double-marking).
+        _syncAttendanceToBackgroundTask();
       }
 
       _isLoading = false;
@@ -318,6 +324,30 @@ class AttendanceProvider extends ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  /// Write app-side attendance flags to SharedPreferences so the background
+  /// isolate (foreground task) can detect that attendance was already marked
+  /// from the app and stop retrying.
+  ///
+  /// Uses separate keys (bg_task_app_entry_marked / bg_task_app_exit_marked)
+  /// to avoid confusion with the background task's own internal flags.
+  Future<void> _syncAttendanceToBackgroundTask() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final now = DateTime.now();
+      final today =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      await prefs.setString('bg_task_last_date', today);
+      if (_isAttendanceMarkedToday) {
+        await prefs.setBool('bg_task_app_entry_marked', true);
+      }
+      if (_hasCheckedOut) {
+        await prefs.setBool('bg_task_app_exit_marked', true);
+      }
+    } catch (e) {
+      debugPrint('[ATTENDANCE] Error syncing to bg task: $e');
+    }
   }
 
   /// Load attendance settings for a gym

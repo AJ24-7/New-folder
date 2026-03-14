@@ -8,6 +8,7 @@ const {
   deleteOffer,
   toggleOfferStatus,
   getValidOffers,
+  getNearbyOffers,
   getCoupons,
   createCoupon,
   updateCoupon,
@@ -213,6 +214,9 @@ router.post('/coupon/:couponCode/apply', async (req, res) => {
 });
 
 // ==================== PUBLIC ACTIVE OFFERS ====================
+
+// Get nearby offers (public endpoint with geo-filtering)
+router.get('/nearby', getNearbyOffers);
 
 // Get all active offers (public endpoint)
 router.get('/active', async (req, res) => {

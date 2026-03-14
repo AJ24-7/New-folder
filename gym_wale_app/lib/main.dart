@@ -127,9 +127,15 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _fadeController;
   late final AnimationController _slideController;
   late final AnimationController _pulseController;
+  late final AnimationController _shimmerController;
   late final Animation<double> _fadeAnim;
   late final Animation<Offset> _slideAnim;
   late final Animation<double> _pulseAnim;
+
+  // Brand colors
+  static const Color _brandIndigo = Color(0xFF3F51B5);
+  static const Color _brandOrange = Color.fromARGB(255, 238, 165, 7);
+  static const Color _tealAccent = Color(0xFF2A9D8F);
 
   @override
   void initState() {
@@ -158,6 +164,11 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
+    _shimmerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat();
+
     _fadeController.forward();
     _slideController.forward();
 
@@ -168,7 +179,7 @@ class _SplashScreenState extends State<SplashScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final geofencingService = Provider.of<GeofencingService>(context, listen: false);
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
-    
+
     await authProvider.init();
 
     // Register FCM token with backend now that auth token is available.
@@ -186,15 +197,12 @@ class _SplashScreenState extends State<SplashScreen>
 
     // Request permissions
     await _requestPermissions();
-    
+
     // Restore geofence only when the user is authenticated — never auto-start
     // location tracking or foreground service for a logged-out user.
     if (authProvider.isAuthenticated) {
       try {
         final restored = await geofencingService.restoreGeofenceFromPreferences();
-        // If the geofence was restored, also load attendance settings into the
-        // AttendanceProvider so that isAutoMarkEnabled() / shouldAutoMarkEntry()
-        // return the correct values for this session (fixes silent DWELL skip).
         if (restored) {
           final restoredGymId = geofencingService.currentGymId;
           if (restoredGymId != null) {
@@ -206,8 +214,6 @@ class _SplashScreenState extends State<SplashScreen>
         print('[GEOFENCE] Error restoring geofence: $e');
       }
     } else {
-      // User is logged out — ensure any lingering foreground service is stopped
-      // so no attendance notification or GPS polling occurs.
       try {
         await ForegroundTaskService().stopService();
       } catch (_) {}
@@ -236,21 +242,18 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeController.dispose();
     _slideController.dispose();
     _pulseController.dispose();
+    _shimmerController.dispose();
     super.dispose();
   }
 
   /// Request necessary permissions for the app
   Future<void> _requestPermissions() async {
     try {
-      // Request location permission
       LocationPermission locationPermission = await LocationService.checkPermission();
-      
-      if (locationPermission == LocationPermission.denied || 
+      if (locationPermission == LocationPermission.denied ||
           locationPermission == LocationPermission.deniedForever) {
         await LocationService.requestPermission();
       }
-      
-      // Request notification permission for Android 13+
       if (await Permission.notification.isDenied) {
         await Permission.notification.request();
       }
@@ -263,7 +266,9 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: FloatingIconsBackground(
-        gradientColors: const [Color(0xFF264653), Color(0xFF2A9D8F)],
+        gradientColors: const [Color(0xFF1A1A2E), Color(0xFF16213E)],
+        iconColor: _tealAccent,
+        showGlowOverlays: true,
         child: SafeArea(
           child: Center(
             child: FadeTransition(
@@ -273,62 +278,149 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Feature highlights row
-                    _buildFeatureRow(
-                      Icons.fitness_center_rounded,
-                      Icons.show_chart_rounded,
-                      Icons.location_on_rounded,
-                    ),
-
-                    const SizedBox(height: 40),
-
-                    // App Name
-                    const Text(
-                      'Gym-wale',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 46,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                        height: 1.1,
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Subtitle chip
+                    // Logo
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 8),
+                      width: 110,
+                      height: 110,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(24),
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [
+                            _tealAccent.withOpacity(0.2),
+                            _brandIndigo.withOpacity(0.15),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
+                          color: _tealAccent.withOpacity(0.4),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _tealAccent.withOpacity(0.25),
+                            blurRadius: 30,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          width: 70,
+                          height: 70,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.fitness_center_rounded,
+                            size: 52,
+                            color: _tealAccent,
+                          ),
                         ),
                       ),
-                      child: const Text(
-                        'Your Fitness Partner',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.8,
+                    ),
+
+                    const SizedBox(height: 32),
+
+                    // Brand Name: Gym(indigo)-wale(orange)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
+                        Text(
+                          'Gym',
+                          style: TextStyle(
+                            color: _brandIndigo,
+                            fontSize: 48,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            height: 1.1,
+                            shadows: [
+                              Shadow(
+                                color: _brandIndigo.withOpacity(0.4),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
+                        Text(
+                          '-',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 48,
+                            fontWeight: FontWeight.w300,
+                            height: 1.1,
+                          ),
+                        ),
+                        Text(
+                          'wale',
+                          style: TextStyle(
+                            color: _brandOrange,
+                            fontSize: 48,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.5,
+                            height: 1.1,
+                            shadows: [
+                              Shadow(
+                                color: _brandOrange.withOpacity(0.4),
+                                blurRadius: 12,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // Featured tagline
+                    AnimatedBuilder(
+                      animation: _shimmerController,
+                      builder: (_, __) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 22, vertical: 10),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                _tealAccent.withOpacity(0.15),
+                                _brandIndigo.withOpacity(0.1),
+                                _tealAccent.withOpacity(0.15),
+                              ],
+                              stops: [
+                                0.0,
+                                _shimmerController.value,
+                                1.0,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(30),
+                            border: Border.all(
+                              color: _tealAccent.withOpacity(0.3),
+                            ),
+                          ),
+                          child: Text(
+                            'Complete Fitness Solutions',
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        );
+                      },
                     ),
 
                     const SizedBox(height: 48),
 
-                    // Feature pills
+                    // Feature pills with teal accent
                     Wrap(
                       alignment: WrapAlignment.center,
                       spacing: 10,
                       runSpacing: 10,
-                      children: const [
-                        _SplashPill(Icons.explore_rounded, 'Find Gyms'),
-                        _SplashPill(Icons.calendar_month_rounded, 'Book Plans'),
-                        _SplashPill(Icons.bolt_rounded, 'Track Progress'),
+                      children: [
+                        _SplashPill(Icons.explore_rounded, 'Find Gyms', _tealAccent),
+                        _SplashPill(Icons.calendar_month_rounded, 'Book Plans', _tealAccent),
+                        _SplashPill(Icons.bolt_rounded, 'Track Progress', _tealAccent),
                       ],
                     ),
 
@@ -345,10 +437,10 @@ class _SplashScreenState extends State<SplashScreen>
                               width: 180,
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(4),
-                                child: const LinearProgressIndicator(
-                                  backgroundColor: Colors.white24,
+                                child: LinearProgressIndicator(
+                                  backgroundColor: Colors.white12,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
+                                      _tealAccent),
                                   minHeight: 3,
                                 ),
                               ),
@@ -357,7 +449,7 @@ class _SplashScreenState extends State<SplashScreen>
                             Text(
                               'Getting things ready...',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
+                                color: Colors.white.withOpacity(0.5),
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -375,64 +467,32 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
-
-  Widget _buildFeatureRow(IconData a, IconData b, IconData c) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _buildGlowIcon(a, 56),
-        const SizedBox(width: 20),
-        _buildGlowIcon(b, 64),
-        const SizedBox(width: 20),
-        _buildGlowIcon(c, 56),
-      ],
-    );
-  }
-
-  Widget _buildGlowIcon(IconData icon, double size) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.white.withOpacity(0.08),
-            blurRadius: 20,
-            spreadRadius: 2,
-          ),
-        ],
-      ),
-      child: Icon(icon, color: Colors.white, size: size * 0.48),
-    );
-  }
 }
 
 class _SplashPill extends StatelessWidget {
   final IconData icon;
   final String label;
-  const _SplashPill(this.icon, this.label);
+  final Color accentColor;
+  const _SplashPill(this.icon, this.label, this.accentColor);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: accentColor.withOpacity(0.1),
         borderRadius: BorderRadius.circular(30),
-        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1.2),
+        border: Border.all(color: accentColor.withOpacity(0.3), width: 1.2),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: Colors.white, size: 16),
+          Icon(icon, color: accentColor.withOpacity(0.8), size: 16),
           const SizedBox(width: 7),
           Text(
             label,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.85),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),

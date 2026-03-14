@@ -451,11 +451,15 @@ class ApiService {
     double? lat,
     double? lng,
     double? radius,
+    List<String>? activities,
+    double? maxPrice,
   }) async {
     try {
-      final Map<String, String> queryParams = {};
+      final Map<String, dynamic> queryParams = {};
       if (search != null && search.isNotEmpty) queryParams['search'] = search;
       if (city != null && city.isNotEmpty) queryParams['city'] = city;
+      if (activities != null && activities.isNotEmpty) queryParams['activities'] = activities;
+      if (maxPrice != null) queryParams['maxPrice'] = maxPrice.toStringAsFixed(0);
 
       final uri = Uri.parse(ApiConfig.baseUrl + '/gyms/search').replace(queryParameters: queryParams);
       print('Fetching gyms from: $uri');
@@ -1252,6 +1256,31 @@ class ApiService {
     return [];
   }
 
+  /// Get nearby offers based on user location (within a given radius in km)
+  static Future<List<Map<String, dynamic>>> getNearbyOffers(
+    double lat,
+    double lng, {
+    double radiusKm = 4,
+  }) async {
+    try {
+      final url = '${ApiConfig.baseUrl}/offers/nearby?lat=$lat&lng=$lng&radius=$radiusKm';
+      final response = await http.get(
+        Uri.parse(url),
+        headers: _headers,
+      ).timeout(ApiConfig.timeout);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['offers'] != null && data['offers'] is List) {
+          return List<Map<String, dynamic>>.from(data['offers']);
+        }
+      }
+    } catch (e) {
+      print('Get nearby offers error: $e');
+    }
+    return [];
+  }
+
   /// Get offers for a specific gym
   static Future<List<dynamic>> getGymOffers(String gymId) async {
     try {
@@ -1296,27 +1325,6 @@ class ApiService {
     return [];
   }
 
-  /// Get nearby gym offers
-  static Future<List<dynamic>> getNearbyOffers(double lat, double lng, {double radiusKm = 5}) async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/offers/nearby?lat=$lat&lng=$lng&radius=$radiusKm'),
-        headers: _headers,
-      ).timeout(ApiConfig.timeout);
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data is List) {
-          return data;
-        } else if (data['offers'] != null) {
-          return data['offers'];
-        }
-      }
-    } catch (e) {
-      print('Get nearby offers error: $e');
-    }
-    return [];
-  }
 
   /// Claim an offer
   static Future<Map<String, dynamic>> claimOffer(String offerId, String gymId) async {

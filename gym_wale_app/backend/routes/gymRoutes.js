@@ -1096,7 +1096,8 @@ function buildGymFilter({ city, pincode, activities }) {
   return filter;
 }
 
-// Helper to aggregate gyms by price
+// Helper to aggregate gyms by price — supports single-tier (membershipPlan.monthlyOptions)
+// and multi-tier (membershipPlan.tiers[].monthlyOptions) membership plan structures.
 async function aggregateGymsByPrice(filter, price) {
   return Gym.aggregate([
     { $match: filter },
@@ -1108,39 +1109,51 @@ async function aggregateGymsByPrice(filter, price) {
         as: 'reviews'
       }
     },
-    { $addFields: {
+    {
+      $addFields: {
         minPlanPrice: {
-          $let: {
-            vars: {
-              plansArray: {
-                $cond: [
-                  { $isArray: "$membershipPlans" },
-                  "$membershipPlans",
-                  []
-                ]
-              }
-            },
-            in: {
-              $cond: [
-                { $gt: [{ $size: "$$plansArray" }, 0] },
-                {
-                  $min: {
-                    $map: {
-                      input: {
-                        $filter: {
-                          input: "$$plansArray",
-                          as: "plan",
-                          cond: { $ne: ["$$plan.price", null] }
-                        }
-                      },
-                      as: "plan",
-                      in: { $toDouble: "$$plan.price" }
+          $min: {
+            $concatArrays: [
+              // Single-tier: prices from membershipPlan.monthlyOptions
+              {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$membershipPlan.monthlyOptions', []] },
+                      as: 'opt',
+                      cond: { $ne: ['$$opt.price', null] }
                     }
+                  },
+                  as: 'opt',
+                  in: { $toDouble: '$$opt.price' }
+                }
+              },
+              // Multi-tier: prices from membershipPlan.tiers[].monthlyOptions (flattened)
+              {
+                $reduce: {
+                  input: { $ifNull: ['$membershipPlan.tiers', []] },
+                  initialValue: [],
+                  in: {
+                    $concatArrays: [
+                      '$$value',
+                      {
+                        $map: {
+                          input: {
+                            $filter: {
+                              input: { $ifNull: ['$$this.monthlyOptions', []] },
+                              as: 'opt',
+                              cond: { $ne: ['$$opt.price', null] }
+                            }
+                          },
+                          as: 'opt',
+                          in: { $toDouble: '$$opt.price' }
+                        }
+                      }
+                    ]
                   }
-                },
-                null
-              ]
-            }
+                }
+              }
+            ]
           }
         }
       }
