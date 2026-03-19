@@ -69,6 +69,15 @@ class AttendanceProvider extends ChangeNotifier {
     try {
       if (data is Map) {
         final event  = data['event'] as String?;
+
+        // Handle service-lifecycle events that carry no gymId first.
+        if (event == 'service_stopped') {
+          // Background isolate has halted the foreground service (attendance
+          // complete for today).  Keep the UI in sync.
+          _geofencingService?.onBackgroundServiceStopped();
+          return;
+        }
+
         final gymId  = data['gymId']  as String?;
         if (gymId == null) return;
 
