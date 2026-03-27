@@ -494,6 +494,8 @@ class _WorkoutAssistantScreenState extends State<WorkoutAssistantScreen>
   Widget _buildRecommendedTab() {
     return Consumer<WorkoutProvider>(
       builder: (context, provider, child) {
+        final recommendedPlans = provider.recommendedWorkoutPlans;
+
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -527,7 +529,7 @@ class _WorkoutAssistantScreenState extends State<WorkoutAssistantScreen>
           );
         }
 
-        if (provider.workoutPlans.isEmpty) {
+        if (recommendedPlans.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(20),
@@ -561,9 +563,9 @@ class _WorkoutAssistantScreenState extends State<WorkoutAssistantScreen>
           onRefresh: () => provider.loadRecommendedPlans(),
           child: ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: provider.workoutPlans.length,
+            itemCount: recommendedPlans.length,
             itemBuilder: (context, index) {
-              final plan = provider.workoutPlans[index];
+              final plan = recommendedPlans[index];
               return _buildWorkoutPlanCard(plan);
             },
           ),
@@ -575,14 +577,16 @@ class _WorkoutAssistantScreenState extends State<WorkoutAssistantScreen>
   Widget _buildAllPlansTab() {
     return Consumer<WorkoutProvider>(
       builder: (context, provider, child) {
+        final allPlans = provider.allWorkoutPlans;
+
         if (provider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
         // Filter plans based on selected goals
         final filteredPlans = _selectedGoals.isEmpty
-            ? provider.workoutPlans
-            : provider.workoutPlans.where((plan) {
+            ? allPlans
+            : allPlans.where((plan) {
                 return plan.goals.any((goal) => _selectedGoals.contains(goal));
               }).toList();
 

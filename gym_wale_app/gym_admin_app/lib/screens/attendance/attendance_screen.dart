@@ -393,7 +393,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       childAspectRatio: isDesktop ? 1.8 : (isMobile ? 1.6 : 1.5),
       children: [
         StatCard(
-          title: 'Total Members',
+          title: 'Active Members',
           value: _stats?.totalMembers.toString() ?? '0',
           icon: FontAwesomeIcons.users,
           color: Colors.blue,

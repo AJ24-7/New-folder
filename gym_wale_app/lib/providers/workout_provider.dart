@@ -3,7 +3,8 @@ import '../models/workout_plan.dart';
 import '../services/workout_service.dart';
 
 class WorkoutProvider with ChangeNotifier {
-  List<WorkoutPlan> _workoutPlans = [];
+  List<WorkoutPlan> _allWorkoutPlans = [];
+  List<WorkoutPlan> _recommendedWorkoutPlans = [];
   WorkoutPlan? _selectedPlan;
   UserWorkoutProgress? _userProgress;
   bool _isLoading = false;
@@ -14,7 +15,9 @@ class WorkoutProvider with ChangeNotifier {
   String? _userBMICategory;
   String? _userFitnessLevel;
 
-  List<WorkoutPlan> get workoutPlans => _workoutPlans;
+  List<WorkoutPlan> get allWorkoutPlans => _allWorkoutPlans;
+  List<WorkoutPlan> get recommendedWorkoutPlans => _recommendedWorkoutPlans;
+  List<WorkoutPlan> get workoutPlans => _allWorkoutPlans;
   WorkoutPlan? get selectedPlan => _selectedPlan;
   UserWorkoutProgress? get userProgress => _userProgress;
   bool get isLoading => _isLoading;
@@ -55,7 +58,7 @@ class WorkoutProvider with ChangeNotifier {
     try {
       final result = await WorkoutService.getWorkoutPlans();
       if (result['success']) {
-        _workoutPlans = result['plans'] as List<WorkoutPlan>;
+        _allWorkoutPlans = result['plans'] as List<WorkoutPlan>;
       } else {
         _error = result['message'];
       }
@@ -86,7 +89,7 @@ class WorkoutProvider with ChangeNotifier {
       );
 
       if (result['success']) {
-        _workoutPlans = result['plans'] as List<WorkoutPlan>;
+        _recommendedWorkoutPlans = result['plans'] as List<WorkoutPlan>;
       } else {
         _error = result['message'];
       }
@@ -193,7 +196,8 @@ class WorkoutProvider with ChangeNotifier {
 
   // Reset provider
   void reset() {
-    _workoutPlans = [];
+    _allWorkoutPlans = [];
+    _recommendedWorkoutPlans = [];
     _selectedPlan = null;
     _userProgress = null;
     _isLoading = false;

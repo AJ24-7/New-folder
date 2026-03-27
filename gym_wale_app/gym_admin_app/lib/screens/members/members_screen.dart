@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import '../../config/app_theme.dart';
@@ -105,8 +106,28 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   void _splitMembersByStatus() {
-    _activeMembers = _filteredMembers.where((m) => !m.isExpired).toList();
-    _expiredMembers = _filteredMembers.where((m) => m.isExpired).toList();
+    _activeMembers = _filteredMembers.where((m) => !_isMemberExpired(m)).toList();
+    _expiredMembers = _filteredMembers.where((m) => _isMemberExpired(m)).toList();
+  }
+
+  bool _isMemberExpired(Member member) {
+    if (member.membershipValidUntil == null) return false;
+    final validUntil = member.membershipValidUntil!;
+    final validDate = DateTime(validUntil.year, validUntil.month, validUntil.day);
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    return validDate.isBefore(todayDate);
+  }
+
+  bool _isMemberExpiringSoon(Member member) {
+    if (member.membershipValidUntil == null) return false;
+    if (_isMemberExpired(member)) return false;
+    final validUntil = member.membershipValidUntil!;
+    final validDate = DateTime(validUntil.year, validUntil.month, validUntil.day);
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final daysUntilExpiry = validDate.difference(todayDate).inDays;
+    return daysUntilExpiry <= 7;
   }
 
   void _onSearchChanged(String query) {
@@ -198,6 +219,15 @@ class _MembersScreenState extends State<MembersScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showImportMembersDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => _ImportMembersDialog(
+        onImported: _loadMembers,
       ),
     );
   }
@@ -489,6 +519,16 @@ class _MembersScreenState extends State<MembersScreen> {
                 side: const BorderSide(color: Colors.white70),
               ),
             ),
+            const SizedBox(width: 12),
+            OutlinedButton.icon(
+              onPressed: _showImportMembersDialog,
+              icon: const FaIcon(FontAwesomeIcons.fileArrowUp, size: 16),
+              label: const Text('Upload Members'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white70),
+              ),
+            ),
           ] else if (isTablet) ...[
             // Tablet: Show compact icon buttons
             IconButton(
@@ -512,6 +552,17 @@ class _MembersScreenState extends State<MembersScreen> {
                 padding: const EdgeInsets.all(12),
               ),
             ),
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: _showImportMembersDialog,
+              icon: const FaIcon(FontAwesomeIcons.fileArrowUp, size: 20),
+              tooltip: 'Upload Members',
+              color: AppTheme.primaryColor,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.all(12),
+              ),
+            ),
           ] else ...[
             // Mobile: Show menu with actions
             PopupMenuButton<String>(
@@ -524,6 +575,9 @@ class _MembersScreenState extends State<MembersScreen> {
                     break;
                   case 'remove':
                     _showRemoveMembersMenu();
+                    break;
+                  case 'import':
+                    _showImportMembersDialog();
                     break;
                 }
               },
@@ -549,6 +603,16 @@ class _MembersScreenState extends State<MembersScreen> {
                       ),
                       SizedBox(width: 12),
                       Text('Remove Members'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'import',
+                  child: Row(
+                    children: [
+                      FaIcon(FontAwesomeIcons.fileArrowUp, size: 18),
+                      SizedBox(width: 12),
+                      Text('Upload Members'),
                     ],
                   ),
                 ),
@@ -748,8 +812,80 @@ class _MembersScreenState extends State<MembersScreen> {
     if (isDesktop) {
       return _buildMembersTable(members);
     } else {
-      return _buildMembersGrid(members);
+      return _buildMembersMobileList(members);
     }
+  }
+
+  Widget _buildMembersMobileList(List<Member> members) {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: members.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final member = members[index];
+        return Material(
+          color: member.currentlyFrozen
+              ? Colors.yellow.shade50
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _showMemberDetails(member),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Row(
+                children: [
+                  _buildProfileImage(member),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          member.memberName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _currencyFormat.format(member.paymentAmount),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'Valid Until',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      _buildValidUntilCell(member),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   Widget _buildMembersTable(List<Member> members) {
@@ -982,8 +1118,8 @@ class _MembersScreenState extends State<MembersScreen> {
       return const Text('N/A');
     }
 
-    final isExpired = member.isExpired;
-    final isExpiringSoon = member.isExpiringSoon;
+    final isExpired = _isMemberExpired(member);
+    final isExpiringSoon = _isMemberExpiringSoon(member);
     
     Color color = AppTheme.successColor;
     if (isExpired) {
@@ -1575,6 +1711,394 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     );
   }
 
+}
+
+class _ImportMembersDialog extends StatefulWidget {
+  final VoidCallback onImported;
+
+  const _ImportMembersDialog({
+    required this.onImported,
+  });
+
+  @override
+  State<_ImportMembersDialog> createState() => _ImportMembersDialogState();
+}
+
+class _ImportMembersDialogState extends State<_ImportMembersDialog> {
+  final MemberService _memberService = MemberService();
+  PlatformFile? _selectedFile;
+  bool _isLoading = false;
+  bool _isImporting = false;
+  Map<String, dynamic>? _summary;
+  List<dynamic> _previewRows = [];
+  List<dynamic> _resultsPreview = [];
+  String? _message;
+
+  String _formatFileSize(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    var size = bytes.toDouble();
+    var unitIndex = 0;
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+    return '${size.toStringAsFixed(size >= 100 ? 0 : 1)} ${units[unitIndex]}';
+  }
+
+  Future<void> _pickImportFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowMultiple: false,
+      withData: true,
+      allowedExtensions: const ['xlsx', 'xls', 'csv', 'pdf'],
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    setState(() {
+      _selectedFile = result.files.first;
+      _summary = null;
+      _previewRows = [];
+      _resultsPreview = [];
+      _message = null;
+    });
+  }
+
+  Future<void> _runPreview() async {
+    if (_selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a file first'),
+          backgroundColor: AppTheme.warningColor,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _message = null;
+    });
+
+    try {
+      final response = await _memberService.importMembersFromFile(
+        file: _selectedFile!,
+        commit: false,
+        chunkSize: 700,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _summary = response['summary'] as Map<String, dynamic>?;
+        _previewRows = (response['preview'] as List<dynamic>? ?? []);
+        _resultsPreview = (response['resultsPreview'] as List<dynamic>? ?? []);
+        _message = response['message']?.toString();
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Preview failed: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _importMembers() async {
+    if (_selectedFile == null) return;
+
+    setState(() => _isImporting = true);
+    try {
+      final response = await _memberService.importMembersFromFile(
+        file: _selectedFile!,
+        commit: true,
+        chunkSize: 700,
+      );
+
+      if (!mounted) return;
+      final summary = response['summary'] as Map<String, dynamic>?;
+      final importedCount = summary?['importedCount'] ?? 0;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Imported $importedCount member(s) successfully'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+
+      widget.onImported();
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import failed: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isImporting = false);
+      }
+    }
+  }
+
+  Widget _buildSummaryCard({
+    required String title,
+    required String value,
+    required Color color,
+    IconData? icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.22)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: color, size: 16),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            '$title: ',
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          ),
+          Text(
+            value,
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: color),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isNarrow = screenWidth < 520;
+    final dialogWidth = screenWidth > 860 ? 760.0 : screenWidth * 0.9;
+    final canImport = _summary != null && _selectedFile != null && !_isLoading && !_isImporting;
+    final parsedRows = _summary?['parsedRows']?.toString() ?? '0';
+    final duplicates = _summary?['skippedDuplicateCount']?.toString() ?? '0';
+    final missingFields = _summary?['totalMissingFields']?.toString() ?? '0';
+
+    return AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      title: Row(
+        children: [
+          const FaIcon(FontAwesomeIcons.fileArrowUp, color: AppTheme.primaryColor),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Upload Existing Members',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: isNarrow ? 18 : null),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: dialogWidth,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+                  border: Border.all(
+                    color: Theme.of(context).dividerColor,
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Supported files: Excel (.xlsx/.xls), CSV, PDF',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Different header names are auto-mapped. Missing values are displayed as NA in preview and imported with safe defaults.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _isLoading || _isImporting ? null : _pickImportFile,
+                          icon: const Icon(Icons.attach_file),
+                          label: const Text('Choose File'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _isLoading || _isImporting || _selectedFile == null ? null : _runPreview,
+                          icon: const Icon(Icons.visibility_outlined),
+                          label: const Text('Preview Mapping'),
+                        ),
+                      ],
+                    ),
+                    if (_selectedFile != null) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          const Icon(Icons.description_outlined, size: 18, color: AppTheme.primaryColor),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_selectedFile!.name} (${_formatFileSize(_selectedFile!.size)})',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (_isLoading) ...[
+                      const SizedBox(height: 12),
+                      const LinearProgressIndicator(),
+                    ],
+                  ],
+                ),
+              ),
+              if (_message != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _message!,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              if (_summary != null) ...[
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: [
+                    _buildSummaryCard(
+                      title: 'Parsed Rows',
+                      value: parsedRows,
+                      color: AppTheme.primaryColor,
+                      icon: Icons.table_chart_outlined,
+                    ),
+                    _buildSummaryCard(
+                      title: 'Duplicates',
+                      value: duplicates,
+                      color: AppTheme.warningColor,
+                      icon: Icons.copy_all,
+                    ),
+                    _buildSummaryCard(
+                      title: 'Missing Fields',
+                      value: missingFields,
+                      color: AppTheme.errorColor,
+                      icon: Icons.info_outline,
+                    ),
+                  ],
+                ),
+              ],
+              if (_previewRows.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text(
+                  'Preview (first rows)',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  constraints: const BoxConstraints(maxHeight: 260),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: ListView.separated(
+                    itemCount: _previewRows.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      final row = _previewRows[index] as Map<String, dynamic>;
+                      final missing = (row['missingFields'] as List<dynamic>? ?? []).cast<dynamic>();
+                      return ListTile(
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 14,
+                          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+                          child: Text('${row['rowNumber'] ?? '-'}', style: const TextStyle(fontSize: 10)),
+                        ),
+                        title: Text(
+                          '${row['memberName'] ?? 'NA'} • ${row['phone'] ?? 'NA'}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        subtitle: Text(
+                          '${row['email'] ?? 'NA'} | ${row['planSelected'] ?? 'NA'} | ${row['monthlyPlan'] ?? 'NA'}'
+                          '${missing.isNotEmpty ? ' | Missing: ${missing.join(', ')}' : ''}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+              if (_resultsPreview.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Import status preview: ${_resultsPreview.length} row(s)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isLoading || _isImporting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: canImport ? _importMembers : null,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
+          ),
+          icon: _isImporting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Icon(Icons.cloud_upload_outlined),
+          label: Text(_isImporting ? 'Importing...' : (isNarrow ? 'Import' : 'Import Members')),
+        ),
+      ],
+    );
+  }
 }
 
 // Member Details Sheet Widget
@@ -2344,7 +2868,22 @@ class _CustomRemoveMembersDialogState extends State<_CustomRemoveMembersDialog> 
   @override
   void initState() {
     super.initState();
-    _filteredMembers = widget.members;
+    _filteredMembers = _sortedByStatus(widget.members);
+  }
+
+  bool _isMemberExpired(Member member) {
+    if (member.membershipValidUntil == null) return false;
+    final validUntil = member.membershipValidUntil!;
+    final validDate = DateTime(validUntil.year, validUntil.month, validUntil.day);
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    return validDate.isBefore(todayDate);
+  }
+
+  List<Member> _sortedByStatus(List<Member> members) {
+    final activeMembers = members.where((m) => !_isMemberExpired(m)).toList();
+    final expiredMembers = members.where((m) => _isMemberExpired(m)).toList();
+    return [...activeMembers, ...expiredMembers];
   }
 
   @override
@@ -2356,15 +2895,16 @@ class _CustomRemoveMembersDialogState extends State<_CustomRemoveMembersDialog> 
   void _onSearchChanged(String query) {
     setState(() {
       if (query.isEmpty) {
-        _filteredMembers = widget.members;
+        _filteredMembers = _sortedByStatus(widget.members);
       } else {
         final lowerQuery = query.toLowerCase();
-        _filteredMembers = widget.members.where((member) {
+        final searchedMembers = widget.members.where((member) {
           return member.memberName.toLowerCase().contains(lowerQuery) ||
                  member.email.toLowerCase().contains(lowerQuery) ||
                  member.phone.contains(query) ||
                  (member.membershipId?.toLowerCase().contains(lowerQuery) ?? false);
         }).toList();
+        _filteredMembers = _sortedByStatus(searchedMembers);
       }
     });
   }
@@ -2504,7 +3044,7 @@ class _CustomRemoveMembersDialogState extends State<_CustomRemoveMembersDialog> 
                       itemBuilder: (context, index) {
                         final member = _filteredMembers[index];
                         final isSelected = _selectedMemberIds.contains(member.id);
-                        final isExpired = member.isExpired;
+                        final isExpired = _isMemberExpired(member);
                         return CheckboxListTile(
                           value: isSelected,
                           onChanged: (value) {

@@ -1,9 +1,11 @@
 import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/member.dart';
 import '../config/api_config.dart';
 import 'storage_service.dart';
 import 'cloudinary_service.dart';
+import 'package:flutter/foundation.dart';
 
 class MemberService {
   final Dio _dio;
@@ -348,6 +350,56 @@ class MemberService {
   Future<void> exportMembers() async {
     // TODO: Implement export functionality
     throw UnimplementedError('Export functionality not implemented yet');
+  }
+
+  /// Import members in bulk from xlsx/xls/csv/pdf files.
+  ///
+  /// If [commit] is false, backend returns preview without inserting rows.
+  Future<Map<String, dynamic>> importMembersFromFile({
+    required PlatformFile file,
+    bool commit = false,
+    int chunkSize = 500,
+  }) async {
+    try {
+      MultipartFile multipartFile;
+
+      if (file.bytes != null) {
+        multipartFile = MultipartFile.fromBytes(
+          file.bytes!,
+          filename: file.name,
+        );
+      } else if (!kIsWeb && file.path != null) {
+        multipartFile = await MultipartFile.fromFile(
+          file.path!,
+          filename: file.name,
+        );
+      } else {
+        throw Exception('Unable to read selected file. Please try again.');
+      }
+
+      final formData = FormData.fromMap({
+        'file': multipartFile,
+        'commit': commit.toString(),
+        'chunkSize': chunkSize.toString(),
+      });
+
+      final response = await _dio.post(
+        '${ApiConfig.members}/import',
+        data: formData,
+        options: Options(headers: {'Content-Type': 'multipart/form-data'}),
+      );
+
+      if (response.statusCode == 200) {
+        if (response.data is Map<String, dynamic>) {
+          return response.data as Map<String, dynamic>;
+        }
+        return {'success': true, 'data': response.data};
+      }
+
+      throw Exception(response.data['message'] ?? 'Failed to import members');
+    } catch (e) {
+      throw Exception('Error importing members: $e');
+    }
   }
 
   /// Extend membership validity for a member
