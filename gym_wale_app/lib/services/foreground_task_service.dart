@@ -1,4 +1,4 @@
-﻿// lib/services/foreground_task_service.dart
+// lib/services/foreground_task_service.dart
 //
 // Keeps geofence-based auto-attendance running even when the app is
 // force-killed from the task switcher.
