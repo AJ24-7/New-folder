@@ -4,6 +4,548 @@ const Payment = require('../models/Payment');
 const Notification = require('../models/Notification');
 const path = require('path');
 const sendEmail = require('../utils/sendEmail');
+const XLSX = require('xlsx');
+const pdfParse = require('pdf-parse');
+
+const IMPORT_REQUIRED_FIELDS = [
+  'memberName',
+  'age',
+  'gender',
+  'phone',
+  'email',
+  'paymentMode',
+  'paymentAmount',
+  'planSelected',
+  'monthlyPlan',
+  'activityPreference'
+];
+
+const IMPORT_FIELD_ALIASES = {
+  memberName: ['membername', 'member_name', 'name', 'fullname', 'full_name', 'customername'],
+  age: ['age', 'memberage', 'member_age', 'years'],
+  gender: ['gender', 'sex', 'membergender', 'member_gender'],
+  phone: ['phone', 'mobile', 'mobileno', 'mobilenumber', 'contact', 'contactnumber', 'memberphone'],
+  email: ['email', 'mail', 'emailid', 'memberemail'],
+  address: ['address', 'location', 'residence', 'memberaddress'],
+  paymentMode: ['paymentmode', 'payment_mode', 'modeofpayment', 'paymentmethod', 'mode'],
+  paymentAmount: ['paymentamount', 'payment_amount', 'amount', 'amountpaid', 'paidamount', 'fees', 'fee'],
+  planSelected: ['plan', 'planselected', 'membershipplan', 'membership', 'tier'],
+  monthlyPlan: ['monthlyplan', 'duration', 'validity', 'tenure', 'months', 'planperiod'],
+  activityPreference: ['activitypreference', 'activity', 'activities', 'workouttype', 'preference'],
+  membershipId: ['membershipid', 'membership_id', 'memberid', 'member_id', 'id'],
+  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill']
+};
+
+function normalizeHeaderKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function toNaIfEmpty(value) {
+  if (value == null) return 'NA';
+  const text = String(value).trim();
+  return text.length === 0 ? 'NA' : text;
+}
+
+function canonicalFieldFromHeader(header) {
+  const normalized = normalizeHeaderKey(header);
+  if (!normalized) return null;
+
+  const directMatch = Object.keys(IMPORT_FIELD_ALIASES).find((key) => key.toLowerCase() === normalized);
+  if (directMatch) return directMatch;
+
+  for (const [field, aliases] of Object.entries(IMPORT_FIELD_ALIASES)) {
+    if (aliases.includes(normalized)) {
+      return field;
+    }
+  }
+
+  return null;
+}
+
+function parseNumeric(value, fallback = 0) {
+  if (value == null || String(value).trim().length === 0) return fallback;
+  const parsed = Number(String(value).replace(/,/g, '').trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeGender(value) {
+  const normalized = normalizeHeaderKey(value);
+  if (['m', 'male', 'man', 'boy'].includes(normalized)) return 'Male';
+  if (['f', 'female', 'woman', 'girl'].includes(normalized)) return 'Female';
+  return 'Other';
+}
+
+function normalizePaymentMode(value) {
+  const normalized = normalizeHeaderKey(value);
+  if (['card', 'creditcard', 'debitcard', 'swipe'].includes(normalized)) return 'Card';
+  if (['upi', 'gpay', 'phonepe', 'paytm'].includes(normalized)) return 'UPI';
+  if (['online', 'netbanking', 'banktransfer'].includes(normalized)) return 'Online';
+  if (['pending', 'due'].includes(normalized)) return 'pending';
+  return 'Cash';
+}
+
+function normalizePlan(value) {
+  const normalized = normalizeHeaderKey(value);
+  if (normalized.includes('premium')) return 'Premium';
+  if (normalized.includes('standard')) return 'Standard';
+  if (normalized.includes('basic')) return 'Basic';
+  return 'Basic';
+}
+
+function normalizeDuration(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '1 Month';
+  const monthMatch = raw.match(/(\d+)/);
+  const months = monthMatch ? Number(monthMatch[1]) : 1;
+  if (months >= 12) return '12 Months';
+  if (months >= 6) return '6 Months';
+  if (months >= 3) return '3 Months';
+  return '1 Month';
+}
+
+function toYyyyMmDdDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().split('T')[0];
+  }
+
+  const text = String(value).trim();
+  if (!text) return null;
+
+  const directDate = new Date(text);
+  if (!Number.isNaN(directDate.getTime())) {
+    return directDate.toISOString().split('T')[0];
+  }
+
+  const ddmmyyyy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if (ddmmyyyy) {
+    const day = Number(ddmmyyyy[1]);
+    const month = Number(ddmmyyyy[2]) - 1;
+    const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3]);
+    const parsed = new Date(year, month, day);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+
+  return null;
+}
+
+function computeValidityFromPlan(monthlyPlan) {
+  const today = new Date();
+  let months = 1;
+  if (/3\s*Months?/i.test(monthlyPlan || '')) months = 3;
+  else if (/6\s*Months?/i.test(monthlyPlan || '')) months = 6;
+  else if (/12\s*Months?/i.test(monthlyPlan || '')) months = 12;
+  const validUntil = new Date(today);
+  validUntil.setMonth(validUntil.getMonth() + months);
+  return validUntil.toISOString().split('T')[0];
+}
+
+function generateMembershipId(gymName, planSelected) {
+  const now = new Date();
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const gymShort = (gymName || 'GYM').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  const planShort = (planSelected || 'PLAN').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  return `${gymShort}-${ym}-${planShort}-${random}`;
+}
+
+function parseTabularLines(lines, delimiter) {
+  if (!lines.length) return [];
+
+  const headers = lines[0].split(delimiter).map((h) => h.trim()).filter(Boolean);
+  if (!headers.length) return [];
+
+  return lines.slice(1).map((line) => {
+    const values = line.split(delimiter).map((v) => v.trim());
+    const row = {};
+    headers.forEach((header, index) => {
+      row[header] = values[index] || '';
+    });
+    return row;
+  }).filter((row) => Object.values(row).some((value) => String(value).trim().length > 0));
+}
+
+function parsePdfRows(rawText) {
+  const text = String(rawText || '');
+  const rawLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (!rawLines.length) return [];
+
+  const candidateDelimiters = [',', '\t', '|'];
+  for (const delimiter of candidateDelimiters) {
+    const headerLine = rawLines.find((line) => {
+      if (!line.includes(delimiter)) return false;
+      const normalized = normalizeHeaderKey(line);
+      return normalized.includes('name') || normalized.includes('phone') || normalized.includes('email');
+    });
+
+    if (headerLine) {
+      const startIndex = rawLines.indexOf(headerLine);
+      const tableLines = rawLines.slice(startIndex);
+      const parsedTable = parseTabularLines(tableLines, delimiter);
+      if (parsedTable.length > 0) {
+        return parsedTable;
+      }
+    }
+  }
+
+  const blocks = text.split(/\n\s*\n/).map((block) => block.trim()).filter(Boolean);
+  const rows = [];
+  for (const block of blocks) {
+    const row = {};
+    const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    for (const line of lines) {
+      const keyValue = line.match(/^([^:]+):\s*(.+)$/);
+      if (keyValue) {
+        row[keyValue[1].trim()] = keyValue[2].trim();
+      }
+    }
+    if (Object.keys(row).length > 0) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function normalizeImportedRows(rawRows) {
+  const normalizedRows = [];
+  const previewRows = [];
+
+  rawRows.forEach((rawRow, rowIndex) => {
+    const mappedValues = {};
+    const missingFields = [];
+
+    for (const [rawKey, rawValue] of Object.entries(rawRow || {})) {
+      const canonical = canonicalFieldFromHeader(rawKey);
+      if (!canonical) continue;
+      if (mappedValues[canonical] == null || String(mappedValues[canonical]).trim().length === 0) {
+        mappedValues[canonical] = rawValue;
+      }
+    }
+
+    const rowHasAnyValue = Object.values(mappedValues).some((value) => String(value ?? '').trim().length > 0);
+    if (!rowHasAnyValue) return;
+
+    IMPORT_REQUIRED_FIELDS.forEach((field) => {
+      if (mappedValues[field] == null || String(mappedValues[field]).trim().length === 0) {
+        missingFields.push(field);
+      }
+    });
+
+    const memberName = toNaIfEmpty(mappedValues.memberName);
+    const age = parseNumeric(mappedValues.age, 0);
+    const gender = normalizeGender(mappedValues.gender);
+    const phone = toNaIfEmpty(mappedValues.phone);
+    const email = toNaIfEmpty(mappedValues.email);
+    const paymentMode = normalizePaymentMode(mappedValues.paymentMode);
+    const paymentAmount = parseNumeric(mappedValues.paymentAmount, 0);
+    const planSelected = normalizePlan(mappedValues.planSelected);
+    const monthlyPlan = normalizeDuration(mappedValues.monthlyPlan);
+    const activityPreference = toNaIfEmpty(mappedValues.activityPreference);
+    const address = toNaIfEmpty(mappedValues.address);
+    const membershipId = toNaIfEmpty(mappedValues.membershipId);
+    const membershipValidUntil = toYyyyMmDdDate(mappedValues.membershipValidUntil);
+
+    normalizedRows.push({
+      sourceRowNumber: rowIndex + 2,
+      memberName,
+      age,
+      gender,
+      phone,
+      email,
+      paymentMode,
+      paymentAmount,
+      planSelected,
+      monthlyPlan,
+      activityPreference,
+      address,
+      membershipId,
+      membershipValidUntil,
+      missingFields
+    });
+
+    if (previewRows.length < 25) {
+      previewRows.push({
+        rowNumber: rowIndex + 2,
+        memberName,
+        age: age || 'NA',
+        gender,
+        phone,
+        email,
+        planSelected,
+        monthlyPlan,
+        paymentAmount,
+        paymentMode,
+        activityPreference,
+        address,
+        membershipId,
+        membershipValidUntil: membershipValidUntil || 'NA',
+        missingFields
+      });
+    }
+  });
+
+  return { normalizedRows, previewRows };
+}
+
+async function parseImportFile(file) {
+  if (!file || !file.buffer) {
+    throw new Error('Uploaded file is missing or empty');
+  }
+
+  const fileName = (file.originalname || '').toLowerCase();
+  if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+    const workbook = XLSX.read(file.buffer, { type: 'buffer', cellDates: true });
+    const firstSheet = workbook.SheetNames[0];
+    if (!firstSheet) return [];
+    const sheet = workbook.Sheets[firstSheet];
+    return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  }
+
+  if (fileName.endsWith('.pdf')) {
+    const pdfData = await pdfParse(file.buffer);
+    return parsePdfRows(pdfData.text || '');
+  }
+
+  throw new Error('Unsupported file type. Use .xlsx, .xls, .csv, or .pdf');
+}
+
+exports.importMembers = async (req, res) => {
+  try {
+    const gymId = (req.admin && (req.admin.gymId || req.admin.id)) || req.body.gymId;
+    if (!gymId) return res.status(400).json({ success: false, message: 'Gym ID is required.' });
+
+    const gym = await Gym.findById(gymId);
+    if (!gym) return res.status(404).json({ success: false, message: 'Gym not found.' });
+
+    const shouldCommit = req.body.commit === 'true' || req.body.commit === true;
+    const parsedChunkSize = Number(req.body.chunkSize || 500);
+    const chunkSize = Number.isFinite(parsedChunkSize)
+      ? Math.min(Math.max(parsedChunkSize, 100), 2000)
+      : 500;
+
+    let rawRows = [];
+    if (Array.isArray(req.body.members)) {
+      rawRows = req.body.members;
+    } else if (typeof req.body.members === 'string' && req.body.members.trim().length > 0) {
+      rawRows = JSON.parse(req.body.members);
+    } else if (req.file) {
+      rawRows = await parseImportFile(req.file);
+    }
+
+    if (!Array.isArray(rawRows) || rawRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No member rows found in upload. Ensure the file has tabular data with headers.'
+      });
+    }
+
+    const { normalizedRows, previewRows } = normalizeImportedRows(rawRows);
+    if (normalizedRows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'No usable member rows were detected after field mapping.',
+        preview: []
+      });
+    }
+
+    const emails = normalizedRows
+      .map((row) => row.email)
+      .filter((value) => value && value !== 'NA')
+      .map((value) => String(value).toLowerCase());
+    const phones = normalizedRows
+      .map((row) => row.phone)
+      .filter((value) => value && value !== 'NA');
+
+    const existingMembers = await Member.find({
+      gym: gymId,
+      $or: [
+        { email: { $in: emails } },
+        { phone: { $in: phones } }
+      ]
+    }).select('email phone');
+
+    const existingEmailSet = new Set(existingMembers.map((m) => String(m.email || '').toLowerCase()).filter(Boolean));
+    const existingPhoneSet = new Set(existingMembers.map((m) => String(m.phone || '').trim()).filter(Boolean));
+
+    const seenEmailSet = new Set();
+    const seenPhoneSet = new Set();
+
+    let importedCount = 0;
+    let skippedDuplicateCount = 0;
+    let skippedInvalidCount = 0;
+    let totalMissingFields = 0;
+
+    const resultsPreview = [];
+    const docsToInsert = [];
+
+    const flushInsertChunk = async () => {
+      if (docsToInsert.length === 0) return;
+
+      const chunk = docsToInsert.splice(0, docsToInsert.length);
+      try {
+        const insertedMembers = await Member.insertMany(
+          chunk.map((item) => item.memberDoc),
+          { ordered: false }
+        );
+        importedCount += insertedMembers.length;
+
+        if (insertedMembers.length > 0) {
+          const payments = insertedMembers.map((insertedMember) => {
+            const meta = chunk.find((entry) => String(entry.memberDoc.membershipId) === String(insertedMember.membershipId));
+            return {
+              gymId,
+              type: 'received',
+              category: 'membership',
+              amount: meta ? meta.memberDoc.paymentAmount : 0,
+              description: `Bulk import membership payment for ${insertedMember.memberName || 'Member'}`,
+              memberName: insertedMember.memberName || '',
+              memberId: insertedMember._id,
+              paymentMethod: String(meta ? meta.memberDoc.paymentMode : 'cash').toLowerCase(),
+              status: 'completed',
+              registrationSource: 'offline',
+              planSelected: insertedMember.planSelected || '',
+              monthlyPlan: insertedMember.monthlyPlan || '',
+              paidDate: new Date(),
+              createdBy: (req.admin && (req.admin._id || req.admin.id)) || gymId
+            };
+          });
+
+          if (payments.length > 0) {
+            await Payment.insertMany(payments, { ordered: false });
+          }
+        }
+      } catch (insertError) {
+        const insertedDocs = insertError.insertedDocs || [];
+        importedCount += insertedDocs.length;
+        skippedInvalidCount += (chunk.length - insertedDocs.length);
+      }
+    };
+
+    for (const row of normalizedRows) {
+      totalMissingFields += row.missingFields.length;
+
+      const normalizedEmail = row.email && row.email !== 'NA' ? String(row.email).toLowerCase() : null;
+      const normalizedPhone = row.phone && row.phone !== 'NA' ? String(row.phone).trim() : null;
+
+      const hasExistingDuplicate =
+        (normalizedEmail && existingEmailSet.has(normalizedEmail)) ||
+        (normalizedPhone && existingPhoneSet.has(normalizedPhone));
+
+      const hasFileDuplicate =
+        (normalizedEmail && seenEmailSet.has(normalizedEmail)) ||
+        (normalizedPhone && seenPhoneSet.has(normalizedPhone));
+
+      if (hasExistingDuplicate || hasFileDuplicate) {
+        skippedDuplicateCount += 1;
+        if (resultsPreview.length < 25) {
+          resultsPreview.push({
+            rowNumber: row.sourceRowNumber,
+            memberName: row.memberName,
+            phone: row.phone,
+            email: row.email,
+            status: 'skipped_duplicate',
+            missingFields: row.missingFields
+          });
+        }
+        continue;
+      }
+
+      if (normalizedEmail) seenEmailSet.add(normalizedEmail);
+      if (normalizedPhone) seenPhoneSet.add(normalizedPhone);
+
+      if (!shouldCommit) {
+        if (resultsPreview.length < 25) {
+          resultsPreview.push({
+            rowNumber: row.sourceRowNumber,
+            memberName: row.memberName,
+            phone: row.phone,
+            email: row.email,
+            status: 'ready_to_import',
+            missingFields: row.missingFields
+          });
+        }
+        continue;
+      }
+
+      const membershipId = row.membershipId !== 'NA'
+        ? row.membershipId
+        : generateMembershipId(gym.gymName || gym.name || 'GYM', row.planSelected);
+
+      const memberDoc = {
+        gym: gymId,
+        memberName: row.memberName,
+        age: Math.max(parseInt(row.age, 10) || 0, 0),
+        gender: row.gender,
+        phone: row.phone,
+        email: row.email,
+        address: row.address === 'NA' ? undefined : row.address,
+        paymentMode: row.paymentMode,
+        paymentAmount: Math.max(Number(row.paymentAmount) || 0, 0),
+        planSelected: row.planSelected,
+        monthlyPlan: row.monthlyPlan,
+        activityPreference: row.activityPreference,
+        membershipId,
+        membershipValidUntil: row.membershipValidUntil || computeValidityFromPlan(row.monthlyPlan)
+      };
+
+      docsToInsert.push({ memberDoc });
+
+      if (resultsPreview.length < 25) {
+        resultsPreview.push({
+          rowNumber: row.sourceRowNumber,
+          memberName: row.memberName,
+          phone: row.phone,
+          email: row.email,
+          status: 'queued',
+          missingFields: row.missingFields
+        });
+      }
+
+      if (docsToInsert.length >= chunkSize) {
+        await flushInsertChunk();
+      }
+    }
+
+    if (shouldCommit && docsToInsert.length > 0) {
+      await flushInsertChunk();
+    }
+
+    const validRows = normalizedRows.length - skippedDuplicateCount - skippedInvalidCount;
+
+    return res.status(200).json({
+      success: true,
+      message: shouldCommit
+        ? `Imported ${importedCount} member(s) successfully.`
+        : 'File parsed successfully. Preview generated.',
+      summary: {
+        totalRows: rawRows.length,
+        parsedRows: normalizedRows.length,
+        validRows,
+        importedCount: shouldCommit ? importedCount : 0,
+        skippedDuplicateCount,
+        skippedInvalidCount,
+        totalMissingFields,
+        chunkSize,
+        committed: shouldCommit
+      },
+      preview: previewRows,
+      resultsPreview
+    });
+  } catch (error) {
+    console.error('Error importing members:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to import members',
+      error: error.message
+    });
+  }
+};
 
 // Renew membership for an existing member
 exports.renewMembership = async (req, res) => {

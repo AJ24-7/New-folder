@@ -187,6 +187,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     }
   }
 
+  /// Normalize an activity name for comparison: trim, lowercase, remove spaces.
+  /// "Boot Camp" → "bootcamp", "Bootcamp" → "bootcamp"
+  String _normalizeActivity(String s) =>
+      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '');
+
   void _applyFilters() {
     print('[GYM_LIST] Applying filters...');
     print('[GYM_LIST] Total gyms: ${_gyms.length}');
@@ -199,10 +204,12 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             gym.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             (gym.city?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false);
 
-        // Activities filter — gym must offer at least one of the selected activities
+        // Activities filter — gym must offer at least one of the selected activities.
+        // Normalize both sides so "Boot Camp" == "Bootcamp" after stripping spaces.
         final matchesActivities = _selectedActivities.isEmpty ||
             _selectedActivities.any((selected) =>
-                gym.activities.any((a) => a.toLowerCase() == selected.toLowerCase()));
+                gym.activities.any((a) =>
+                    _normalizeActivity(a) == _normalizeActivity(selected)));
 
         // Filter out active member gyms UNLESS user is manually searching
         final notActiveMember = !_activeGymIds.contains(gym.id) || _isManualSearch;

@@ -78,19 +78,26 @@
 	</array>
 
 	<!-- ═══════════════════════════════════════════════════════════════
-	     NOTIFICATION SETTINGS
+	     BACKGROUND TASK SCHEDULER
+	     Required for flutter_foreground_task on iOS 13+.
+	     Each identifier must match the task IDs registered in Dart code.
 	════════════════════════════════════════════════════════════════== -->
-	<key>UIUserNotificationSettings</key>
-	<dict>
-		<key>UIUserNotificationTypes</key>
-		<integer>7</integer>
-	</dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	</array>
 
 	<!-- ═══════════════════════════════════════════════════════════════
 	     GOOGLE MAPS API KEY (set via environment / build config)
 	════════════════════════════════════════════════════════════════== -->
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
+	<!-- Set your Google Maps API key here (replace with your actual key).
+	     To inject via Xcode build settings: add GOOGLE_MAPS_API_KEY = <your_key>
+	     to your project's xcconfig file (e.g., Flutter/Debug.xcconfig) or in
+	     Xcode under Build Settings → User-Defined. Never commit the actual key. -->
+	<key>GMSApiKey</key>
+	<string>$(GOOGLE_MAPS_API_KEY)</string>
 
 	<!-- ═══════════════════════════════════════════════════════════════
 	     TRANSPORT SECURITY
@@ -127,6 +134,17 @@
 	<!-- ═══════════════════════════════════════════════════════════════
 	     FIREBASE / PUSH NOTIFICATIONS
 	════════════════════════════════════════════════════════════════== -->
-	<!-- Firebase requires access to camera roll on iOS 14+ when targeting photos -->
+	<!-- Allow Firebase to swizzle AppDelegate methods for push notification support -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
+
+	<!-- ═══════════════════════════════════════════════════════════════
+	     FLUTTER PERFORMANCE (iOS 15+)
+	     Disables the 60 fps cap on ProMotion displays so Flutter can
+	     render at the display's native refresh rate (e.g. 120 Hz on
+	     iPhone 13 Pro / 14 Pro).
+	════════════════════════════════════════════════════════════════== -->
+	<key>CADisableMinimumFrameDurationOnPhone</key>
+	<true/>
 </dict>
 </plist>

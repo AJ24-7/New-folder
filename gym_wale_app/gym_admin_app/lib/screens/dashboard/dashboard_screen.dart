@@ -771,9 +771,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         StatCard(
           title: 'Overall Attendance',
-          value: _attendanceStats != null
-              ? '${_attendanceStats!.monthlyAttendanceRate.toStringAsFixed(1)}%'
-              : '--',
+          value: '${(_attendanceStats?.monthlyAttendanceRate ?? 0).toStringAsFixed(1)}%',
           icon: Icons.calendar_today,
           color: AppTheme.infoColor,
           trend: _attendanceStats?.monthlyAttendanceRate,

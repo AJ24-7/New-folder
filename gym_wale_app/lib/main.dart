@@ -179,6 +179,7 @@ class _SplashScreenState extends State<SplashScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final geofencingService = Provider.of<GeofencingService>(context, listen: false);
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+    bool restoredGeofence = false;
 
     await authProvider.init();
 
@@ -202,8 +203,8 @@ class _SplashScreenState extends State<SplashScreen>
     // location tracking or foreground service for a logged-out user.
     if (authProvider.isAuthenticated) {
       try {
-        final restored = await geofencingService.restoreGeofenceFromPreferences();
-        if (restored) {
+        restoredGeofence = await geofencingService.restoreGeofenceFromPreferences();
+        if (restoredGeofence) {
           final restoredGymId = geofencingService.currentGymId;
           if (restoredGymId != null) {
             debugPrint('[MAIN] Loading attendance settings after restore for gym: $restoredGymId');
@@ -212,6 +213,12 @@ class _SplashScreenState extends State<SplashScreen>
         }
       } catch (e) {
         print('[GEOFENCE] Error restoring geofence: $e');
+      }
+
+      // Fallback: if nothing was restored, bootstrap geofencing from active
+      // memberships here so attendance works even before HomeScreen logic runs.
+      if (!restoredGeofence && !geofencingService.isServiceRunning) {
+        await _bootstrapGeofenceFromMemberships(attendanceProvider, geofencingService);
       }
     } else {
       try {
@@ -234,6 +241,50 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => destination),
       );
+    }
+  }
+
+  Future<void> _bootstrapGeofenceFromMemberships(
+    AttendanceProvider attendanceProvider,
+    GeofencingService geofencingService,
+  ) async {
+    try {
+      final activeMemberships = await ApiService.getActiveMemberships();
+      if (activeMemberships.isEmpty) return;
+
+      for (final membership in activeMemberships) {
+        final isFrozen = membership['currentlyFrozen'] == true;
+        if (isFrozen) continue;
+
+        String? gymId;
+        if (membership['gymId'] != null) {
+          gymId = membership['gymId'].toString();
+        } else if (membership['gym']?['_id'] != null) {
+          gymId = membership['gym']['_id'].toString();
+        } else if (membership['gym']?['id'] != null) {
+          gymId = membership['gym']['id'].toString();
+        }
+        if (gymId == null || gymId.isEmpty) continue;
+
+        final response = await ApiService.getGymAttendanceSettings(gymId);
+        if (response['success'] != true) continue;
+
+        final settings = response['settings'];
+        if (settings is! Map<String, dynamic>) continue;
+
+        final geofenceEnabled = settings['geofenceEnabled'] == true ||
+            settings['mode'] == 'geofence' ||
+            settings['mode'] == 'hybrid';
+        if (!geofenceEnabled) continue;
+
+        debugPrint('[MAIN] Bootstrapping geofence from active membership for gym: $gymId');
+        final setupOk = await attendanceProvider.setupGeofencingWithSettings(gymId);
+        if (setupOk || geofencingService.isServiceRunning) {
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('[MAIN] Geofence bootstrap skipped: $e');
     }
   }
 

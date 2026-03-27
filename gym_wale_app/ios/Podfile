@@ -1,0 +1,113 @@
+<<<<<<< HEAD
+platform :ios, '13.0'
+
+=======
+# Uncomment this line to define a global platform for your project
+platform :ios, '13.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+>>>>>>> c0db684feac9dc44fb1d341da61964ba26c8fee5
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+<<<<<<< HEAD
+
+  raise 'FLUTTER_ROOT not found in Generated.xcconfig. Try deleting Generated.xcconfig, then run flutter pub get'
+=======
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+>>>>>>> c0db684feac9dc44fb1d341da61964ba26c8fee5
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+<<<<<<< HEAD
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+
+=======
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+>>>>>>> c0db684feac9dc44fb1d341da61964ba26c8fee5
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+<<<<<<< HEAD
+
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+
+        # permission_handler: enable only the permissions used by this app.
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_PHOTOS=1',
+        'PERMISSION_PHOTOS_ADD_ONLY=1',
+        'PERMISSION_NOTIFICATIONS=1',
+        'PERMISSION_LOCATION=1',
+
+        # Keep unused permissions disabled.
+        'PERMISSION_EVENTS=0',
+        'PERMISSION_REMINDERS=0',
+        'PERMISSION_CONTACTS=0',
+        'PERMISSION_MICROPHONE=0',
+        'PERMISSION_SPEECH_RECOGNIZER=0',
+        'PERMISSION_MEDIA_LIBRARY=0',
+        'PERMISSION_SENSORS=0',
+        'PERMISSION_BLUETOOTH=0',
+        'PERMISSION_APP_TRACKING_TRANSPARENCY=0',
+        'PERMISSION_CRITICAL_ALERTS=0',
+        'PERMISSION_ASSISTANT=0',
+=======
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # ─────────────────────────────────────────────────────────────────────
+      # permission_handler recommended preprocessor definitions.
+      # Only enable the permissions your app actually uses to keep binary
+      # size minimal and avoid App Store review issues.
+      # ─────────────────────────────────────────────────────────────────────
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+
+        ## dart: PermissionGroup.location (geolocator / geofencing)
+        'PERMISSION_LOCATION=1',
+
+        ## dart: PermissionGroup.camera (image_picker / image_cropper)
+        'PERMISSION_CAMERA=1',
+
+        ## dart: PermissionGroup.photos (image_picker — photo library access)
+        'PERMISSION_PHOTOS=1',
+
+        ## dart: PermissionGroup.notification (firebase_messaging / flutter_local_notifications)
+        'PERMISSION_NOTIFICATIONS=1',
+
+        ## dart: PermissionGroup.sensors (activity recognition for geofence accuracy)
+        'PERMISSION_SENSORS=1',
+>>>>>>> c0db684feac9dc44fb1d341da61964ba26c8fee5
+      ]
+    end
+  end
+end

@@ -1,6 +1,6 @@
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
@@ -460,6 +460,9 @@ class ApiService {
       if (city != null && city.isNotEmpty) queryParams['city'] = city;
       if (activities != null && activities.isNotEmpty) queryParams['activities'] = activities;
       if (maxPrice != null) queryParams['maxPrice'] = maxPrice.toStringAsFixed(0);
+      if (lat != null) queryParams['lat'] = lat.toString();
+      if (lng != null) queryParams['lng'] = lng.toString();
+      if (radius != null) queryParams['radius'] = radius.toString();
 
       final uri = Uri.parse(ApiConfig.baseUrl + '/gyms/search').replace(queryParameters: queryParams);
       print('Fetching gyms from: $uri');
@@ -509,14 +512,21 @@ class ApiService {
               }
             }
             
-            // If lat/lng provided, filter by distance
+            // If lat/lng provided, filter by distance using Geolocator and attach distance field.
             if (lat != null && lng != null && radius != null) {
-              gyms = gyms.where((gym) {
-                if (gym.latitude == 0.0 && gym.longitude == 0.0) return false;
-                final distance = _calculateDistance(lat, lng, gym.latitude, gym.longitude);
-                return distance <= radius;
-              }).toList();
-              print('Filtered to ${gyms.length} gyms within ${radius}km');
+              final List<Gym> nearby = [];
+              for (final gym in gyms) {
+                if (gym.latitude == 0.0 && gym.longitude == 0.0) continue;
+                final distanceMeters = Geolocator.distanceBetween(
+                  lat, lng, gym.latitude, gym.longitude,
+                );
+                final distanceKm = distanceMeters / 1000;
+                if (distanceKm <= radius) {
+                  nearby.add(gym.copyWith(distance: distanceKm));
+                }
+              }
+              gyms = nearby;
+              print('Filtered to ${gyms.length} gyms within ${radius}km using Geolocator');
             }
             
             return gyms;
@@ -534,22 +544,6 @@ class ApiService {
       print('Get gyms error: $e');
     }
     return [];
-  }
-  
-  // Helper to calculate distance between two points (Haversine formula)
-  static double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-    const double earthRadius = 6371; // km
-    final dLat = _toRadians(lat2 - lat1);
-    final dLon = _toRadians(lon2 - lon1);
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_toRadians(lat1)) * cos(_toRadians(lat2)) *
-        sin(dLon / 2) * sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return earthRadius * c;
-  }
-  
-  static double _toRadians(double degree) {
-    return degree * pi / 180;
   }
 
   /// Get gym details by ID

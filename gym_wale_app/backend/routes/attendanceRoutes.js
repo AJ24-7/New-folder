@@ -629,13 +629,16 @@ router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
         const endDate = new Date(year, month, 0);
         endDate.setHours(23, 59, 59, 999);
 
-        const attendance = await Attendance.find({
-            gymId,
-            date: {
-                $gte: startDate,
-                $lte: endDate
-            }
-        }).lean();
+        const [attendance, members] = await Promise.all([
+            Attendance.find({
+                gymId,
+                date: {
+                    $gte: startDate,
+                    $lte: endDate
+                }
+            }).lean(),
+            Member.find({ gym: gymId }).select('membershipValidUntil').lean(),
+        ]);
 
         // Today's date at midnight for today-specific stats
         const today = new Date();
@@ -643,20 +646,15 @@ router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
         const todayStr = today.toISOString().split('T')[0];
 
         // Compute all stats the admin client expects
-        const uniqueMembers = new Set();
         const statusBreakdown = { present: 0, absent: 0, late: 0 };
         const attendanceByType = {};
         const dailyMap = {};
         let todayPresent = 0;
-        let todayAbsent = 0;
+        let todayAbsentFromRecords = 0;
         let totalPresent = 0;
 
         attendance.forEach(record => {
             const dateKey = record.date.toISOString().split('T')[0];
-
-            if (record.personType === 'Member') {
-                uniqueMembers.add(record.personId.toString());
-            }
 
             // Status breakdown
             if (record.status === 'present') {
@@ -684,11 +682,21 @@ router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
             // Today stats
             if (dateKey === todayStr) {
                 if (record.status === 'present') todayPresent++;
-                else if (record.status === 'absent') todayAbsent++;
+                else if (record.status === 'absent') todayAbsentFromRecords++;
             }
         });
 
-        const totalMembers = uniqueMembers.size || 0;
+        // Active members = membership valid through today.
+        const todayMidnight = new Date();
+        todayMidnight.setHours(0, 0, 0, 0);
+        const activeMembers = members.filter(member => {
+            if (!member.membershipValidUntil) return false;
+            const validUntil = new Date(member.membershipValidUntil);
+            return !Number.isNaN(validUntil.getTime()) && validUntil >= todayMidnight;
+        }).length;
+
+        const totalMembers = activeMembers;
+        const todayAbsent = Math.max(totalMembers - todayPresent, todayAbsentFromRecords, 0);
         const totalWorkingDays = Object.keys(dailyMap).length;
         const averagePresent = totalWorkingDays > 0 ? Math.round(totalPresent / totalWorkingDays) : 0;
         const monthlyAttendanceRate = attendance.length > 0 ? ((totalPresent / attendance.length) * 100) : 0;
@@ -728,6 +736,7 @@ router.get('/stats/:month/:year', gymadminAuth, async (req, res) => {
 
         res.json({
             success: true,
+            activeMembers,
             totalMembers,
             presentToday: todayPresent,
             absentToday: todayAbsent,
