@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gym Registration - Gym Wale</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="gym-register.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -19,7 +22,7 @@
         <!-- Header with Gym Branding -->
         <header class="header">
             <div class="gym-wale-brand">
-                <i class="fas fa-dumbbell"></i>
+                <img src="icons/Icon-192.png" alt="Gym Wale App Logo" class="app-logo">
                 <h1>Gym Wale</h1>
             </div>
             <div id="gymBranding" class="gym-specific-brand">
@@ -172,33 +175,14 @@
 
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="newDOB"><i class="fas fa-calendar"></i> Date of Birth *</label>
-                                <input type="date" id="newDOB" name="dateOfBirth" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="newBloodGroup"><i class="fas fa-tint"></i> Blood Group</label>
-                                <select id="newBloodGroup" name="bloodGroup">
-                                    <option value="">Select Blood Group</option>
-                                    <option value="A+">A+</option>
-                                    <option value="A-">A-</option>
-                                    <option value="B+">B+</option>
-                                    <option value="B-">B-</option>
-                                    <option value="AB+">AB+</option>
-                                    <option value="AB-">AB-</option>
-                                    <option value="O+">O+</option>
-                                    <option value="O-">O-</option>
-                                </select>
+                                <label for="newAge"><i class="fas fa-calendar"></i> Age *</label>
+                                <input type="number" id="newAge" name="age" min="10" max="100" required>
                             </div>
                         </div>
 
                         <div class="form-group">
-                            <label for="newAddress"><i class="fas fa-map-marker-alt"></i> Address *</label>
-                            <textarea id="newAddress" name="address" rows="3" required></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="newEmergencyContact"><i class="fas fa-phone-square"></i> Emergency Contact Number *</label>
-                            <input type="tel" id="newEmergencyContact" name="emergencyContact" pattern="[0-9]{10}" required>
+                            <label for="newAddress"><i class="fas fa-map-marker-alt"></i> Address</label>
+                            <textarea id="newAddress" name="address" rows="3"></textarea>
                         </div>
 
                         <button type="button" class="btn btn-primary" onclick="nextStep(2)">

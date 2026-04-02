@@ -1,11 +1,13 @@
 // Gym Wale Registration Page JavaScript
 // API Configuration
 const API_BASE_URL = 'https://gym-wale.onrender.com/api';
+const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 // Global State
 let currentStep = 1;
 let registrationType = '';
 let gymId = '';
+let qrToken = '';
 let gymData = {};
 let membershipPlans = [];
 let selectedPlan = null;
@@ -13,47 +15,100 @@ let memberData = {};
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    // Get gym ID from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
-    gymId = urlParams.get('gymId');
-    
-    if (!gymId) {
+    gymId = urlParams.get('gymId') || urlParams.get('gym') || '';
+    qrToken = urlParams.get('token') || urlParams.get('qrToken') || '';
+
+    if (!gymId && !qrToken) {
         showError('Invalid registration link. Please scan the QR code again.');
         return;
     }
-    
-    // Load gym information
-    loadGymInfo();
-    
-    // Setup payment method change listener
+
     setupPaymentMethodListener();
+
+    if (qrToken) {
+        loadQRCodeContext();
+    } else {
+        loadGymInfo();
+    }
 });
+
+// Load QR token context and derive gym details
+async function loadQRCodeContext() {
+    showLoading(true);
+    try {
+        const response = await fetch(`${API_BASE_URL}/qr-codes/validate/${encodeURIComponent(qrToken)}`);
+        if (!response.ok) {
+            throw new Error('QR code is invalid or has expired');
+        }
+
+        const data = await response.json();
+        if (!data.valid || !data.gym || !data.gym.id) {
+            throw new Error(data.message || 'Invalid QR code');
+        }
+
+        gymId = data.gym.id;
+        gymData = {
+            id: data.gym.id,
+            name: data.gym.name || 'Gym Registration',
+            logoUrl: resolveAssetUrl(data.gym.logo)
+        };
+
+        applyGymBranding();
+        showLoading(false);
+    } catch (error) {
+        console.error('Error validating QR code:', error);
+        showLoading(false);
+
+        // Fallback to gym-based flow if gymId is present in query params.
+        if (gymId) {
+            loadGymInfo();
+            return;
+        }
+
+        showError(error.message || 'Invalid QR code. Please scan again.');
+    }
+}
 
 // Load Gym Information
 async function loadGymInfo() {
     showLoading(true);
     try {
-        const response = await fetch(`${API_BASE_URL}/gym/info/${gymId}`);
+        const response = await fetch(`${API_BASE_URL}/gyms/info/${gymId}`);
         if (!response.ok) throw new Error('Failed to load gym information');
-        
+
         gymData = await response.json();
-        
-        // Update UI with gym branding
-        document.getElementById('gymName').textContent = gymData.name || 'Gym';
-        
+
         if (gymData.logoUrl) {
-            const gymLogo = document.getElementById('gymLogo');
-            gymLogo.src = gymData.logoUrl;
-            gymLogo.classList.remove('hidden');
+            gymData.logoUrl = resolveAssetUrl(gymData.logoUrl);
         }
-        
+
+        applyGymBranding();
         showLoading(false);
     } catch (error) {
         console.error('Error loading gym info:', error);
         showLoading(false);
-        // Continue even if gym info fails - use default branding
+
         document.getElementById('gymName').textContent = 'Gym Registration';
     }
+}
+
+function applyGymBranding() {
+    document.getElementById('gymName').textContent = gymData.name || 'Gym Registration';
+
+    const gymLogo = document.getElementById('gymLogo');
+    if (gymData.logoUrl) {
+        gymLogo.src = gymData.logoUrl;
+        gymLogo.classList.remove('hidden');
+    } else {
+        gymLogo.classList.add('hidden');
+    }
+}
+
+function resolveAssetUrl(url) {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    return `${API_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 // Registration Type Selection
@@ -107,12 +162,12 @@ function updateStepIndicator(step) {
 // Load Membership Plans
 async function loadMembershipPlans() {
     try {
-        const response = await fetch(`${API_BASE_URL}/gym/${gymId}/membership-plans`);
+        const response = await fetch(`${API_BASE_URL}/gyms/${gymId}/membership-plans`);
         if (!response.ok) throw new Error('Failed to load membership plans');
-        
+
         const data = await response.json();
         membershipPlans = data.monthlyOptions || [];
-        
+
         displayMembershipPlans();
     } catch (error) {
         console.error('Error loading membership plans:', error);
@@ -227,9 +282,22 @@ function previousStep(step) {
 // Update Payment Summary
 function updatePaymentSummary() {
     document.getElementById('summaryName').textContent = memberData.name || '-';
-    document.getElementById('summaryPlan').textContent = gymData.name || 'Standard Plan';
+    document.getElementById('summaryPlan').textContent = resolvePlanTier(selectedPlan.months);
     document.getElementById('summaryDuration').textContent = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
     document.getElementById('summaryAmount').textContent = `₹${selectedPlan.price.toLocaleString('en-IN')}`;
+}
+
+function resolvePlanTier(months) {
+    if (months >= 6) return 'Premium';
+    if (months >= 3) return 'Standard';
+    return 'Basic';
+}
+
+function normalizePaymentMode(mode) {
+    if (mode === 'Cash') return 'Cash';
+    if (mode === 'Card') return 'Card';
+    if (mode === 'UPI') return 'UPI';
+    return 'Online';
 }
 
 // Setup Payment Method Listener
@@ -316,27 +384,54 @@ async function submitNewMember() {
     }
     
     showLoading(true);
-    
+
     try {
         const paymentMethod = document.querySelector('input[name="paymentMethod"]:checked').value;
         const transactionId = document.getElementById('transactionId').value;
-        
+        const activities = Array.from(document.querySelectorAll('input[name="newActivities"]:checked'))
+            .map(cb => cb.value);
+
+        if (activities.length === 0) {
+            showLoading(false);
+            alert('Please select at least one preferred activity');
+            return;
+        }
+
+        const monthlyPlan = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
+        const paymentMode = normalizePaymentMode(paymentMethod);
+
         const data = {
-            ...memberData,
             gymId: gymId,
+            name: memberData.name,
+            age: Number(memberData.age),
+            gender: memberData.gender,
+            phone: memberData.phone,
+            email: memberData.email,
+            address: memberData.address || '',
+            preferredActivities: activities,
+            activityPreference: activities.join(', '),
+            planSelected: resolvePlanTier(selectedPlan.months),
+            monthlyPlan,
+            paymentMode,
+            paymentAmount: selectedPlan.price,
             membershipPlan: {
                 months: selectedPlan.months,
                 price: selectedPlan.price,
-                discount: selectedPlan.discount || 0
+                discount: selectedPlan.discount || 0,
+                tier: resolvePlanTier(selectedPlan.months)
             },
             payment: {
-                method: paymentMethod,
+                method: paymentMode,
                 amount: selectedPlan.price,
                 transactionId: transactionId || null
-            },
-            registrationType: 'new'
+            }
         };
-        
+
+        if (qrToken) {
+            data.qrToken = qrToken;
+            data.registrationType = 'standard';
+        }
+
         const response = await fetch(`${API_BASE_URL}/members/qr-register-new`, {
             method: 'POST',
             headers: {
@@ -344,17 +439,17 @@ async function submitNewMember() {
             },
             body: JSON.stringify(data)
         });
-        
+
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.message || 'Registration failed');
         }
-        
+
         const result = await response.json();
-        
+
         showLoading(false);
         showSuccess('New Member', result);
-        
+
     } catch (error) {
         console.error('Error submitting registration:', error);
         showLoading(false);
@@ -441,14 +536,4 @@ function formatDate(date) {
     const day = String(d.getDate()).padStart(2, '0');
     const year = d.getFullYear();
     return `${year}-${month}-${day}`;
-}
-
-function validatePhone(phone) {
-    const phoneRegex = /^[0-9]{10}$/;
-    return phoneRegex.test(phone);
-}
-
-function validateEmail(email) {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
 }
