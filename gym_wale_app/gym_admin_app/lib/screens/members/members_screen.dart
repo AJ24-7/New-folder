@@ -1729,9 +1729,11 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
   PlatformFile? _selectedFile;
   bool _isLoading = false;
   bool _isImporting = false;
+  bool _mergeDuplicates = false;
   Map<String, dynamic>? _summary;
   List<dynamic> _previewRows = [];
   List<dynamic> _resultsPreview = [];
+  List<dynamic> _duplicates = [];
   String? _message;
 
   String _formatFileSize(int bytes) {
@@ -1761,6 +1763,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
       _summary = null;
       _previewRows = [];
       _resultsPreview = [];
+      _duplicates = [];
       _message = null;
     });
   }
@@ -1793,6 +1796,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
         _summary = response['summary'] as Map<String, dynamic>?;
         _previewRows = (response['preview'] as List<dynamic>? ?? []);
         _resultsPreview = (response['resultsPreview'] as List<dynamic>? ?? []);
+        _duplicates = (response['duplicates'] as List<dynamic>? ?? []);
         _message = response['message']?.toString();
       });
     } catch (e) {
@@ -1819,15 +1823,17 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
         file: _selectedFile!,
         commit: true,
         chunkSize: 700,
+        mergeDuplicates: _mergeDuplicates,
       );
 
       if (!mounted) return;
       final summary = response['summary'] as Map<String, dynamic>?;
       final importedCount = summary?['importedCount'] ?? 0;
+      final mergedCount = summary?['mergedCount'] ?? 0;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Imported $importedCount member(s) successfully'),
+          content: Text('Imported $importedCount, merged $mergedCount duplicate member(s)'),
           backgroundColor: AppTheme.successColor,
         ),
       );
@@ -1890,6 +1896,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
     final canImport = _summary != null && _selectedFile != null && !_isLoading && !_isImporting;
     final parsedRows = _summary?['parsedRows']?.toString() ?? '0';
     final duplicates = _summary?['skippedDuplicateCount']?.toString() ?? '0';
+    final merged = _summary?['mergedCount']?.toString() ?? '0';
     final missingFields = _summary?['totalMissingFields']?.toString() ?? '0';
 
     return AlertDialog(
@@ -1932,7 +1939,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Different header names are auto-mapped. Missing values are displayed as NA in preview and imported with safe defaults.',
+                      'Different header names are auto-mapped (including Joining Date/DOJ). Missing values are displayed as NA in preview and imported with safe defaults.',
                       style: TextStyle(
                         fontSize: 12,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -2008,12 +2015,55 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
                       icon: Icons.copy_all,
                     ),
                     _buildSummaryCard(
+                      title: 'Merged',
+                      value: merged,
+                      color: AppTheme.successColor,
+                      icon: Icons.merge_type,
+                    ),
+                    _buildSummaryCard(
                       title: 'Missing Fields',
                       value: missingFields,
                       color: AppTheme.errorColor,
                       icon: Icons.info_outline,
                     ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Theme.of(context).dividerColor),
+                  ),
+                  child: Column(
+                    children: [
+                      SwitchListTile.adaptive(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Auto-merge duplicates while importing'),
+                        subtitle: const Text('Merges duplicate Member ID/Email/Phone with existing records'),
+                        value: _mergeDuplicates,
+                        onChanged: _isImporting
+                            ? null
+                            : (value) => setState(() => _mergeDuplicates = value),
+                      ),
+                      if (_duplicates.isNotEmpty)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () {
+                              showDialog(
+                                context: context,
+                                builder: (_) => _ImportDuplicatesDialog(duplicates: _duplicates),
+                              );
+                            },
+                            icon: const Icon(Icons.manage_search),
+                            label: Text('Review duplicate rows (${_duplicates.length})'),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
               if (_previewRows.isNotEmpty) ...[
@@ -2049,6 +2099,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
                         ),
                         subtitle: Text(
                           '${row['email'] ?? 'NA'} | ${row['planSelected'] ?? 'NA'} | ${row['monthlyPlan'] ?? 'NA'}'
+                          ' | Join: ${row['joinDate'] ?? 'NA'}'
                           '${missing.isNotEmpty ? ' | Missing: ${missing.join(', ')}' : ''}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
@@ -2095,6 +2146,163 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
                 )
               : const Icon(Icons.cloud_upload_outlined),
           label: Text(_isImporting ? 'Importing...' : (isNarrow ? 'Import' : 'Import Members')),
+        ),
+      ],
+    );
+  }
+}
+
+class _ImportDuplicatesDialog extends StatelessWidget {
+  final List<dynamic> duplicates;
+
+  const _ImportDuplicatesDialog({
+    required this.duplicates,
+  });
+
+  Widget _buildDetailLine(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            fontSize: 12,
+          ),
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            TextSpan(text: value.isEmpty ? 'NA' : value),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          const Icon(Icons.content_copy, color: AppTheme.warningColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Duplicate Members Found (${duplicates.length})',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 860,
+        height: 520,
+        child: duplicates.isEmpty
+            ? const Center(child: Text('No duplicates found'))
+            : ListView.separated(
+                itemCount: duplicates.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = duplicates[index] as Map<String, dynamic>;
+                  final incoming = (item['incoming'] as Map<String, dynamic>? ?? {});
+                  final existing = (item['existing'] as Map<String, dynamic>? ?? {});
+                  final reason = (item['duplicateReason'] ?? 'duplicate').toString();
+
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.25),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warningColor.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Text(
+                                'Row ${item['rowNumber'] ?? '-'}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              reason.replaceAll('_', ' '),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: AppTheme.primaryColor.withValues(alpha: 0.07),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Uploaded Row', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    _buildDetailLine(context, 'Name', '${incoming['memberName'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Member ID', '${incoming['membershipId'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Phone', '${incoming['phone'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Email', '${incoming['email'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Join Date', '${incoming['joinDate'] ?? 'NA'}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(8),
+                                  color: AppTheme.successColor.withValues(alpha: 0.08),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Existing Member', style: TextStyle(fontWeight: FontWeight.w700)),
+                                    const SizedBox(height: 6),
+                                    _buildDetailLine(context, 'Name', '${existing['memberName'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Member ID', '${existing['membershipId'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Phone', '${existing['phone'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Email', '${existing['email'] ?? 'NA'}'),
+                                    _buildDetailLine(context, 'Join Date', '${existing['joinDate'] ?? 'NA'}'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Close'),
         ),
       ],
     );

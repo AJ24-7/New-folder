@@ -33,8 +33,86 @@ const IMPORT_FIELD_ALIASES = {
   monthlyPlan: ['monthlyplan', 'duration', 'validity', 'tenure', 'months', 'planperiod'],
   activityPreference: ['activitypreference', 'activity', 'activities', 'workouttype', 'preference'],
   membershipId: ['membershipid', 'membership_id', 'memberid', 'member_id', 'id'],
-  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill']
+  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill'],
+  joinDate: ['joindate', 'join_date', 'joiningdate', 'joining_date', 'dateofjoining', 'doj', 'enrollmentdate', 'enrolledon', 'memberjoindate']
 };
+
+function formatYyyyMmDdLocal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateValue(value) {
+  if (value == null) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      12,
+      0,
+      0,
+      0
+    );
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  const numericRaw = Number(raw);
+  if (Number.isFinite(numericRaw)) {
+    // Excel date serial support.
+    if (numericRaw > 20000 && numericRaw < 90000) {
+      const epoch = new Date(Date.UTC(1899, 11, 30));
+      const parsedUtc = new Date(epoch.getTime() + numericRaw * 24 * 60 * 60 * 1000);
+      return new Date(
+        parsedUtc.getUTCFullYear(),
+        parsedUtc.getUTCMonth(),
+        parsedUtc.getUTCDate(),
+        12,
+        0,
+        0,
+        0
+      );
+    }
+  }
+
+  const ddmmyyyy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  if (ddmmyyyy) {
+    const day = Number(ddmmyyyy[1]);
+    const month = Number(ddmmyyyy[2]) - 1;
+    const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3]);
+    const parsed = new Date(year, month, day, 12, 0, 0, 0);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  const yyyymmdd = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
+  if (yyyymmdd) {
+    const year = Number(yyyymmdd[1]);
+    const month = Number(yyyymmdd[2]) - 1;
+    const day = Number(yyyymmdd[3]);
+    const parsed = new Date(year, month, day, 12, 0, 0, 0);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  const directDate = new Date(raw);
+  if (!Number.isNaN(directDate.getTime())) {
+    return new Date(
+      directDate.getFullYear(),
+      directDate.getMonth(),
+      directDate.getDate(),
+      12,
+      0,
+      0,
+      0
+    );
+  }
+
+  return null;
+}
 
 function normalizeHeaderKey(value) {
   return String(value || '')
@@ -106,32 +184,9 @@ function normalizeDuration(value) {
 }
 
 function toYyyyMmDdDate(value) {
-  if (!value) return null;
-
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().split('T')[0];
-  }
-
-  const text = String(value).trim();
-  if (!text) return null;
-
-  const directDate = new Date(text);
-  if (!Number.isNaN(directDate.getTime())) {
-    return directDate.toISOString().split('T')[0];
-  }
-
-  const ddmmyyyy = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
-  if (ddmmyyyy) {
-    const day = Number(ddmmyyyy[1]);
-    const month = Number(ddmmyyyy[2]) - 1;
-    const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3]);
-    const parsed = new Date(year, month, day);
-    if (!Number.isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
-    }
-  }
-
-  return null;
+  const parsed = parseDateValue(value);
+  if (!parsed) return null;
+  return formatYyyyMmDdLocal(parsed);
 }
 
 function computeValidityFromPlan(monthlyPlan) {
@@ -250,6 +305,7 @@ function normalizeImportedRows(rawRows) {
     const address = toNaIfEmpty(mappedValues.address);
     const membershipId = toNaIfEmpty(mappedValues.membershipId);
     const membershipValidUntil = toYyyyMmDdDate(mappedValues.membershipValidUntil);
+    const joinDate = parseDateValue(mappedValues.joinDate);
 
     normalizedRows.push({
       sourceRowNumber: rowIndex + 2,
@@ -266,6 +322,7 @@ function normalizeImportedRows(rawRows) {
       address,
       membershipId,
       membershipValidUntil,
+      joinDate,
       missingFields
     });
 
@@ -285,12 +342,77 @@ function normalizeImportedRows(rawRows) {
         address,
         membershipId,
         membershipValidUntil: membershipValidUntil || 'NA',
+        joinDate: joinDate != null ? formatYyyyMmDdLocal(joinDate) : 'NA',
         missingFields
       });
     }
   });
 
   return { normalizedRows, previewRows };
+}
+
+function sanitizeImportValue(value) {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed.toUpperCase() === 'NA') return null;
+    return trimmed;
+  }
+  return value;
+}
+
+function buildMemberMergePatch(existingMember, row) {
+  const patch = {};
+
+  const incomingName = sanitizeImportValue(row.memberName);
+  if (incomingName && incomingName !== existingMember.memberName) patch.memberName = incomingName;
+
+  const incomingAge = Number(row.age);
+  if (Number.isFinite(incomingAge) && incomingAge > 0 && incomingAge !== existingMember.age) patch.age = incomingAge;
+
+  const incomingGender = sanitizeImportValue(row.gender);
+  if (incomingGender && incomingGender !== existingMember.gender) patch.gender = incomingGender;
+
+  const incomingPhone = sanitizeImportValue(row.phone);
+  if (incomingPhone && incomingPhone !== existingMember.phone) patch.phone = incomingPhone;
+
+  const incomingEmail = sanitizeImportValue(row.email);
+  if (incomingEmail && incomingEmail !== existingMember.email) patch.email = incomingEmail;
+
+  const incomingAddress = sanitizeImportValue(row.address);
+  if (incomingAddress && incomingAddress !== existingMember.address) patch.address = incomingAddress;
+
+  const incomingPaymentMode = sanitizeImportValue(row.paymentMode);
+  if (incomingPaymentMode && incomingPaymentMode !== existingMember.paymentMode) patch.paymentMode = incomingPaymentMode;
+
+  const incomingPaymentAmount = Number(row.paymentAmount);
+  if (Number.isFinite(incomingPaymentAmount) && incomingPaymentAmount >= 0 && incomingPaymentAmount !== existingMember.paymentAmount) {
+    patch.paymentAmount = incomingPaymentAmount;
+  }
+
+  const incomingPlan = sanitizeImportValue(row.planSelected);
+  if (incomingPlan && incomingPlan !== existingMember.planSelected) patch.planSelected = incomingPlan;
+
+  const incomingMonthlyPlan = sanitizeImportValue(row.monthlyPlan);
+  if (incomingMonthlyPlan && incomingMonthlyPlan !== existingMember.monthlyPlan) patch.monthlyPlan = incomingMonthlyPlan;
+
+  const incomingActivity = sanitizeImportValue(row.activityPreference);
+  if (incomingActivity && incomingActivity !== existingMember.activityPreference) patch.activityPreference = incomingActivity;
+
+  const incomingMembershipId = sanitizeImportValue(row.membershipId);
+  if (incomingMembershipId && incomingMembershipId !== existingMember.membershipId) patch.membershipId = incomingMembershipId;
+
+  const incomingJoinDate = row.joinDate instanceof Date ? row.joinDate : parseDateValue(row.joinDate);
+  if (incomingJoinDate && (!existingMember.joinDate || new Date(existingMember.joinDate).getTime() !== incomingJoinDate.getTime())) {
+    patch.joinDate = incomingJoinDate;
+  }
+
+  const incomingValidUntil = sanitizeImportValue(row.membershipValidUntil);
+  if (incomingValidUntil && incomingValidUntil !== existingMember.membershipValidUntil) {
+    patch.membershipValidUntil = incomingValidUntil;
+  }
+
+  return patch;
 }
 
 async function parseImportFile(file) {
@@ -324,6 +446,7 @@ exports.importMembers = async (req, res) => {
     if (!gym) return res.status(404).json({ success: false, message: 'Gym not found.' });
 
     const shouldCommit = req.body.commit === 'true' || req.body.commit === true;
+    const mergeDuplicates = req.body.mergeDuplicates === 'true' || req.body.mergeDuplicates === true;
     const parsedChunkSize = Number(req.body.chunkSize || 500);
     const chunkSize = Number.isFinite(parsedChunkSize)
       ? Math.min(Math.max(parsedChunkSize, 100), 2000)
@@ -361,27 +484,38 @@ exports.importMembers = async (req, res) => {
     const phones = normalizedRows
       .map((row) => row.phone)
       .filter((value) => value && value !== 'NA');
+    const membershipIds = normalizedRows
+      .map((row) => row.membershipId)
+      .filter((value) => value && value !== 'NA');
 
     const existingMembers = await Member.find({
       gym: gymId,
       $or: [
+        { membershipId: { $in: membershipIds } },
         { email: { $in: emails } },
         { phone: { $in: phones } }
       ]
-    }).select('email phone');
+    }).select('_id memberName membershipId email phone planSelected monthlyPlan paymentAmount membershipValidUntil joinDate');
 
     const existingEmailSet = new Set(existingMembers.map((m) => String(m.email || '').toLowerCase()).filter(Boolean));
     const existingPhoneSet = new Set(existingMembers.map((m) => String(m.phone || '').trim()).filter(Boolean));
+    const existingMembershipIdSet = new Set(existingMembers.map((m) => String(m.membershipId || '').trim()).filter(Boolean));
+    const existingByMembershipId = new Map(existingMembers.map((m) => [String(m.membershipId || '').trim(), m]));
+    const existingByEmail = new Map(existingMembers.map((m) => [String(m.email || '').toLowerCase(), m]));
+    const existingByPhone = new Map(existingMembers.map((m) => [String(m.phone || '').trim(), m]));
 
     const seenEmailSet = new Set();
     const seenPhoneSet = new Set();
+    const seenMembershipIdSet = new Set();
 
     let importedCount = 0;
+    let mergedCount = 0;
     let skippedDuplicateCount = 0;
     let skippedInvalidCount = 0;
     let totalMissingFields = 0;
 
     const resultsPreview = [];
+    const duplicates = [];
     const docsToInsert = [];
 
     const flushInsertChunk = async () => {
@@ -432,16 +566,76 @@ exports.importMembers = async (req, res) => {
 
       const normalizedEmail = row.email && row.email !== 'NA' ? String(row.email).toLowerCase() : null;
       const normalizedPhone = row.phone && row.phone !== 'NA' ? String(row.phone).trim() : null;
+      const normalizedMembershipId = row.membershipId && row.membershipId !== 'NA' ? String(row.membershipId).trim() : null;
 
       const hasExistingDuplicate =
+        (normalizedMembershipId && existingMembershipIdSet.has(normalizedMembershipId)) ||
         (normalizedEmail && existingEmailSet.has(normalizedEmail)) ||
         (normalizedPhone && existingPhoneSet.has(normalizedPhone));
 
       const hasFileDuplicate =
+        (normalizedMembershipId && seenMembershipIdSet.has(normalizedMembershipId)) ||
         (normalizedEmail && seenEmailSet.has(normalizedEmail)) ||
         (normalizedPhone && seenPhoneSet.has(normalizedPhone));
 
       if (hasExistingDuplicate || hasFileDuplicate) {
+        const existingMember =
+          (normalizedMembershipId && existingByMembershipId.get(normalizedMembershipId)) ||
+          (normalizedEmail && existingByEmail.get(normalizedEmail)) ||
+          (normalizedPhone && existingByPhone.get(normalizedPhone)) ||
+          null;
+
+        const duplicateReason = hasFileDuplicate ? 'duplicate_in_file' : 'duplicate_existing_member';
+
+        if (duplicates.length < 200) {
+          duplicates.push({
+            rowNumber: row.sourceRowNumber,
+            duplicateReason,
+            incoming: {
+              memberName: row.memberName,
+              membershipId: row.membershipId,
+              email: row.email,
+              phone: row.phone,
+              planSelected: row.planSelected,
+              monthlyPlan: row.monthlyPlan,
+              joinDate: row.joinDate ? formatYyyyMmDdLocal(row.joinDate) : 'NA',
+            },
+            existing: existingMember ? {
+              id: existingMember._id,
+              memberName: existingMember.memberName,
+              membershipId: existingMember.membershipId || 'NA',
+              email: existingMember.email || 'NA',
+              phone: existingMember.phone || 'NA',
+              planSelected: existingMember.planSelected || 'NA',
+              monthlyPlan: existingMember.monthlyPlan || 'NA',
+              joinDate: existingMember.joinDate ? formatYyyyMmDdLocal(new Date(existingMember.joinDate)) : 'NA',
+              membershipValidUntil: existingMember.membershipValidUntil || 'NA'
+            } : null,
+            missingFields: row.missingFields,
+          });
+        }
+
+        if (shouldCommit && mergeDuplicates && existingMember && !hasFileDuplicate) {
+          const mergePatch = buildMemberMergePatch(existingMember, row);
+          if (Object.keys(mergePatch).length > 0) {
+            await Member.findByIdAndUpdate(existingMember._id, { $set: mergePatch });
+          }
+          mergedCount += 1;
+
+          if (resultsPreview.length < 25) {
+            resultsPreview.push({
+              rowNumber: row.sourceRowNumber,
+              memberName: row.memberName,
+              phone: row.phone,
+              email: row.email,
+              status: 'merged_duplicate',
+              duplicateReason,
+              missingFields: row.missingFields
+            });
+          }
+          continue;
+        }
+
         skippedDuplicateCount += 1;
         if (resultsPreview.length < 25) {
           resultsPreview.push({
@@ -450,12 +644,14 @@ exports.importMembers = async (req, res) => {
             phone: row.phone,
             email: row.email,
             status: 'skipped_duplicate',
+            duplicateReason,
             missingFields: row.missingFields
           });
         }
         continue;
       }
 
+      if (normalizedMembershipId) seenMembershipIdSet.add(normalizedMembershipId);
       if (normalizedEmail) seenEmailSet.add(normalizedEmail);
       if (normalizedPhone) seenPhoneSet.add(normalizedPhone);
 
@@ -490,6 +686,7 @@ exports.importMembers = async (req, res) => {
         planSelected: row.planSelected,
         monthlyPlan: row.monthlyPlan,
         activityPreference: row.activityPreference,
+        joinDate: row.joinDate || undefined,
         membershipId,
         membershipValidUntil: row.membershipValidUntil || computeValidityFromPlan(row.monthlyPlan)
       };
@@ -528,14 +725,17 @@ exports.importMembers = async (req, res) => {
         parsedRows: normalizedRows.length,
         validRows,
         importedCount: shouldCommit ? importedCount : 0,
+        mergedCount: shouldCommit ? mergedCount : 0,
         skippedDuplicateCount,
         skippedInvalidCount,
         totalMissingFields,
         chunkSize,
+        duplicateStrategy: mergeDuplicates ? 'merge' : 'skip',
         committed: shouldCommit
       },
       preview: previewRows,
-      resultsPreview
+      resultsPreview,
+      duplicates
     });
   } catch (error) {
     console.error('Error importing members:', error);
