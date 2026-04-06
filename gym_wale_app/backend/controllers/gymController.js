@@ -790,6 +790,33 @@ exports.registerGym = async (req, res) => {
       return Number.isFinite(parsed) ? parsed : null;
     };
 
+    const resolveUploadedFileUrl = (file, { fallbackFolder = 'gymPhotos' } = {}) => {
+      if (!file || typeof file !== 'object') return '';
+
+      const candidates = [file.secure_url, file.url, file.path, file.location];
+      for (const candidate of candidates) {
+        if (typeof candidate !== 'string') continue;
+        const trimmed = candidate.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          return trimmed;
+        }
+        if (trimmed.startsWith('/uploads/')) {
+          return trimmed;
+        }
+        if (trimmed.startsWith('uploads/')) {
+          return `/${trimmed}`;
+        }
+      }
+
+      // Last fallback for legacy local uploads (if any).
+      if (typeof file.filename === 'string' && file.filename.trim()) {
+        return `/uploads/${fallbackFolder}/${file.filename.trim()}`;
+      }
+
+      return '';
+    };
+
     const parseActiveDays = (value) => {
       const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -908,11 +935,12 @@ exports.registerGym = async (req, res) => {
 
     const registrationPhotos = uploadedGymImages
       .map((file, index) => {
-        const imageUrl = file.path || file.secure_url || file.url || '';
+        const imageUrl = resolveUploadedFileUrl(file, { fallbackFolder: 'gymPhotos' });
         if (!imageUrl) return null;
         return {
-          title: `Gym Photo ${index + 1}`,
-          description: 'Uploaded during registration',
+          title: `NA-${index + 1}`,
+          description: 'NA',
+          // Category is enum-constrained in schema; use a safe default.
           category: 'general',
           imageUrl,
         };
@@ -928,7 +956,7 @@ exports.registerGym = async (req, res) => {
     let logoUrl = '';
     if (req.files && req.files.logo && req.files.logo.length > 0) {
       const logoFile = req.files.logo[0];
-      logoUrl = logoFile.path || logoFile.secure_url || logoFile.url || '';
+      logoUrl = resolveUploadedFileUrl(logoFile, { fallbackFolder: 'gym-logos' });
     }
 
     // Prefer explicit map coordinates from client; fallback to geocoding if not provided.
