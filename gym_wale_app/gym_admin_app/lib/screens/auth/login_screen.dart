@@ -6,6 +6,9 @@ import '../../config/app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../dashboard/dashboard_screen.dart';
 import 'forgot_password_screen.dart';
+import 'register_gym_screen.dart';
+import '../legal/privacy_policy_screen.dart';
+import '../legal/terms_and_conditions_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -321,7 +324,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   Widget _buildMobileHeader() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -335,46 +339,62 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
           topRight: Radius.circular(24),
         ),
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
-            width: 60,
-            height: 60,
+            width: 64,
+            height: 64,
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF334155) : Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primaryColor.withOpacity(isDark ? 0.3 : 0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 5),
-                ),
-              ],
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
             ),
-            padding: const EdgeInsets.all(8),
-            child: Image.asset(
-              'assets/images/logo.png',
-              fit: BoxFit.contain,
+            padding: const EdgeInsets.all(10),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(
+                'assets/images/gym-adminlogo.png',
+                fit: BoxFit.contain,
+              ),
             ),
           ),
-          const SizedBox(height: 12),
-          RichText(
-            text: const TextSpan(
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                TextSpan(
-                  text: 'Gym',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: navyBlue,
+                RichText(
+                  text: const TextSpan(
+                    children: [
+                      TextSpan(
+                        text: 'Gym',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: navyBlue,
+                        ),
+                      ),
+                      TextSpan(
+                        text: '-Wale',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.bold,
+                          color: orange,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                TextSpan(
-                  text: '-Wale',
+                const SizedBox(height: 4),
+                Text(
+                  'Admin Dashboard',
                   style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: orange,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white70 : const Color(0xFF475569),
                   ),
                 ),
               ],
@@ -577,6 +597,78 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 ),
               ),
             ),
+
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RegisterGymScreen(),
+                  ),
+                );
+              },
+              child: Text(
+                'New gym? Register now',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 4),
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 4,
+              runSpacing: 2,
+              children: [
+                Text(
+                  'By continuing, you agree to our',
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TermsAndConditionsScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Terms & Conditions'),
+                ),
+                Text(
+                  'and',
+                  style: TextStyle(
+                    color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                    fontSize: 12,
+                  ),
+                ),
+                TextButton(
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text('Privacy Policy'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -628,7 +720,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                   ),
                   padding: const EdgeInsets.all(12),
                   child: Image.asset(
-                    'assets/images/logo.png',
+                    'assets/images/gymadmin_white.png',
                     fit: BoxFit.contain,
                   ),
                 ),

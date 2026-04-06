@@ -76,7 +76,7 @@ router.options('/register', (req, res) => {
 });
 
 router.post('/register',  upload.fields([
-  { name: 'gymImages', maxCount: 5 },
+  { name: 'gymImages' },
   { name: 'logo', maxCount: 1 },
 ]), registerGym);
 

@@ -72,7 +72,7 @@ class SidebarMenu extends StatelessWidget {
                   ),
                   padding: const EdgeInsets.all(6),
                   child: Image.asset(
-                    'assets/images/logo.png',
+                    'assets/images/gym-adminlogo.png',
                     fit: BoxFit.contain,
                   ),
                 ),

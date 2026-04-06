@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import '../config/api_config.dart';
 import '../models/admin.dart';
 import 'storage_service.dart';
@@ -318,6 +319,84 @@ class AuthService {
       return {
         'success': false,
         'message': 'An unexpected error occurred',
+      };
+    }
+  }
+
+  /// Register Gym (new gym admin onboarding)
+  Future<Map<String, dynamic>> registerGym({
+    required Map<String, dynamic> payload,
+    XFile? logoFile,
+    List<XFile>? gymImages,
+  }) async {
+    try {
+      final hasUploads = logoFile != null || (gymImages != null && gymImages.isNotEmpty);
+
+      dynamic requestBody = payload;
+      Options? requestOptions;
+
+      if (hasUploads) {
+        final formMap = <String, dynamic>{...payload};
+
+        if (logoFile != null) {
+          final logoBytes = await logoFile.readAsBytes();
+          formMap['logo'] = MultipartFile.fromBytes(
+            logoBytes,
+            filename: logoFile.name,
+          );
+        }
+
+        if (gymImages != null && gymImages.isNotEmpty) {
+          final files = <MultipartFile>[];
+          for (final image in gymImages) {
+            final bytes = await image.readAsBytes();
+            files.add(
+              MultipartFile.fromBytes(
+                bytes,
+                filename: image.name,
+              ),
+            );
+          }
+          formMap['gymImages'] = files;
+        }
+
+        requestBody = FormData.fromMap(formMap);
+        requestOptions = Options(
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        );
+      }
+
+      final response = await _dio.post(
+        ApiConfig.registerGym,
+        data: requestBody,
+        options: requestOptions,
+      );
+
+      final data = response.data is Map<String, dynamic>
+          ? response.data as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      final isSuccess = (response.statusCode == 200 || response.statusCode == 201) &&
+          (data['status'] == 'pending' || data['success'] == true || data['message'] != null);
+
+      return {
+        'success': isSuccess,
+        'status': data['status'],
+        'message': data['message'] ?? 'Registration submitted successfully',
+      };
+    } on DioException catch (e) {
+      return {
+        'success': false,
+        'message': e.response?.data is Map<String, dynamic>
+            ? (e.response?.data['message'] ?? 'Registration failed')
+            : 'Registration failed',
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'An unexpected error occurred during registration',
       };
     }
   }

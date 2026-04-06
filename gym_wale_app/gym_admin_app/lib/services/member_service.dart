@@ -359,6 +359,8 @@ class MemberService {
     required PlatformFile file,
     bool commit = false,
     int chunkSize = 500,
+    int previewLimit = 500,
+    bool mergeDuplicates = false,
   }) async {
     try {
       MultipartFile multipartFile;
@@ -381,6 +383,8 @@ class MemberService {
         'file': multipartFile,
         'commit': commit.toString(),
         'chunkSize': chunkSize.toString(),
+        'previewLimit': previewLimit.toString(),
+        'mergeDuplicates': mergeDuplicates.toString(),
       });
 
       final response = await _dio.post(

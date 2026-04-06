@@ -19,12 +19,15 @@ import 'screens/attendance/attendance_screen.dart';
 import 'screens/payments/payments_screen.dart';
 import 'screens/geofence/geofence_setup_screen.dart';
 import 'screens/equipment/equipment_screen.dart';
+import 'screens/offers/offers_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/gym_profile_screen.dart';
 import 'screens/support/support_screen.dart';
+import 'screens/setup/setup_guide_screen.dart';
 import 'services/storage_service.dart';
 import 'services/passcode_service.dart';
 import 'services/firebase_messaging_service.dart';
+import 'services/setup_guide_service.dart';
 import 'widgets/passcode_dialog.dart';
 
 void main() async {
@@ -101,6 +104,12 @@ class MyApp extends StatelessWidget {
                   return MaterialPageRoute(builder: (_) => const SettingsScreen());
                 case '/gym-profile':
                   return MaterialPageRoute(builder: (_) => const GymProfileScreen());
+                case '/offers':
+                  return MaterialPageRoute(builder: (_) => const OffersScreen());
+                case '/setup-guide':
+                  return MaterialPageRoute(
+                    builder: (_) => const SetupGuideScreen(isFirstTimeFlow: false),
+                  );
                 case '/support':
                   final args = settings.arguments as Map<String, dynamic>?;
                   return MaterialPageRoute(
@@ -131,7 +140,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool _passcodeRequired = false;
   bool _passcodeVerified = false;
   bool _hasCheckedPasscode = false; // Track if we've already checked passcode settings
+  bool _checkingSetupGuide = false;
+  bool _shouldShowSetupGuide = false;
+  bool _hasCheckedSetupGuide = false;
   final PasscodeService _passcodeService = PasscodeService();
+  final SetupGuideService _setupGuideService = SetupGuideService();
+  final StorageService _storageService = StorageService();
 
   @override
   void initState() {
@@ -234,6 +248,51 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
   }
 
+  Future<void> _checkSetupGuideStatus() async {
+    if (_hasCheckedSetupGuide) return;
+
+    setState(() {
+      _checkingSetupGuide = true;
+      _hasCheckedSetupGuide = true;
+    });
+
+    final gymId = _storageService.getGymId();
+    bool shouldShow = false;
+
+    if (gymId != null && gymId.isNotEmpty) {
+      shouldShow = await _setupGuideService.shouldShowOnLogin(gymId);
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _shouldShowSetupGuide = shouldShow;
+      _checkingSetupGuide = false;
+    });
+  }
+
+  void _handleSetupGuideCompleted() {
+    if (!mounted) return;
+    setState(() {
+      _shouldShowSetupGuide = false;
+    });
+  }
+
+  void _handleSetupGuideSkipped() {
+    if (!mounted) return;
+    setState(() {
+      _shouldShowSetupGuide = false;
+    });
+  }
+
+  void _resetSetupGuideCheck() {
+    if (!mounted) return;
+    setState(() {
+      _checkingSetupGuide = false;
+      _shouldShowSetupGuide = false;
+      _hasCheckedSetupGuide = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_checkingOnboarding) {
@@ -280,12 +339,41 @@ class _AuthWrapperState extends State<AuthWrapper> {
           }
 
           // Show dashboard if no passcode required or passcode verified
+          if (!_hasCheckedSetupGuide && !_checkingSetupGuide) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted && !_hasCheckedSetupGuide) {
+                _checkSetupGuideStatus();
+              }
+            });
+          }
+
+          if (_checkingSetupGuide) {
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          }
+
+          if (_shouldShowSetupGuide) {
+            return SetupGuideScreen(
+              isFirstTimeFlow: true,
+              onCompleted: _handleSetupGuideCompleted,
+              onSkipped: _handleSetupGuideSkipped,
+            );
+          }
+
           return const DashboardScreen();
         } else {
           // Reset passcode state when logged out
           if (_hasCheckedPasscode || _passcodeVerified) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               _resetPasscodeCheck();
+            });
+          }
+          if (_hasCheckedSetupGuide || _shouldShowSetupGuide) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _resetSetupGuideCheck();
             });
           }
           return const LoginScreen();

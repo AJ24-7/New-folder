@@ -19,28 +19,59 @@ const speakeasy = require('speakeasy');
 const geocodeAddress = async (address, city, state, pincode) => {
   try {
     const fullAddress = [address, city, state, pincode].filter(Boolean).join(', ');
+    if (!fullAddress) return null;
     const encodedAddress = encodeURIComponent(fullAddress);
-    
-    
-    // Using Nominatim (free geocoding service)
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in`);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+
+    // Prefer OpenCage when API key is configured.
+    if (process.env.OPENCAGE_API_KEY) {
+      const openCageUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodedAddress}&key=${process.env.OPENCAGE_API_KEY}&limit=1&countrycode=in&no_annotations=1`;
+      const openCageResponse = await fetch(openCageUrl, {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (openCageResponse.ok) {
+        const openCageData = await openCageResponse.json();
+        const geometry = openCageData?.results?.[0]?.geometry;
+        if (geometry && Number.isFinite(geometry.lat) && Number.isFinite(geometry.lng)) {
+          return { lat: geometry.lat, lng: geometry.lng };
+        }
+      } else {
+        console.warn(`OpenCage geocoding skipped due to HTTP ${openCageResponse.status}`);
+      }
     }
-    
-    const data = await response.json();
-    
-    if (data && data.length > 0) {
+
+    // Fallback: Nominatim free endpoint (may return 403/429 on some hosted infra).
+    const emailHint = encodeURIComponent(
+      process.env.NOMINATIM_CONTACT_EMAIL || process.env.SUPPORT_EMAIL || 'support@gymwale.app'
+    );
+    const nominatimResponse = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in&addressdetails=0&email=${emailHint}`,
+      {
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': process.env.NOMINATIM_USER_AGENT || 'GymWaleBackend/1.0',
+          Referer: process.env.APP_URL || 'https://gym-wale.onrender.com',
+        },
+      }
+    );
+
+    if (!nominatimResponse.ok) {
+      console.warn(`Nominatim geocoding skipped due to HTTP ${nominatimResponse.status}`);
+      return null;
+    }
+
+    const nominatimData = await nominatimResponse.json();
+
+    if (Array.isArray(nominatimData) && nominatimData.length > 0) {
       return {
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon)
+        lat: parseFloat(nominatimData[0].lat),
+        lng: parseFloat(nominatimData[0].lon)
       };
     }
     
     return null;
   } catch (error) {
-    console.warn('Geocoding failed:', error);
+    console.warn('Geocoding failed, continuing without coordinates:', error.message);
     return null;
   }
 };
@@ -781,16 +812,125 @@ exports.resetPassword = async (req, res) => {
 
 exports.registerGym = async (req, res) => {
   try {
+    const toTrimmedString = (value) =>
+      typeof value === 'string' ? value.trim() : '';
 
-    // Password check
+    const parseCoordinate = (value) => {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const resolveUploadedFileUrl = (file, { fallbackFolder = 'gymPhotos' } = {}) => {
+      if (!file || typeof file !== 'object') return '';
+
+      const candidates = [file.secure_url, file.url, file.path, file.location];
+      for (const candidate of candidates) {
+        if (typeof candidate !== 'string') continue;
+        const trimmed = candidate.trim();
+        if (!trimmed) continue;
+        if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+          return trimmed;
+        }
+        if (trimmed.startsWith('/uploads/')) {
+          return trimmed;
+        }
+        if (trimmed.startsWith('uploads/')) {
+          return `/${trimmed}`;
+        }
+      }
+
+      // Last fallback for legacy local uploads (if any).
+      if (typeof file.filename === 'string' && file.filename.trim()) {
+        return `/uploads/${fallbackFolder}/${file.filename.trim()}`;
+      }
+
+      return '';
+    };
+
+    const parseActiveDays = (value) => {
+      const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+      let rawDays = [];
+      if (Array.isArray(value)) {
+        rawDays = value;
+      } else if (typeof value === 'string' && value.trim()) {
+        try {
+          const parsed = JSON.parse(value);
+          if (Array.isArray(parsed)) {
+            rawDays = parsed;
+          } else {
+            rawDays = value.split(',');
+          }
+        } catch {
+          rawDays = value.split(',');
+        }
+      }
+
+      const normalized = rawDays
+        .map((d) => toTrimmedString(String(d)).toLowerCase())
+        .filter((d) => validDays.includes(d));
+
+      return normalized.length > 0 ? [...new Set(normalized)] : validDays;
+    };
+
+    const gymName = toTrimmedString(req.body.gymName || req.body.name);
+    const email = toTrimmedString(req.body.email);
+    const phone = toTrimmedString(req.body.phone);
+    const contactPerson = toTrimmedString(req.body.contactPerson || req.body.ownerName);
+    const supportEmail = toTrimmedString(req.body.supportEmail || req.body.email);
+    const supportPhone = toTrimmedString(req.body.supportPhone || req.body.phone);
+    const description = toTrimmedString(req.body.description || req.body.about || req.body.gymDescription);
+
+    const address = toTrimmedString(req.body.address || req.body['location[address]'] || req.body.location?.address);
+    const city = toTrimmedString(req.body.city || req.body['location[city]'] || req.body.location?.city);
+    const state = toTrimmedString(req.body.state || req.body['location[state]'] || req.body.location?.state);
+    const pincode = toTrimmedString(req.body.pincode || req.body['location[pincode]'] || req.body.location?.pincode);
+    const landmark = toTrimmedString(req.body.landmark || req.body['location[landmark]'] || req.body.location?.landmark);
+
+    const incomingLat = parseCoordinate(
+      req.body.latitude ?? req.body.lat ?? req.body['location[lat]'] ?? req.body.location?.lat
+    );
+    const incomingLng = parseCoordinate(
+      req.body.longitude ?? req.body.lng ?? req.body['location[lng]'] ?? req.body.location?.lng
+    );
+
+    const hasValidIncomingCoordinates =
+      incomingLat !== null &&
+      incomingLng !== null &&
+      incomingLat >= -90 &&
+      incomingLat <= 90 &&
+      incomingLng >= -180 &&
+      incomingLng <= 180;
+
     const plainPassword = req.body.password;
-    if (!plainPassword) {
-      return res.status(400).json({ message: 'Password is required' });
+    if (!plainPassword || typeof plainPassword !== 'string' || plainPassword.length < 8) {
+      return res.status(400).json({ message: 'Password is required and must be at least 8 characters.' });
+    }
+
+    const requiredFields = {
+      gymName,
+      email,
+      phone,
+      contactPerson,
+      supportEmail,
+      supportPhone,
+      address,
+      city,
+      state,
+      pincode,
+    };
+
+    const missingFields = Object.keys(requiredFields).filter((key) => !requiredFields[key]);
+    if (missingFields.length > 0) {
+      return res.status(400).json({
+        message: `Missing required fields: ${missingFields.join(', ')}`,
+      });
     }
 
     // Duplicate check (by email or phone)
     const existingGym = await Gym.findOne({
-      $or: [{ email: req.body.email }, { phone: req.body.phone }]
+      $or: [{ email }, { phone }],
     });
 
     if (existingGym) {
@@ -799,218 +939,128 @@ exports.registerGym = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(plainPassword, 10);
 
+    const morningOpening = toTrimmedString(req.body.morningOpening || req.body.operatingHours?.morning?.opening);
+    const morningClosing = toTrimmedString(req.body.morningClosing || req.body.operatingHours?.morning?.closing);
+    const eveningOpening = toTrimmedString(req.body.eveningOpening || req.body.operatingHours?.evening?.opening);
+    const eveningClosing = toTrimmedString(req.body.eveningClosing || req.body.operatingHours?.evening?.closing);
 
-    // File handling for registration: gymImages (multiple) and logo (single)
-    let gymPhotos = [];
-    if (req.files && req.files.gymImages) {
-      // Parse meta fields for gymImages
-      let metaArr = [];
-      // Find max index for meta fields
-      let maxIdx = -1;
-      Object.keys(req.body).forEach(key => {
-        const match = key.match(/^gymImagesMeta\[(\d+)\]\[(title|description|category)\]$/);
-        if (match) {
-          const idx = parseInt(match[1], 10);
-          if (idx > maxIdx) maxIdx = idx;
-        }
+    const hasMorningSlot = morningOpening && morningClosing;
+    const hasEveningSlot = eveningOpening && eveningClosing;
+    if (!hasMorningSlot && !hasEveningSlot) {
+      return res.status(400).json({
+        message: 'At least one complete operating slot is required (morning or evening).',
       });
-      for (let i = 0; i <= maxIdx; i++) {
-        metaArr[i] = {
-          title: req.body[`gymImagesMeta[${i}][title]`] || '',
-          description: req.body[`gymImagesMeta[${i}][description]`] || '',
-          category: req.body[`gymImagesMeta[${i}][category]`] || ''
-        };
-      }
-      const files = req.files.gymImages;
-      // Only include photos with all required fields
-      gymPhotos = files.map((file, i) => ({
-        title: metaArr[i]?.title || '',
-        description: metaArr[i]?.description || '',
-        category: metaArr[i]?.category || '',
-        imageUrl: `uploads/gymPhotos/${file.filename}`,
-        uploadedAt: new Date()
-      })).filter(photo => photo.title && photo.description && photo.category);
     }
 
-    // Handle gym logo upload (single file, field name: 'logo')
+    const activeDays = parseActiveDays(req.body.activeDays);
+
+    const uploadedGymImages = (req.files && Array.isArray(req.files.gymImages))
+      ? req.files.gymImages
+      : [];
+
+    if (uploadedGymImages.length < 2) {
+      return res.status(400).json({
+        message: 'Please upload at least 2 gym photos for registration.',
+      });
+    }
+
+    const registrationPhotos = uploadedGymImages
+      .map((file, index) => {
+        const imageUrl = resolveUploadedFileUrl(file, { fallbackFolder: 'gymPhotos' });
+        if (!imageUrl) return null;
+        return {
+          title: `NA-${index + 1}`,
+          description: 'NA',
+          // Category is enum-constrained in schema; use a safe default.
+          category: 'general',
+          imageUrl,
+        };
+      })
+      .filter(Boolean);
+
+    if (registrationPhotos.length < 2) {
+      return res.status(400).json({
+        message: 'Could not process the uploaded gym photos. Please try again.',
+      });
+    }
+
     let logoUrl = '';
     if (req.files && req.files.logo && req.files.logo.length > 0) {
-      logoUrl = `/uploads/gym-logos/${req.files.logo[0].filename}`;
-    } else {
-      logoUrl = '';
+      const logoFile = req.files.logo[0];
+      logoUrl = resolveUploadedFileUrl(logoFile, { fallbackFolder: 'gym-logos' });
     }
 
+    // Prefer explicit map coordinates from client; fallback to geocoding if not provided.
+    let coordinates = hasValidIncomingCoordinates
+      ? { lat: incomingLat, lng: incomingLng }
+      : null;
 
-    // Parse activities as array of objects: [{ name, icon, description }]
-    let activities = [];
-    if (Array.isArray(req.body.activities)) {
-      activities = req.body.activities.map(a => {
-        if (typeof a === 'string') {
-          // Check if string is JSON
-          try {
-            const parsed = JSON.parse(a);
-            return {
-              name: parsed.name || '',
-              icon: parsed.icon || 'fa-dumbbell',
-              description: parsed.description || ''
-            };
-          } catch {
-            // If not JSON, treat as plain name
-            return { name: a, icon: 'fa-dumbbell', description: '' };
-          }
-        } else if (typeof a === 'object' && a !== null && a.name) {
-          // Already correct format
-          return {
-            name: a.name,
-            icon: a.icon || 'fa-dumbbell',
-            description: a.description || ''
-          };
-        }
-        return null;
-      }).filter(Boolean);
-    } else if (typeof req.body.activities === 'string') {
-      // Accept JSON string or comma-separated
+    if (!coordinates) {
       try {
-        const arr = JSON.parse(req.body.activities);
-        if (Array.isArray(arr)) {
-          activities = arr.map(a =>
-            typeof a === 'object' && a !== null
-              ? { name: a.name || '', icon: a.icon || 'fa-dumbbell', description: a.description || '' }
-              : { name: a, icon: 'fa-dumbbell', description: '' }
-          ).filter(Boolean);
-        }
-      } catch {
-        // fallback: comma-separated string
-        activities = req.body.activities.split(',').map(s => ({ name: s.trim(), icon: 'fa-dumbbell', description: '' }));
+        coordinates = await geocodeAddress(
+          address,
+          city,
+          state,
+          pincode
+        );
+      } catch (geocodeError) {
+        console.error('Geocoding error during registration:', geocodeError);
       }
     }
 
-
-    // Parse membership plans robustly (handle indexed fields from FormData)
-    let membershipPlans = [];
-    // Collect all membership plan fields by index
-    const planFieldRegex = /^membershipPlans\[(\d+)\]\[(\w+)\]$/;
-    const planMap = {};
-    Object.keys(req.body).forEach(key => {
-      const match = key.match(planFieldRegex);
-      if (match) {
-        const idx = parseInt(match[1], 10);
-        const field = match[2];
-        if (!planMap[idx]) planMap[idx] = {};
-        planMap[idx][field] = req.body[key];
-      }
-    });
-    // Convert planMap to array, parse benefits as array, ensure proper data types
-    membershipPlans = Object.keys(planMap).sort((a,b)=>a-b).map(idx => {
-      const plan = planMap[idx];
-      return {
-        name: plan.name || '',
-        price: parseFloat(plan.price) || 0,
-        discount: parseFloat(plan.discount) || 0,
-        discountMonths: parseInt(plan.discountMonths) || 0,
-        benefits: plan.benefits ? plan.benefits.split(',').map(b => b.trim()).filter(Boolean) : [],
-        note: plan.note || '',
-        icon: plan.icon || 'fa-leaf',
-        color: plan.color || '#38b000'
-      };
-    });
-    // Fallback: legacy array style (for backward compatibility)
-    if (membershipPlans.length === 0 && Array.isArray(req.body.planName)) {
-      for (let i = 0; i < req.body.planName.length; i++) {
-        membershipPlans.push({
-          name: req.body.planName[i] || '',
-          price: parseFloat(req.body.planPrice[i]) || 0,
-          discount: parseFloat(req.body.planDiscount[i]) || 0,
-          discountMonths: parseInt(req.body.planDiscountMonths[i]) || 0,
-          benefits: req.body.planBenefits[i]?.split(',').map(b => b.trim()).filter(Boolean) || [],
-          note: req.body.planNote[i] || '',
-          icon: req.body.planIcon[i] || 'fa-leaf',
-          color: req.body.planColor[i] || '#38b000'
-        });
-      }
-    }
-    
-    // Ensure we have default membership plans if none were provided
-    if (membershipPlans.length === 0) {
-      membershipPlans = [
-        { 
-          name: 'Basic', 
-          price: 800, 
-          discount: 0, 
-          discountMonths: 0, 
-          benefits: ['Gym Access', 'Group Classes'], 
-          note: 'Best for beginners', 
-          icon: 'fa-leaf', 
-          color: '#38b000' 
-        },
-        { 
-          name: 'Standard', 
-          price: 1200, 
-          discount: 10, 
-          discountMonths: 6, 
-          benefits: ['All Basic Benefits', 'Diet Plan', 'Locker Facility'], 
-          note: 'Most Popular', 
-          icon: 'fa-star', 
-          color: '#3a86ff' 
-        },
-        { 
-          name: 'Premium', 
-          price: 1800, 
-          discount: 15, 
-          discountMonths: 12, 
-          benefits: ['All Standard Benefits', 'Personal Trainer', 'Spa & Sauna'], 
-          note: 'For serious fitness', 
-          icon: 'fa-gem', 
-          color: '#8338ec' 
-        }
-      ];
-    }
-
-    // Try to geocode the address to get lat/lng coordinates
-    let coordinates = null;
-    try {
-      coordinates = await geocodeAddress(
-        req.body.address,
-        req.body.city,
-        req.body.state,
-        req.body.pincode
-      );
-      if (coordinates) {
-      } else {
-      }
-    } catch (geocodeError) {
-      console.error('Geocoding error during registration:', geocodeError);
-    }
+    const finalDescription = toTrimmedString(description);
+    const safeRegistrationPhotos = registrationPhotos.map((photo, index) => ({
+      ...photo,
+      title: toTrimmedString(photo.title) || `NA-${index + 1}`,
+      description: toTrimmedString(photo.description) || 'NA',
+      category: toTrimmedString(photo.category) || 'general',
+    }));
 
     const newGym = new Gym({
-      gymName: req.body.gymName,
+      gymName,
       admin: req.admin ? req.admin.id : null,
-      email: req.body.email,
-      phone: req.body.phone,
+      email,
+      phone,
       password: hashedPassword,
       location: {
-        address: req.body.address,
-        city: req.body.city,
-        state: req.body.state,
-        pincode: req.body.pincode,
-        landmark: req.body.landmark,
+        address,
+        city,
+        state,
+        pincode,
+        landmark,
         lat: coordinates?.lat || null,
-        lng: coordinates?.lng || null
+        lng: coordinates?.lng || null,
+        geofenceRadius: Number(req.body.geofenceRadius) || 100,
       },
-      description: req.body.description,
-      gymPhotos,
+      description: finalDescription,
+      gymPhotos: safeRegistrationPhotos,
       logoUrl,
-      equipment: Array.isArray(req.body.equipment) ? req.body.equipment : (typeof req.body.equipment === 'string' ? req.body.equipment.split(',').map(e => e.trim()) : []),
-      activities,
-      membershipPlans,
-      contactPerson: req.body.contactPerson,
-      supportEmail: req.body.supportEmail,
-      supportPhone: req.body.supportPhone,
-      openingTime: req.body.openingTime,
-      closingTime: req.body.closingTime,
-      membersCount: req.body.currentMembers,
+      equipment: [],
+      activities: [],
+      contactPerson,
+      supportEmail,
+      supportPhone,
+      operatingHours: {
+        morning: {
+          opening: hasMorningSlot ? morningOpening : undefined,
+          closing: hasMorningSlot ? morningClosing : undefined,
+        },
+        evening: {
+          opening: hasEveningSlot ? eveningOpening : undefined,
+          closing: hasEveningSlot ? eveningClosing : undefined,
+        },
+      },
+      activeDays,
+      openingTime: toTrimmedString(req.body.openingTime) || (hasMorningSlot ? morningOpening : ''),
+      closingTime: toTrimmedString(req.body.closingTime) || (hasEveningSlot ? eveningClosing : ''),
+      membersCount: Number(req.body.currentMembers) || 0,
       status: 'pending',
     });
+
+    // Description is optional; keep it as an empty string when omitted.
+    if (typeof newGym.description !== 'string') {
+      newGym.description = '';
+    }
 
     await newGym.save();
 
@@ -1117,6 +1167,18 @@ exports.registerGym = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error during gym registration:", error);
+
+    if (error?.name === 'ValidationError') {
+      const fields = Object.values(error.errors || {}).map((e) => e.path);
+      return res.status(400).json({
+        message: 'Validation failed while registering gym',
+        fields,
+        details: Object.fromEntries(
+          Object.entries(error.errors || {}).map(([key, val]) => [key, val?.message || 'Invalid value'])
+        ),
+      });
+    }
+
     res.status(500).json({ message: "Server error while registering gym" });
   }
 };

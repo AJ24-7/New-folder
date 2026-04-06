@@ -130,29 +130,51 @@ class LocationPermissionServiceWeb {
     }
 
     try {
-      final completer = Completer<WebPosition?>();
-      final geolocation = web.window.navigator.geolocation;
+      Future<WebPosition?> fetchWithOptions({
+        required bool highAccuracy,
+        required int timeoutMs,
+        required int maximumAgeMs,
+      }) async {
+        final completer = Completer<WebPosition?>();
+        final geolocation = web.window.navigator.geolocation;
 
-      geolocation.getCurrentPosition(
-        (web.GeolocationPosition position) {
-          completer.complete(WebPosition(
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: DateTime.now(),
-          ));
-        }.toJS,
-        (web.GeolocationPositionError error) {
-          completer.complete(null);
-        }.toJS,
-        web.PositionOptions(
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0,
-        ),
+        geolocation.getCurrentPosition(
+          (web.GeolocationPosition position) {
+            completer.complete(WebPosition(
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy,
+              timestamp: DateTime.now(),
+            ));
+          }.toJS,
+          (web.GeolocationPositionError error) {
+            completer.complete(null);
+          }.toJS,
+          web.PositionOptions(
+            enableHighAccuracy: highAccuracy,
+            timeout: timeoutMs,
+            maximumAge: maximumAgeMs,
+          ),
+        );
+
+        return completer.future;
+      }
+
+      final precise = await fetchWithOptions(
+        highAccuracy: true,
+        timeoutMs: 12000,
+        maximumAgeMs: 0,
       );
+      if (precise != null) {
+        return precise;
+      }
 
-      return await completer.future;
+      // Retry allowing cached position so browsers can return a quick valid fix.
+      return await fetchWithOptions(
+        highAccuracy: false,
+        timeoutMs: 15000,
+        maximumAgeMs: 300000,
+      );
     } catch (e) {
       return null;
     }

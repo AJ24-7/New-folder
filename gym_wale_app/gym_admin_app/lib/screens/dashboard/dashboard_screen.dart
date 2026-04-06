@@ -55,7 +55,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final MemberService _memberService = MemberService();
   final _currencyFormat = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
   final _dateFormat = DateFormat('dd MMM yyyy');
-  
+
   DashboardStats? _stats;
   List<GymPhoto> _gymPhotos = [];
   MembershipPlan? _membershipPlan;
@@ -73,7 +73,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   String _trialStatusFilter = '';
   String _trialDateFilter = '';
-  
+
   // Dashboard Data - TODO: Implement when backend endpoints are ready
   // final List<dynamic> _newMembers = [];
   // final List<dynamic> _trialBookings = [];
@@ -82,12 +82,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // final List<dynamic> _gymPhotos = [];
   // final List<dynamic> _membershipPlans = [];
   // final List<dynamic> _activities = [];
-  
+
   // Chart Data - TODO: Implement attendance chart
   // final int _selectedMonth = DateTime.now().month - 1;
   // final int _selectedYear = DateTime.now().year;
   // final List<double> _attendanceData = List.filled(31, 0);
-  
+
   // Trial Bookings Filter - TODO: Implement trial bookings filter
   // final String _trialStatusFilter = '';
 
@@ -101,7 +101,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   /// Initialize Firebase Cloud Messaging
   Future<void> _initializeFCM() async {
     try {
-      final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+      final notificationProvider = Provider.of<NotificationProvider>(
+        context,
+        listen: false,
+      );
       await notificationProvider.initializeFCM();
       debugPrint('✅ [Dashboard] FCM initialized');
     } catch (e) {
@@ -116,45 +119,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _hasError = false;
       });
     }
-    
+
     try {
       // Load dashboard stats (critical - if this fails, show error)
       final stats = await _apiService.getDashboardStats();
-      
+
       if (mounted) {
         setState(() {
           _stats = stats;
           _isLoading = false;
         });
       }
-      
+
       // Load gym photos independently (non-critical - failures won't break the page)
       _loadGymPhotos();
-      
+
       // Load membership plans independently (non-critical)
       _loadMembershipPlans();
-      
+
       // Load gym logo independently (non-critical)
       _loadGymLogo();
-      
+
       // Load recent activities independently (non-critical)
       _loadRecentActivities();
-      
+
       // Load gym activities independently (non-critical)
       _loadGymActivities();
-      
+
       // Load trial bookings independently (non-critical)
       _loadTrialBookings();
-      
+
       // Load equipment gallery independently (non-critical)
       _loadEquipmentGallery();
-      
+
       // Load recent members independently (non-critical)
       _loadRecentMembers();
-      
+
       // Load attendance stats independently (non-critical)
       _loadAttendanceStats();
-      
+
       // TODO: Load additional dashboard data (implement these methods in ApiService)
       // _newMembers = await _apiService.getNewMembers(limit: 5);
       // _trialBookings = await _apiService.getTrialBookings(limit: 5);
@@ -162,7 +165,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // _equipmentGallery = await _apiService.getEquipment(limit: 4);
       // _activities = await _apiService.getGymActivities();
       // _attendanceData = await _apiService.getAttendanceChartData(_selectedMonth, _selectedYear);
-      
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -296,7 +298,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         status: _trialStatusFilter.isNotEmpty ? _trialStatusFilter : null,
         dateFilter: _trialDateFilter.isNotEmpty ? _trialDateFilter : null,
       );
-      
+
       if (result != null && result['bookings'] != null) {
         if (mounted) {
           setState(() {
@@ -318,7 +320,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     try {
       final equipment = await _equipmentService.getAllEquipment();
       // Only show equipment with photos
-      final equipmentWithPhotos = equipment.where((e) => e.photos.isNotEmpty).toList();
+      final equipmentWithPhotos = equipment
+          .where((e) => e.photos.isNotEmpty)
+          .toList();
       if (mounted) {
         setState(() {
           _equipmentGallery = equipmentWithPhotos;
@@ -367,7 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _onMenuItemSelected(int index) {
     if (index == _selectedIndex) return;
-    
+
     // Navigate to different screens based on index
     // Using pushReplacementNamed/pushReplacement to properly replace current screen
     switch (index) {
@@ -387,9 +391,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const AttendanceScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const AttendanceScreen()),
         );
         break;
       case 4: // Payments
@@ -400,9 +402,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const EquipmentScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const EquipmentScreen()),
         );
         break;
       case 6: // Offers
@@ -410,9 +410,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => const OffersScreen(),
-          ),
+          MaterialPageRoute(builder: (context) => const OffersScreen()),
         );
         break;
       case 7: // Support & Reviews
@@ -421,9 +419,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final gymId = _getCurrentGymId();
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => SupportScreen(gymId: gymId),
-          ),
+          MaterialPageRoute(builder: (context) => SupportScreen(gymId: gymId)),
         );
         break;
       case 8: // Settings
@@ -446,7 +442,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       key: _scaffoldKey,
-      backgroundColor: isDark ? AppTheme.darkBackgroundColor : AppTheme.backgroundColor,
+      backgroundColor: isDark
+          ? AppTheme.darkBackgroundColor
+          : AppTheme.backgroundColor,
       body: Row(
         children: [
           // Sidebar
@@ -462,7 +460,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               children: [
                 // Top Navigation Bar - Compact Version
-                _buildTopNavBar(context, l10n, isDesktop, isTablet, admin, themeProvider, localeProvider),
+                _buildTopNavBar(
+                  context,
+                  l10n,
+                  isDesktop,
+                  isTablet,
+                  admin,
+                  themeProvider,
+                  localeProvider,
+                ),
 
                 // Content Area
                 Expanded(
@@ -493,7 +499,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           : null,
     );
   }
-  
+
   Widget _buildTopNavBar(
     BuildContext context,
     AppLocalizations l10n,
@@ -535,7 +541,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           if (!isDesktop)
             IconButton(
-              icon: const FaIcon(FontAwesomeIcons.bars, size: 24, color: Colors.white),
+              icon: const FaIcon(
+                FontAwesomeIcons.bars,
+                size: 24,
+                color: Colors.white,
+              ),
               onPressed: () => _scaffoldKey.currentState?.openDrawer(),
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
@@ -586,7 +596,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.7), width: 2),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.7),
+                width: 2,
+              ),
             ),
             child: CircleAvatar(
               radius: 17,
@@ -605,9 +618,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           if (isDesktop || isTablet) ...[
             const SizedBox(width: 8),
-            Text(admin?.name ?? 'Admin', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+            Text(
+              admin?.name ?? 'Admin',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down, size: 18, color: Colors.white),
+            const Icon(
+              Icons.keyboard_arrow_down,
+              size: 18,
+              color: Colors.white,
+            ),
           ],
         ],
       ),
@@ -623,12 +646,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         PopupMenuItem(
+          value: 'setup_guide',
+          child: Row(
+            children: [
+              const Icon(Icons.school_outlined, size: 18),
+              const SizedBox(width: 12),
+              const Text('Setup Guide'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
           value: 'logout',
           child: Row(
             children: [
               const Icon(Icons.logout, size: 18, color: AppTheme.errorColor),
               const SizedBox(width: 12),
-              const Text('Logout', style: TextStyle(color: AppTheme.errorColor)),
+              const Text(
+                'Logout',
+                style: TextStyle(color: AppTheme.errorColor),
+              ),
             ],
           ),
         ),
@@ -638,12 +674,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _handleLogout();
         } else if (value == 'profile') {
           Navigator.pushNamed(context, '/gym-profile');
+        } else if (value == 'setup_guide') {
+          Navigator.pushNamed(context, '/setup-guide');
         }
       },
     );
   }
 
-  Widget _buildDashboardContent(BuildContext context, AppLocalizations l10n, bool isDesktop) {
+  Widget _buildDashboardContent(
+    BuildContext context,
+    AppLocalizations l10n,
+    bool isDesktop,
+  ) {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -653,7 +695,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: AppTheme.errorColor,
+            ),
             const SizedBox(height: 16),
             Text(_errorMessage),
             const SizedBox(height: 16),
@@ -676,27 +722,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Stats Cards
             _buildStatsCards(l10n, isDesktop),
             const SizedBox(height: 24),
-            
+
             // Send Notifications Section
             const NotificationQuickActions(),
             const SizedBox(height: 24),
-            
+
             // Quick Actions & Activities Row
             _buildQuickActionsRow(isDesktop),
             const SizedBox(height: 24),
-            
+
             // Gym Photos Section
             _buildGymPhotosSection(),
             const SizedBox(height: 24),
-            
+
             // Equipment Gallery Section
             _buildEquipmentGalleryCard(l10n),
             const SizedBox(height: 24),
-            
+
             // Membership Plans
             _buildMembershipPlansSection(),
             const SizedBox(height: 24),
-            
+
             // Main Content Grid
             if (isDesktop)
               Row(
@@ -717,11 +763,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 24),
                   Expanded(
                     flex: 1,
-                    child: Column(
-                      children: [
-                        _buildRecentActivityCard(l10n),
-                      ],
-                    ),
+                    child: Column(children: [_buildRecentActivityCard(l10n)]),
                   ),
                 ],
               )
@@ -742,11 +784,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   Widget _buildStatsCards(AppLocalizations l10n, bool isDesktop) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
     return GridView.count(
       crossAxisCount: isDesktop ? 4 : 2,
       crossAxisSpacing: isMobile ? 8 : 16,
@@ -771,7 +813,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         StatCard(
           title: 'Overall Attendance',
-          value: '${(_attendanceStats?.monthlyAttendanceRate ?? 0).toStringAsFixed(1)}%',
+          value:
+              '${(_attendanceStats?.monthlyAttendanceRate ?? 0).toStringAsFixed(1)}%',
           icon: Icons.calendar_today,
           color: AppTheme.infoColor,
           trend: _attendanceStats?.monthlyAttendanceRate,
@@ -800,9 +843,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                FaIcon(FontAwesomeIcons.heart, color: AppTheme.errorColor, size: 18),
+                FaIcon(
+                  FontAwesomeIcons.heart,
+                  color: AppTheme.errorColor,
+                  size: 18,
+                ),
                 SizedBox(width: 12),
-                Text('Activities Offered', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  'Activities Offered',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 Spacer(),
                 TextButton.icon(
                   onPressed: _showManageActivitiesDialog,
@@ -818,9 +868,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         children: [
-                          FaIcon(FontAwesomeIcons.dumbbell, size: 48, color: Colors.grey[400]),
+                          FaIcon(
+                            FontAwesomeIcons.dumbbell,
+                            size: 48,
+                            color: Colors.grey[400],
+                          ),
                           SizedBox(height: 12),
-                          Text('No activities added yet', style: TextStyle(color: Colors.grey[600])),
+                          Text(
+                            'No activities added yet',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
                           SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: _showManageActivitiesDialog,
@@ -834,7 +891,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : Wrap(
                     spacing: 12,
                     runSpacing: 12,
-                    children: _gymActivities.map((activity) => _buildActivityCard(activity)).toList(),
+                    children: _gymActivities
+                        .map((activity) => _buildActivityCard(activity))
+                        .toList(),
                   ),
           ],
         ),
@@ -856,9 +915,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     const Row(
                       children: [
-                        FaIcon(FontAwesomeIcons.bolt, color: AppTheme.primaryColor, size: 18),
+                        FaIcon(
+                          FontAwesomeIcons.bolt,
+                          color: AppTheme.primaryColor,
+                          size: 18,
+                        ),
                         SizedBox(width: 12),
-                        Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                        Text(
+                          'Quick Actions',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 20),
@@ -869,9 +938,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(width: 24),
-          Expanded(
-            child: _buildActivitiesOfferedCard(),
-          ),
+          Expanded(child: _buildActivitiesOfferedCard()),
         ],
       );
     }
@@ -887,9 +954,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 const Row(
                   children: [
-                    FaIcon(FontAwesomeIcons.bolt, color: AppTheme.primaryColor, size: 18),
+                    FaIcon(
+                      FontAwesomeIcons.bolt,
+                      color: AppTheme.primaryColor,
+                      size: 18,
+                    ),
                     SizedBox(width: 12),
-                    Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(
+                      'Quick Actions',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -903,17 +980,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ],
     );
   }
-  
+
   Widget _buildQuickActionsGrid() {
     final actions = [
-      {'icon': FontAwesomeIcons.userPlus, 'label': 'Add Member', 'onTap': _showAddMemberDialog},
-      {'icon': FontAwesomeIcons.moneyBillWave, 'label': 'Record Payment', 'onTap': _showRecordPaymentDialog},
-      {'icon': FontAwesomeIcons.userTie, 'label': 'Add Trainer', 'onTap': _showAddTrainerDialog},
-      {'icon': FontAwesomeIcons.dumbbell, 'label': 'Add Equipment', 'onTap': _showAddEquipmentDialog},
-      {'icon': FontAwesomeIcons.qrcode, 'label': 'Generate QR', 'onTap': _showQRCodeDialog},
-      {'icon': FontAwesomeIcons.fingerprint, 'label': 'Biometric', 'onTap': _showBiometricDialog},
+      {
+        'icon': FontAwesomeIcons.userPlus,
+        'label': 'Add Member',
+        'onTap': _showAddMemberDialog,
+      },
+      {
+        'icon': FontAwesomeIcons.moneyBillWave,
+        'label': 'Record Payment',
+        'onTap': _showRecordPaymentDialog,
+      },
+      {
+        'icon': FontAwesomeIcons.userTie,
+        'label': 'Add Trainer',
+        'onTap': _showAddTrainerDialog,
+      },
+      {
+        'icon': FontAwesomeIcons.dumbbell,
+        'label': 'Add Equipment',
+        'onTap': _showAddEquipmentDialog,
+      },
+      {
+        'icon': FontAwesomeIcons.qrcode,
+        'label': 'Generate QR',
+        'onTap': _showQRCodeDialog,
+      },
+      {
+        'icon': FontAwesomeIcons.fingerprint,
+        'label': 'Biometric',
+        'onTap': _showBiometricDialog,
+      },
     ];
-    
+
     return Wrap(
       spacing: 12,
       runSpacing: 12,
@@ -927,16 +1028,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
             decoration: BoxDecoration(
               color: AppTheme.primaryColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+              border: Border.all(
+                color: AppTheme.primaryColor.withValues(alpha: 0.2),
+              ),
             ),
             child: Column(
               children: [
-                FaIcon(action['icon'] as IconData, color: AppTheme.primaryColor, size: 24),
+                FaIcon(
+                  action['icon'] as IconData,
+                  color: AppTheme.primaryColor,
+                  size: 24,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   action['label'] as String,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -955,7 +1065,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           color: AppTheme.primaryColor.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+          border: Border.all(
+            color: AppTheme.primaryColor.withValues(alpha: 0.2),
+          ),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -969,10 +1081,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Text(
               activity.name,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -993,9 +1102,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               size: 28,
             ),
             SizedBox(width: 12),
-            Expanded(
-              child: Text(activity.name),
-            ),
+            Expanded(child: Text(activity.name)),
           ],
         ),
         content: Text(
@@ -1015,8 +1122,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   // Show manage activities dialog
   void _showManageActivitiesDialog() async {
     // Track selected activities
-    List<String> selectedActivityNames = _gymActivities.map((a) => a.name).toList();
-    
+    List<String> selectedActivityNames = _gymActivities
+        .map((a) => a.name)
+        .toList();
+
     await showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
@@ -1044,7 +1153,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     spacing: 12,
                     runSpacing: 12,
                     children: PredefinedActivities.all.map((activity) {
-                      final isSelected = selectedActivityNames.contains(activity.name);
+                      final isSelected = selectedActivityNames.contains(
+                        activity.name,
+                      );
                       return InkWell(
                         onTap: () {
                           setState(() {
@@ -1060,12 +1171,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           width: 140,
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: isSelected 
+                            color: isSelected
                                 ? AppTheme.primaryColor.withValues(alpha: 0.15)
                                 : Colors.grey.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: isSelected 
+                              color: isSelected
                                   ? AppTheme.primaryColor
                                   : Colors.grey.withValues(alpha: 0.3),
                               width: isSelected ? 2 : 1,
@@ -1075,7 +1186,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               FaIcon(
                                 FontAwesomeIconMapper.getIcon(activity.icon),
-                                color: isSelected ? AppTheme.primaryColor : Colors.grey[600],
+                                color: isSelected
+                                    ? AppTheme.primaryColor
+                                    : Colors.grey[600],
                                 size: 28,
                               ),
                               SizedBox(height: 8),
@@ -1084,8 +1197,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                  color: isSelected ? AppTheme.primaryColor : Colors.grey[800],
+                                  fontWeight: isSelected
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: isSelected
+                                      ? AppTheme.primaryColor
+                                      : Colors.grey[800],
                                 ),
                               ),
                               if (isSelected)
@@ -1141,7 +1258,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .toList();
 
       // Update activities via API
-      final updatedActivities = await _gymService.updateGymActivities(selectedActivities);
+      final updatedActivities = await _gymService.updateGymActivities(
+        selectedActivities,
+      );
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading
@@ -1159,7 +1278,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     } catch (e) {
       if (!mounted) return;
       Navigator.pop(context); // Close loading
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to update activities: $e'),
@@ -1168,12 +1287,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
   }
-  
+
   Widget _buildGymPhotosSection() {
     final size = MediaQuery.of(context).size;
     final isTablet = size.width > 600 && size.width <= 900;
     final isMobile = size.width <= 600;
-    
+
     return Card(
       child: Padding(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -1186,12 +1305,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Flexible(
                   child: Row(
                     children: [
-                      FaIcon(FontAwesomeIcons.images, color: AppTheme.primaryColor, size: 18),
+                      FaIcon(
+                        FontAwesomeIcons.images,
+                        color: AppTheme.primaryColor,
+                        size: 18,
+                      ),
                       SizedBox(width: 12),
                       Flexible(
                         child: Text(
                           'Gym Photos',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1219,7 +1345,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(40),
                   child: Column(
                     children: [
-                      const Icon(Icons.photo_library_outlined, size: 48, color: Colors.grey),
+                      const Icon(
+                        Icons.photo_library_outlined,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'No photos uploaded yet',
@@ -1267,7 +1397,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             fit: BoxFit.cover,
             errorBuilder: (context, error, stack) => Container(
               color: Colors.grey[300],
-              child: const Icon(Icons.broken_image, size: 48, color: Colors.grey),
+              child: const Icon(
+                Icons.broken_image,
+                size: 48,
+                color: Colors.grey,
+              ),
             ),
           ),
           Positioned(
@@ -1302,10 +1436,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   Text(
                     photo.category,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10,
-                    ),
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
                   ),
                 ],
               ),
@@ -1321,7 +1452,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   color: Colors.black.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(4),
                 ),
-                child: const Icon(Icons.more_vert, color: Colors.white, size: 16),
+                child: const Icon(
+                  Icons.more_vert,
+                  color: Colors.white,
+                  size: 16,
+                ),
               ),
               itemBuilder: (context) => [
                 const PopupMenuItem(value: 'edit', child: Text('Edit')),
@@ -1340,11 +1475,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   Widget _buildMembershipPlansSection() {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
     return Card(
       child: Padding(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -1357,12 +1492,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Flexible(
                   child: Row(
                     children: [
-                      FaIcon(FontAwesomeIcons.crown, color: Color(0xFFFFBE0B), size: 18),
+                      FaIcon(
+                        FontAwesomeIcons.crown,
+                        color: Color(0xFFFFBE0B),
+                        size: 18,
+                      ),
                       SizedBox(width: 12),
                       Flexible(
                         child: Text(
                           'Membership Plans',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -1370,28 +1512,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                if (_membershipPlan != null && (_membershipPlan!.monthlyOptions.isNotEmpty || _membershipPlan!.tiers.isNotEmpty))
+                if (_membershipPlan != null &&
+                    (_membershipPlan!.monthlyOptions.isNotEmpty ||
+                        _membershipPlan!.tiers.isNotEmpty))
                   isMobile
                       ? IconButton(
                           onPressed: _showEditMembershipPlansDialog,
-                          icon: const FaIcon(FontAwesomeIcons.penToSquare, size: 18),
+                          icon: const FaIcon(
+                            FontAwesomeIcons.penToSquare,
+                            size: 18,
+                          ),
                           tooltip: 'Edit Plan',
                         )
                       : OutlinedButton.icon(
                           onPressed: _showEditMembershipPlansDialog,
-                          icon: const FaIcon(FontAwesomeIcons.penToSquare, size: 14),
+                          icon: const FaIcon(
+                            FontAwesomeIcons.penToSquare,
+                            size: 14,
+                          ),
                           label: const Text('Edit Plan'),
                         ),
               ],
             ),
             const SizedBox(height: 20),
-            if (_membershipPlan == null || (_membershipPlan!.monthlyOptions.isEmpty && _membershipPlan!.tiers.isEmpty))
+            if (_membershipPlan == null ||
+                (_membershipPlan!.monthlyOptions.isEmpty &&
+                    _membershipPlan!.tiers.isEmpty))
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(40),
                   child: Column(
                     children: [
-                      const Icon(Icons.card_membership_outlined, size: 48, color: Colors.grey),
+                      const Icon(
+                        Icons.card_membership_outlined,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
                       const SizedBox(height: 12),
                       const Text(
                         'No membership plan created yet',
@@ -1434,68 +1590,143 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: planColor.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: planColor.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: FaIcon(
+                _getIconData(plan.icon),
+                color: planColor,
+                size: 20,
+              ),
             ),
-            child: FaIcon(_getIconData(plan.icon), color: planColor, size: 20),
-          ),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(plan.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            if (plan.note.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(plan.note, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            ],
-          ])),
-        ]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    plan.name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  if (plan.note.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      plan.note,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 12,
           runSpacing: 12,
-          children: plan.monthlyOptions.map((option) => SizedBox(
-            width: 180,
-            child: Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    Text('${option.months} month${option.months > 1 ? 's' : ''}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    if (option.isPopular) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: planColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(999)),
-                        child: const Text('POPULAR', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
+          children: plan.monthlyOptions
+              .map(
+                (option) => SizedBox(
+                  width: 180,
+                  child: Card(
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '${option.months} month${option.months > 1 ? 's' : ''}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              if (option.isPopular) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 2,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: planColor.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(999),
+                                  ),
+                                  child: const Text(
+                                    'POPULAR',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _currencyFormat.format(option.finalPrice),
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                          if (option.discount > 0) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              '${option.discount}% OFF • ${_currencyFormat.format(option.price)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppTheme.successColor,
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
-                    ],
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(_currencyFormat.format(option.finalPrice), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.primaryColor)),
-                  if (option.discount > 0) ...[
-                    const SizedBox(height: 2),
-                    Text('${option.discount}% OFF • ${_currencyFormat.format(option.price)}', style: const TextStyle(fontSize: 11, color: AppTheme.successColor)),
-                  ],
-                ]),
-              ),
-            ),
-          )).toList(),
+                    ),
+                  ),
+                ),
+              )
+              .toList(),
         ),
         if (plan.benefits.isNotEmpty) ...[
           const SizedBox(height: 20),
-          const Text('Benefits Included', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+          const Text(
+            'Benefits Included',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
           Wrap(
-            spacing: 8, runSpacing: 8,
-            children: plan.benefits.map((b) => Chip(
-              avatar: const Icon(Icons.check_circle, size: 14, color: AppTheme.successColor),
-              label: Text(b),
-            )).toList(),
+            spacing: 8,
+            runSpacing: 8,
+            children: plan.benefits
+                .map(
+                  (b) => Chip(
+                    avatar: const Icon(
+                      Icons.check_circle,
+                      size: 14,
+                      color: AppTheme.successColor,
+                    ),
+                    label: Text(b),
+                  ),
+                )
+                .toList(),
           ),
         ],
       ],
@@ -1508,95 +1739,228 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final isDesktop = size.width > 900;
     final isTablet = size.width > 600 && size.width <= 900;
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        const FaIcon(FontAwesomeIcons.layerGroup, size: 14, color: AppTheme.primaryColor),
-        const SizedBox(width: 8),
-        Text('${plan.tiers.length} Tier Plans', style: const TextStyle(fontSize: 13, color: AppTheme.primaryColor, fontWeight: FontWeight.w600)),
-      ]),
-      const SizedBox(height: 16),
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: plan.tiers.map((tier) {
-            Color tierColor;
-            try { tierColor = Color(int.parse(tier.color.replaceFirst('#', '0xFF'))); } catch (_) { tierColor = AppTheme.primaryColor; }
-
-            final popularOpt = tier.monthlyOptions.isNotEmpty
-                ? (tier.monthlyOptions.firstWhere((o) => o.isPopular, orElse: () => tier.monthlyOptions.first))
-                : null;
-
-            return Container(
-              width: isDesktop ? 220 : (isTablet ? 200 : 180),
-              margin: const EdgeInsets.only(right: 16),
-              child: Card(
-                elevation: 3,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  side: BorderSide(color: tierColor.withValues(alpha: 0.35), width: 1.5),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: tierColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
-                        child: FaIcon(_getIconData(tier.icon), color: tierColor, size: 16),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(child: Text(tier.name, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: tierColor), overflow: TextOverflow.ellipsis)),
-                    ]),
-                    if (tier.note.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(tier.note, style: TextStyle(fontSize: 11, color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis),
-                    ],
-                    const SizedBox(height: 12),
-                    if (popularOpt != null) ...[
-                      Text('From', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-                      const SizedBox(height: 2),
-                      Text(_currencyFormat.format(popularOpt.finalPrice), style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: tierColor)),
-                      Text('/ ${popularOpt.durationLabel}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-                      const Divider(height: 14),
-                    ],
-                    ...tier.monthlyOptions.map((opt) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        Text(opt.durationLabel, style: const TextStyle(fontSize: 12)),
-                        Row(mainAxisSize: MainAxisSize.min, children: [
-                          if (opt.isPopular)
-                            Container(
-                              margin: const EdgeInsets.only(right: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(color: tierColor.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                              child: Text('★', style: TextStyle(fontSize: 9, color: tierColor)),
-                            ),
-                          Text(_currencyFormat.format(opt.finalPrice), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: tierColor)),
-                        ]),
-                      ]),
-                    )),
-                    if (tier.benefits.isNotEmpty) ...[
-                      const Divider(height: 14),
-                      ...tier.benefits.take(4).map((b) => Padding(
-                        padding: const EdgeInsets.only(bottom: 3),
-                        child: Row(children: [
-                          Icon(Icons.check_circle, size: 12, color: tierColor),
-                          const SizedBox(width: 6),
-                          Expanded(child: Text(b, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
-                        ]),
-                      )),
-                      if (tier.benefits.length > 4)
-                        Text('+${tier.benefits.length - 4} more', style: TextStyle(fontSize: 10, color: Colors.grey[600])),
-                    ],
-                  ]),
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const FaIcon(
+              FontAwesomeIcons.layerGroup,
+              size: 14,
+              color: AppTheme.primaryColor,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '${plan.tiers.length} Tier Plans',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.primaryColor,
+                fontWeight: FontWeight.w600,
               ),
-            );
-          }).toList(),
+            ),
+          ],
         ),
-      ),
-    ]);
+        const SizedBox(height: 16),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: plan.tiers.map((tier) {
+              Color tierColor;
+              try {
+                tierColor = Color(
+                  int.parse(tier.color.replaceFirst('#', '0xFF')),
+                );
+              } catch (_) {
+                tierColor = AppTheme.primaryColor;
+              }
+
+              final popularOpt = tier.monthlyOptions.isNotEmpty
+                  ? (tier.monthlyOptions.firstWhere(
+                      (o) => o.isPopular,
+                      orElse: () => tier.monthlyOptions.first,
+                    ))
+                  : null;
+
+              return Container(
+                width: isDesktop ? 220 : (isTablet ? 200 : 180),
+                margin: const EdgeInsets.only(right: 16),
+                child: Card(
+                  elevation: 3,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(
+                      color: tierColor.withValues(alpha: 0.35),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: tierColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: FaIcon(
+                                _getIconData(tier.icon),
+                                color: tierColor,
+                                size: 16,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                tier.name,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: tierColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (tier.note.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            tier.note,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        if (popularOpt != null) ...[
+                          Text(
+                            'From',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.grey[500],
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            _currencyFormat.format(popularOpt.finalPrice),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: tierColor,
+                            ),
+                          ),
+                          Text(
+                            '/ ${popularOpt.durationLabel}',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                          const Divider(height: 14),
+                        ],
+                        ...tier.monthlyOptions.map(
+                          (opt) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  opt.durationLabel,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (opt.isPopular)
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 4),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 4,
+                                          vertical: 1,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: tierColor.withValues(
+                                            alpha: 0.15,
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          '★',
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            color: tierColor,
+                                          ),
+                                        ),
+                                      ),
+                                    Text(
+                                      _currencyFormat.format(opt.finalPrice),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: tierColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (tier.benefits.isNotEmpty) ...[
+                          const Divider(height: 14),
+                          ...tier.benefits
+                              .take(4)
+                              .map(
+                                (b) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 3),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle,
+                                        size: 12,
+                                        color: tierColor,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          b,
+                                          style: const TextStyle(fontSize: 11),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          if (tier.benefits.length > 4)
+                            Text(
+                              '+${tier.benefits.length - 4} more',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
+    );
   }
 
   IconData _getIconData(String iconName) {
@@ -1611,7 +1975,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return FontAwesomeIcons.leaf;
     }
   }
-  
+
   Widget _buildNewMembersCard(AppLocalizations l10n) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
@@ -1624,15 +1988,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                const FaIcon(FontAwesomeIcons.users, color: AppTheme.primaryColor, size: 18),
+                const FaIcon(
+                  FontAwesomeIcons.users,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 const SizedBox(width: 12),
-                const Text('New Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'New Members',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 TextButton.icon(
-                  onPressed: () => Navigator.pushReplacementNamed(context, '/members'),
+                  onPressed: () =>
+                      Navigator.pushReplacementNamed(context, '/members'),
                   icon: const Icon(Icons.arrow_forward, size: 16),
                   label: const Text('View All'),
-                  style: TextButton.styleFrom(foregroundColor: AppTheme.primaryColor),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.primaryColor,
+                  ),
                 ),
               ],
             ),
@@ -1643,9 +2017,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(32),
                   child: Column(
                     children: [
-                      Icon(Icons.people_outline, size: 48, color: Colors.grey.shade400),
+                      Icon(
+                        Icons.people_outline,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 12),
-                      Text('No members yet', style: TextStyle(color: Colors.grey.shade600)),
+                      Text(
+                        'No members yet',
+                        style: TextStyle(color: Colors.grey.shade600),
+                      ),
                       const SizedBox(height: 12),
                       ElevatedButton.icon(
                         onPressed: _showAddMemberDialog,
@@ -1672,8 +2053,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     contentPadding: EdgeInsets.zero,
                     leading: CircleAvatar(
                       radius: 22,
-                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      child: member.profileImage != null && member.profileImage!.isNotEmpty
+                      backgroundColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.1,
+                      ),
+                      child:
+                          member.profileImage != null &&
+                              member.profileImage!.isNotEmpty
                           ? ClipOval(
                               child: Image.network(
                                 member.profileImage!,
@@ -1699,11 +2084,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     title: Text(
                       member.memberName,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
                     subtitle: Text(
                       '${member.planSelected} • ${member.monthlyPlan}',
-                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1722,12 +2113,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             'Until ${_dateFormat.format(member.membershipValidUntil!)}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: member.isExpired ? AppTheme.errorColor : Colors.grey.shade600,
+                              color: member.isExpired
+                                  ? AppTheme.errorColor
+                                  : Colors.grey.shade600,
                             ),
                           ),
                       ],
                     ),
-                    onTap: () => Navigator.pushReplacementNamed(context, '/members'),
+                    onTap: () =>
+                        Navigator.pushReplacementNamed(context, '/members'),
                   );
                 },
               ),
@@ -1736,11 +2130,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   Widget _buildTrialBookingsCard(AppLocalizations l10n) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
     return Card(
       child: Padding(
         padding: EdgeInsets.all(isMobile ? 16 : 24),
@@ -1749,9 +2143,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                const FaIcon(FontAwesomeIcons.calendarPlus, color: AppTheme.primaryColor, size: 18),
+                const FaIcon(
+                  FontAwesomeIcons.calendarPlus,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 const SizedBox(width: 12),
-                const Text('Trial Bookings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Trial Bookings',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 // Filter buttons
                 PopupMenuButton<String>(
@@ -1789,7 +2190,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     PopupMenuItem(value: 'tomorrow', child: Text('Tomorrow')),
                     PopupMenuItem(value: 'this-week', child: Text('This Week')),
                     PopupMenuItem(value: 'next-week', child: Text('Next Week')),
-                    PopupMenuItem(value: 'this-month', child: Text('This Month')),
+                    PopupMenuItem(
+                      value: 'this-month',
+                      child: Text('This Month'),
+                    ),
                   ],
                 ),
               ],
@@ -1801,8 +2205,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   padding: const EdgeInsets.all(40),
                   child: Column(
                     children: [
-                      FaIcon(FontAwesomeIcons.calendarXmark, 
-                        size: 48, 
+                      FaIcon(
+                        FontAwesomeIcons.calendarXmark,
+                        size: 48,
                         color: Colors.grey.shade300,
                       ),
                       const SizedBox(height: 16),
@@ -1818,7 +2223,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: _trialBookings.length > 5 ? 5 : _trialBookings.length,
+                itemCount: _trialBookings.length > 5
+                    ? 5
+                    : _trialBookings.length,
                 separatorBuilder: (context, index) => const Divider(height: 24),
                 itemBuilder: (context, index) {
                   final booking = _trialBookings[index];
@@ -1833,7 +2240,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: () {
                       // TODO: Navigate to full trial bookings page
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Full trial bookings page coming soon')),
+                        const SnackBar(
+                          content: Text('Full trial bookings page coming soon'),
+                        ),
                       );
                     },
                     icon: const Icon(Icons.arrow_forward),
@@ -1850,10 +2259,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildTrialBookingItem(TrialBooking booking) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
     Color statusColor;
     IconData statusIcon;
-    
+
     switch (booking.status.toLowerCase()) {
       case 'confirmed':
         statusColor = AppTheme.successColor;
@@ -1952,11 +2361,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 12),
                 // Status Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1964,7 +2378,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       FaIcon(statusIcon, size: 12, color: statusColor),
                       const SizedBox(width: 6),
                       Text(
-                        booking.status[0].toUpperCase() + booking.status.substring(1),
+                        booking.status[0].toUpperCase() +
+                            booking.status.substring(1),
                         style: TextStyle(
                           color: statusColor,
                           fontSize: 11,
@@ -1995,7 +2410,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     FontAwesomeIcons.phone,
                     booking.displayPhone,
                   ),
-                if (booking.fitnessGoal != null && booking.fitnessGoal!.isNotEmpty)
+                if (booking.fitnessGoal != null &&
+                    booking.fitnessGoal!.isNotEmpty)
                   _buildBookingDetail(
                     FontAwesomeIcons.dumbbell,
                     booking.fitnessGoal!,
@@ -2008,11 +2424,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => _updateTrialBookingStatus(booking.id, 'contacted'),
+                    onPressed: () =>
+                        _updateTrialBookingStatus(booking.id, 'contacted'),
                     icon: const FaIcon(FontAwesomeIcons.phone, size: 12),
                     label: const Text('Mark Contacted'),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
@@ -2024,7 +2444,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.successColor,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
@@ -2043,14 +2466,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         FaIcon(icon, size: 12, color: Colors.grey.shade600),
         const SizedBox(width: 6),
-        Text(
-          text,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-        ),
+        Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
       ],
     );
   }
-  
+
   Widget _buildAttendanceChart(AppLocalizations l10n) {
     final dailyData = _attendanceStats?.dailyData;
     final hasData = dailyData != null && dailyData.isNotEmpty;
@@ -2062,7 +2482,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       presentSpots = List.generate(dailyData.length, (i) {
         return FlSpot(i.toDouble(), dailyData[i].present.toDouble());
       });
-      final maxPresent = dailyData.fold<int>(0, (m, d) => d.present > m ? d.present : m);
+      final maxPresent = dailyData.fold<int>(
+        0,
+        (m, d) => d.present > m ? d.present : m,
+      );
       maxY = (maxPresent + 2).toDouble();
     } else {
       presentSpots = [const FlSpot(0, 0)];
@@ -2077,9 +2500,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                const FaIcon(FontAwesomeIcons.chartLine, color: AppTheme.primaryColor, size: 18),
+                const FaIcon(
+                  FontAwesomeIcons.chartLine,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 const SizedBox(width: 12),
-                const Text('Attendance Trend', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Attendance Trend',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 if (_attendanceStats != null)
                   Text(
@@ -2092,7 +2522,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
             if (!hasData)
               const SizedBox(
                 height: 200,
-                child: Center(child: Text('No attendance data for this month', style: TextStyle(color: Colors.grey))),
+                child: Center(
+                  child: Text(
+                    'No attendance data for this month',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
               )
             else
               SizedBox(
@@ -2101,29 +2536,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   LineChartData(
                     minY: 0,
                     maxY: maxY,
-                    gridData: const FlGridData(show: true, drawVerticalLine: false),
+                    gridData: const FlGridData(
+                      show: true,
+                      drawVerticalLine: false,
+                    ),
                     titlesData: FlTitlesData(
-                      leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 32)),
+                      leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: 32,
+                        ),
+                      ),
                       bottomTitles: AxisTitles(
                         sideTitles: SideTitles(
                           showTitles: true,
                           reservedSize: 28,
-                          interval: (dailyData.length / 6).ceilToDouble().clamp(1, 31),
+                          interval: (dailyData.length / 6).ceilToDouble().clamp(
+                            1,
+                            31,
+                          ),
                           getTitlesWidget: (value, meta) {
                             final idx = value.toInt();
-                            if (idx < 0 || idx >= dailyData.length) return const SizedBox.shrink();
+                            if (idx < 0 || idx >= dailyData.length)
+                              return const SizedBox.shrink();
                             return Padding(
                               padding: const EdgeInsets.only(top: 6),
                               child: Text(
                                 '${dailyData[idx].date.day}',
-                                style: const TextStyle(fontSize: 10, color: Colors.grey),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
                               ),
                             );
                           },
                         ),
                       ),
-                      topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                      rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
                     ),
                     borderData: FlBorderData(show: false),
                     lineBarsData: [
@@ -2134,7 +2588,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         color: AppTheme.primaryColor,
                         barWidth: 3,
                         dotData: FlDotData(show: dailyData.length <= 15),
-                        belowBarData: BarAreaData(show: true, color: AppTheme.primaryColor.withValues(alpha: 0.1)),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                        ),
                       ),
                     ],
                     lineTouchData: LineTouchData(
@@ -2146,7 +2603,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             final d = dailyData[idx];
                             return LineTooltipItem(
                               '${DateFormat('dd MMM').format(d.date)}\nPresent: ${d.present}',
-                              const TextStyle(color: Colors.white, fontSize: 12),
+                              const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
                             );
                           }).toList();
                         },
@@ -2160,7 +2620,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   Widget _buildRecentActivityCard(AppLocalizations l10n) {
     return Card(
       child: Padding(
@@ -2170,32 +2630,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             const Row(
               children: [
-                FaIcon(FontAwesomeIcons.clock, color: AppTheme.primaryColor, size: 18),
+                FaIcon(
+                  FontAwesomeIcons.clock,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 SizedBox(width: 12),
-                Text('Recent Activity', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  'Recent Activity',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
               ],
             ),
             const SizedBox(height: 20),
             if (_recentActivities.isEmpty)
-              const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No recent activity')))
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Text('No recent activity'),
+                ),
+              )
             else
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: _recentActivities.length > 10 ? 10 : _recentActivities.length,
+                itemCount: _recentActivities.length > 10
+                    ? 10
+                    : _recentActivities.length,
                 separatorBuilder: (context, index) => const Divider(),
                 itemBuilder: (context, index) {
                   final activity = _recentActivities[index];
                   final type = activity['type'] ?? '';
                   final description = activity['description'] ?? 'Activity';
-                  final createdAt = activity['createdAt'] != null 
-                    ? DateTime.parse(activity['createdAt'])
-                    : DateTime.now();
+                  final createdAt = activity['createdAt'] != null
+                      ? DateTime.parse(activity['createdAt'])
+                      : DateTime.now();
                   final timeAgo = _getTimeAgo(createdAt);
-                  
+
                   IconData icon;
                   Color color;
-                  
+
                   switch (type) {
                     case 'membership_plan_updated':
                       icon = FontAwesomeIcons.crown;
@@ -2213,7 +2687,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       icon = FontAwesomeIcons.circleInfo;
                       color = Colors.grey;
                   }
-                  
+
                   return ListTile(
                     leading: Container(
                       padding: const EdgeInsets.all(8),
@@ -2225,7 +2699,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     title: Text(
                       description,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     subtitle: Text(
                       timeAgo,
@@ -2240,11 +2717,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   String _getTimeAgo(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
-    
+
     if (difference.inDays > 0) {
       return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
     } else if (difference.inHours > 0) {
@@ -2255,7 +2732,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return 'Just now';
     }
   }
-  
+
   Widget _buildEquipmentGalleryCard(AppLocalizations l10n) {
     final size = MediaQuery.of(context).size;
     final isTablet = size.width > 600 && size.width <= 900;
@@ -2269,9 +2746,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Row(
               children: [
-                const FaIcon(FontAwesomeIcons.dumbbell, color: AppTheme.primaryColor, size: 18),
+                const FaIcon(
+                  FontAwesomeIcons.dumbbell,
+                  color: AppTheme.primaryColor,
+                  size: 18,
+                ),
                 const SizedBox(width: 12),
-                const Text('Equipment Gallery', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const Text(
+                  'Equipment Gallery',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
                 const Spacer(),
                 if (_equipmentGallery.isNotEmpty)
                   TextButton.icon(
@@ -2287,14 +2771,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
             const SizedBox(height: 20),
-            
+
             if (_equipmentGallery.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.all(40),
                   child: Column(
                     children: [
-                      Icon(Icons.fitness_center, size: 48, color: Colors.grey.shade400),
+                      Icon(
+                        Icons.fitness_center,
+                        size: 48,
+                        color: Colors.grey.shade400,
+                      ),
                       const SizedBox(height: 16),
                       Text(
                         'No equipment with photos yet',
@@ -2302,7 +2790,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton.icon(
-                        onPressed: () => Navigator.pushNamed(context, '/equipment'),
+                        onPressed: () =>
+                            Navigator.pushNamed(context, '/equipment'),
                         icon: const Icon(Icons.add),
                         label: const Text('Add Equipment'),
                         style: ElevatedButton.styleFrom(
@@ -2339,14 +2828,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final statusColor = equipment.status == EquipmentStatus.available
         ? AppTheme.successColor
         : equipment.status == EquipmentStatus.maintenance
-            ? AppTheme.warningColor
-            : AppTheme.errorColor;
+        ? AppTheme.warningColor
+        : AppTheme.errorColor;
 
     final statusText = equipment.status == EquipmentStatus.available
         ? 'Available'
         : equipment.status == EquipmentStatus.maintenance
-            ? 'Maintenance'
-            : 'Out of Service';
+        ? 'Maintenance'
+        : 'Out of Service';
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -2362,12 +2851,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stack) => Container(
                       color: Colors.grey[300],
-                      child: const Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                      child: const Icon(
+                        Icons.fitness_center,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
                     ),
                   )
                 : Container(
                     color: Colors.grey[300],
-                    child: const Icon(Icons.fitness_center, size: 48, color: Colors.grey),
+                    child: const Icon(
+                      Icons.fitness_center,
+                      size: 48,
+                      color: Colors.grey,
+                    ),
                   ),
             // Overlay gradient and text at bottom
             Positioned(
@@ -2415,10 +2912,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         const Text(
                           ' • ',
-                          style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                          ),
+                          style: TextStyle(color: Colors.white70, fontSize: 10),
                         ),
                         Text(
                           'Qty: ${equipment.quantity}',
@@ -2459,7 +2953,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 top: 4,
                 left: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(10),
@@ -2467,7 +2964,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.photo_library, size: 10, color: Colors.white),
+                      const Icon(
+                        Icons.photo_library,
+                        size: 10,
+                        color: Colors.white,
+                      ),
                       const SizedBox(width: 3),
                       Text(
                         '${equipment.photos.length}',
@@ -2486,7 +2987,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
+
   // Quick Action: Add Member
   void _showAddMemberDialog() {
     showDialog(
@@ -2507,7 +3008,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final amountController = TextEditingController();
     String selectedMemberId = '';
     String paymentMode = 'Cash';
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -2521,9 +3022,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Row(
                   children: [
-                    const FaIcon(FontAwesomeIcons.moneyBillWave, color: AppTheme.successColor),
+                    const FaIcon(
+                      FontAwesomeIcons.moneyBillWave,
+                      color: AppTheme.successColor,
+                    ),
                     const SizedBox(width: 12),
-                    const Text('Record Payment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                    const Text(
+                      'Record Payment',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -2564,7 +3074,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     prefixIcon: Icon(Icons.payment),
                   ),
                   items: ['Cash', 'Card', 'UPI', 'Bank Transfer']
-                      .map((mode) => DropdownMenuItem(value: mode, child: Text(mode)))
+                      .map(
+                        (mode) =>
+                            DropdownMenuItem(value: mode, child: Text(mode)),
+                      )
                       .toList(),
                   onChanged: (value) => setState(() => paymentMode = value!),
                 ),
@@ -2579,30 +3092,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(width: 12),
                     ElevatedButton(
                       onPressed: () async {
-                        if (selectedMemberId.isEmpty || amountController.text.isEmpty) {
+                        if (selectedMemberId.isEmpty ||
+                            amountController.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please fill in all fields')),
+                            const SnackBar(
+                              content: Text('Please fill in all fields'),
+                            ),
                           );
                           return;
                         }
-                        
+
                         final success = await _apiService.recordPayment({
                           'memberId': selectedMemberId,
                           'amount': double.tryParse(amountController.text) ?? 0,
                           'paymentMode': paymentMode,
                           'date': DateTime.now().toIso8601String(),
                         });
-                        
+
                         Navigator.pop(context);
-                        
+
                         if (success) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Payment recorded successfully!'), backgroundColor: AppTheme.successColor),
+                            const SnackBar(
+                              content: Text('Payment recorded successfully!'),
+                              backgroundColor: AppTheme.successColor,
+                            ),
                           );
                           _loadDashboardData();
                         } else {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Failed to record payment'), backgroundColor: AppTheme.errorColor),
+                            const SnackBar(
+                              content: Text('Failed to record payment'),
+                              backgroundColor: AppTheme.errorColor,
+                            ),
                           );
                         }
                       },
@@ -2624,7 +3146,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
     final specialtyController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -2637,9 +3159,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Row(
                 children: [
-                  const FaIcon(FontAwesomeIcons.userTie, color: AppTheme.secondaryColor),
+                  const FaIcon(
+                    FontAwesomeIcons.userTie,
+                    color: AppTheme.secondaryColor,
+                  ),
                   const SizedBox(width: 12),
-                  const Text('Add New Trainer', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Add New Trainer',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -2697,30 +3225,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(width: 12),
                   ElevatedButton(
                     onPressed: () async {
-                      if (nameController.text.isEmpty || emailController.text.isEmpty) {
+                      if (nameController.text.isEmpty ||
+                          emailController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please fill in all required fields')),
+                          const SnackBar(
+                            content: Text('Please fill in all required fields'),
+                          ),
                         );
                         return;
                       }
-                      
+
                       final success = await _apiService.addTrainer({
                         'name': nameController.text,
                         'email': emailController.text,
                         'phone': phoneController.text,
                         'specialty': specialtyController.text,
                       });
-                      
+
                       Navigator.pop(context);
-                      
+
                       if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Trainer added successfully!'), backgroundColor: AppTheme.successColor),
+                          const SnackBar(
+                            content: Text('Trainer added successfully!'),
+                            backgroundColor: AppTheme.successColor,
+                          ),
                         );
                         _loadDashboardData();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Failed to add trainer'), backgroundColor: AppTheme.errorColor),
+                          const SnackBar(
+                            content: Text('Failed to add trainer'),
+                            backgroundColor: AppTheme.errorColor,
+                          ),
                         );
                       }
                     },
@@ -2740,7 +3277,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final nameController = TextEditingController();
     final typeController = TextEditingController();
     final quantityController = TextEditingController();
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -2753,9 +3290,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Row(
                 children: [
-                  const FaIcon(FontAwesomeIcons.dumbbell, color: AppTheme.primaryColor),
+                  const FaIcon(
+                    FontAwesomeIcons.dumbbell,
+                    color: AppTheme.primaryColor,
+                  ),
                   const SizedBox(width: 12),
-                  const Text('Add Equipment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Add Equipment',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -2806,27 +3349,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     onPressed: () async {
                       if (nameController.text.isEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Please enter equipment name')),
+                          const SnackBar(
+                            content: Text('Please enter equipment name'),
+                          ),
                         );
                         return;
                       }
-                      
+
                       final success = await _apiService.addEquipment({
                         'name': nameController.text,
                         'type': typeController.text,
                         'quantity': int.tryParse(quantityController.text) ?? 1,
                       });
-                      
+
                       Navigator.pop(context);
-                      
+
                       if (success) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Equipment added successfully!'), backgroundColor: AppTheme.successColor),
+                          const SnackBar(
+                            content: Text('Equipment added successfully!'),
+                            backgroundColor: AppTheme.successColor,
+                          ),
                         );
                         _loadDashboardData();
                       } else {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Failed to add equipment'), backgroundColor: AppTheme.errorColor),
+                          const SnackBar(
+                            content: Text('Failed to add equipment'),
+                            backgroundColor: AppTheme.errorColor,
+                          ),
                         );
                       }
                     },
@@ -2852,7 +3403,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const FaIcon(FontAwesomeIcons.fingerprint, size: 64, color: AppTheme.primaryColor),
+              const FaIcon(
+                FontAwesomeIcons.fingerprint,
+                size: 64,
+                color: AppTheme.primaryColor,
+              ),
               const SizedBox(height: 24),
               const Text(
                 'Biometric Enrollment',
@@ -2869,13 +3424,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: () {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Biometric enrollment feature coming soon')),
+                    const SnackBar(
+                      content: Text('Biometric enrollment feature coming soon'),
+                    ),
                   );
                 },
                 icon: const FaIcon(FontAwesomeIcons.fingerprint, size: 18),
                 label: const Text('Start Enrollment'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 32,
+                    vertical: 16,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -2896,20 +3456,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showQRCodeDialog() async {
     // Fetch gym QR data
     final qrData = await _apiService.getGymQRData();
-    
+
     if (qrData == null || !mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Unable to generate QR code'), backgroundColor: AppTheme.errorColor),
+        const SnackBar(
+          content: Text('Unable to generate QR code'),
+          backgroundColor: AppTheme.errorColor,
+        ),
       );
       return;
     }
-    
+
     // Generate registration URL for QR code
-    final baseUrl = 'https://gym-wale.onrender.com';
-    final registrationUrl = '$baseUrl/gym-register.html?gymId=${qrData['gymId']}';
+    final baseUrl = 'https://gym-wale.com';
+    final registrationUrl =
+        '$baseUrl/gym-register.html?gymId=${qrData['gymId']}&gym=${qrData['gymId']}';
     final gymName = qrData['gymName'] ?? 'Gym';
     final gymId = qrData['gymId'] ?? '';
-    
+
     showDialog(
       context: context,
       builder: (context) => Dialog(
@@ -2927,7 +3491,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: BoxDecoration(
                   color: AppTheme.primaryColor.withValues(alpha: 0.1),
                   border: Border(
-                    bottom: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.2)),
+                    bottom: BorderSide(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                    ),
                   ),
                 ),
                 child: Row(
@@ -2936,7 +3502,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const Flexible(
                       child: Text(
                         'Gym Registration QR Code',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -2964,12 +3533,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline, color: AppTheme.infoColor),
+                            const Icon(
+                              Icons.info_outline,
+                              color: AppTheme.infoColor,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 'Members can scan this QR code to register or update their information',
-                                style: TextStyle(fontSize: 13, color: Colors.blue.shade900),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.blue.shade900,
+                                ),
                               ),
                             ),
                           ],
@@ -2983,7 +3558,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.3,
+                              ),
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: Colors.black.withValues(alpha: 0.1),
@@ -2997,7 +3576,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             version: QrVersions.auto,
                             size: 250,
                             backgroundColor: Colors.white,
-                            embeddedImage: _gymLogoUrl != null ? NetworkImage(_gymLogoUrl!) : null,
+                            embeddedImage: _gymLogoUrl != null
+                                ? NetworkImage(_gymLogoUrl!)
+                                : null,
                             embeddedImageStyle: const QrEmbeddedImageStyle(
                               size: Size(40, 40),
                             ),
@@ -3007,19 +3588,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const SizedBox(height: 16),
                       Text(
                         gymName,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           'Gym ID: $gymId',
-                          style: const TextStyle(color: AppTheme.primaryColor, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: AppTheme.primaryColor,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -3029,19 +3619,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         alignment: WrapAlignment.center,
                         children: [
                           ElevatedButton.icon(
-                            onPressed: () => _downloadQRCodeA4Template(registrationUrl, gymName, gymId),
+                            onPressed: () => _downloadQRCodeA4Template(
+                              registrationUrl,
+                              gymName,
+                              gymId,
+                            ),
                             icon: const Icon(Icons.download, size: 18),
                             label: const Text('Download A4'),
                             style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
                             ),
                           ),
                           OutlinedButton.icon(
-                            onPressed: () => _copyUrlToClipboard(registrationUrl),
+                            onPressed: () =>
+                                _copyUrlToClipboard(registrationUrl),
                             icon: const Icon(Icons.copy, size: 18),
                             label: const Text('Copy Link'),
                             style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
                             ),
                           ),
                           TextButton.icon(
@@ -3049,7 +3650,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             icon: const Icon(Icons.close, size: 18),
                             label: const Text('Close'),
                             style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 20,
+                                vertical: 12,
+                              ),
                             ),
                           ),
                         ],
@@ -3089,7 +3693,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   // Download QR code as A4 creative template
-  Future<void> _downloadQRCodeA4Template(String qrData, String gymName, String gymId) async {
+  Future<void> _downloadQRCodeA4Template(
+    String qrData,
+    String gymName,
+    String gymId,
+  ) async {
     try {
       // Navigate to dedicated QR code template screen
       Navigator.of(context).push(
@@ -3112,7 +3720,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
     }
   }
-  
+
   void _handleLogout() {
     showDialog(
       context: context,
@@ -3120,7 +3728,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Confirm Logout'),
         content: const Text('Are you sure you want to logout?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('No')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('No'),
+          ),
           ElevatedButton(
             onPressed: () async {
               Navigator.pop(context); // Close dialog first
@@ -3132,7 +3743,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 (route) => false, // Remove all previous routes
               );
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
             child: const Text('Yes'),
           ),
         ],
@@ -3172,9 +3785,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => const Center(child: CircularProgressIndicator()),
+      builder: (dialogContext) =>
+          const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
       await _gymService.uploadGymPhoto(
         photoFile: photoFile,
@@ -3195,9 +3809,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload photo: $e')));
       }
     }
   }
@@ -3212,9 +3826,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => const Center(child: CircularProgressIndicator()),
+      builder: (dialogContext) =>
+          const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
       await _gymService.updateGymPhoto(
         photoId: photoId,
@@ -3235,9 +3850,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to update photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to update photo: $e')));
       }
     }
   }
@@ -3291,7 +3906,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.image, size: 48, color: Colors.grey),
+                            const Icon(
+                              Icons.image,
+                              size: 48,
+                              color: Colors.grey,
+                            ),
                             const SizedBox(height: 8),
                             ElevatedButton.icon(
                               onPressed: () async {
@@ -3341,12 +3960,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'facilities', child: Text('Facilities')),
-                      DropdownMenuItem(value: 'equipment', child: Text('Equipment')),
-                      DropdownMenuItem(value: 'classes', child: Text('Classes')),
-                      DropdownMenuItem(value: 'exterior', child: Text('Exterior')),
-                      DropdownMenuItem(value: 'amenities', child: Text('Amenities')),
-                      DropdownMenuItem(value: 'general', child: Text('General')),
+                      DropdownMenuItem(
+                        value: 'facilities',
+                        child: Text('Facilities'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'equipment',
+                        child: Text('Equipment'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'classes',
+                        child: Text('Classes'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'exterior',
+                        child: Text('Exterior'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'amenities',
+                        child: Text('Amenities'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'general',
+                        child: Text('General'),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -3384,9 +4021,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                       // Close the form dialog
                       Navigator.of(context).pop();
-                      
+
                       // Perform upload
-                      _performPhotoUpload(photoFile, photoTitle, photoDescription, photoCategory);
+                      _performPhotoUpload(
+                        photoFile,
+                        photoTitle,
+                        photoDescription,
+                        photoCategory,
+                      );
                     },
               child: const Text('Upload'),
             ),
@@ -3398,7 +4040,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _showEditPhotoDialog(GymPhoto photo) async {
     final titleController = TextEditingController(text: photo.title);
-    final descriptionController = TextEditingController(text: photo.description);
+    final descriptionController = TextEditingController(
+      text: photo.description,
+    );
     String category = photo.category;
     XFile? selectedImage;
     Uint8List? imageBytes;
@@ -3459,7 +4103,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           icon: const Icon(Icons.camera_alt, size: 16),
                           label: const Text('Change'),
                           style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                           ),
                         ),
                       ),
@@ -3490,12 +4137,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       border: OutlineInputBorder(),
                     ),
                     items: const [
-                      DropdownMenuItem(value: 'facilities', child: Text('Facilities')),
-                      DropdownMenuItem(value: 'equipment', child: Text('Equipment')),
-                      DropdownMenuItem(value: 'classes', child: Text('Classes')),
-                      DropdownMenuItem(value: 'exterior', child: Text('Exterior')),
-                      DropdownMenuItem(value: 'amenities', child: Text('Amenities')),
-                      DropdownMenuItem(value: 'general', child: Text('General')),
+                      DropdownMenuItem(
+                        value: 'facilities',
+                        child: Text('Facilities'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'equipment',
+                        child: Text('Equipment'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'classes',
+                        child: Text('Classes'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'exterior',
+                        child: Text('Exterior'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'amenities',
+                        child: Text('Amenities'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'general',
+                        child: Text('General'),
+                      ),
                     ],
                     onChanged: (value) {
                       if (value != null) {
@@ -3531,9 +4196,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 // Close the form dialog
                 Navigator.of(context).pop();
-                
+
                 // Perform update
-                _performPhotoUpdate(photoId, photoTitle, photoDescription, newPhoto);
+                _performPhotoUpdate(
+                  photoId,
+                  photoTitle,
+                  photoDescription,
+                  newPhoto,
+                );
               },
               child: const Text('Update'),
             ),
@@ -3556,7 +4226,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorColor),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
             child: const Text('Delete'),
           ),
         ],
@@ -3569,9 +4241,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => const Center(child: CircularProgressIndicator()),
+      builder: (dialogContext) =>
+          const Center(child: CircularProgressIndicator()),
     );
-    
+
     try {
       await _gymService.deleteGymPhoto(photo.id);
 
@@ -3587,26 +4260,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete photo: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to delete photo: $e')));
       }
     }
   }
 
   // Membership Plan Create/Edit Operation
   Future<void> _showEditMembershipPlansDialog() async {
-    final bool isCreating = _membershipPlan == null || _membershipPlan!.monthlyOptions.isEmpty && _membershipPlan!.tiers.isEmpty;
+    final bool isCreating =
+        _membershipPlan == null ||
+        _membershipPlan!.monthlyOptions.isEmpty &&
+            _membershipPlan!.tiers.isEmpty;
 
     // ── Single-mode fields ──────────────────────────────────
-    final nameController = TextEditingController(text: isCreating ? 'Standard' : _membershipPlan!.name);
-    final noteController = TextEditingController(text: isCreating ? '' : _membershipPlan!.note);
+    final nameController = TextEditingController(
+      text: isCreating ? 'Standard' : _membershipPlan!.name,
+    );
+    final noteController = TextEditingController(
+      text: isCreating ? '' : _membershipPlan!.note,
+    );
     String selectedIcon = isCreating ? 'fa-star' : _membershipPlan!.icon;
     String selectedColor = isCreating ? '#3a86ff' : _membershipPlan!.color;
-    List<String> selectedBenefits = isCreating ? [] : List.from(_membershipPlan!.benefits);
+    List<String> selectedBenefits = isCreating
+        ? []
+        : List.from(_membershipPlan!.benefits);
     List<MonthlyOption> monthOptions = isCreating
-        ? [MonthlyOption(months: 1, price: 1500), MonthlyOption(months: 3, price: 4000), MonthlyOption(months: 6, price: 7500)]
-        : _membershipPlan!.monthlyOptions.map((o) => MonthlyOption(months: o.months, price: o.price, discount: o.discount, isPopular: o.isPopular)).toList();
+        ? [
+            MonthlyOption(months: 1, price: 1500),
+            MonthlyOption(months: 3, price: 4000),
+            MonthlyOption(months: 6, price: 7500),
+          ]
+        : _membershipPlan!.monthlyOptions
+              .map(
+                (o) => MonthlyOption(
+                  months: o.months,
+                  price: o.price,
+                  discount: o.discount,
+                  isPopular: o.isPopular,
+                ),
+              )
+              .toList();
 
     // ── Plan-mode toggle ────────────────────────────────────
     String planMode = isCreating ? 'single' : _membershipPlan!.planMode;
@@ -3614,11 +4309,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // ── Multi-tier default tiers ─────────────────────────────
     List<PlanTier> tiers = (isCreating || _membershipPlan!.tiers.isEmpty)
         ? [
-            PlanTier(name: 'Basic',    icon: 'fa-leaf',  color: '#38b000', note: 'Essential access', benefits: ['Gym Access', 'Locker Facility'],            monthlyOptions: [MonthlyOption(months: 1, price: 999), MonthlyOption(months: 3, price: 2700), MonthlyOption(months: 6, price: 5000)]),
-            PlanTier(name: 'Standard', icon: 'fa-star',  color: '#3a86ff', note: 'Most popular',      benefits: ['Gym Access', 'Group Classes', 'Locker Facility'], monthlyOptions: [MonthlyOption(months: 1, price: 1500, isPopular: true), MonthlyOption(months: 3, price: 4000), MonthlyOption(months: 6, price: 7500)]),
-            PlanTier(name: 'Premium',  icon: 'fa-crown', color: '#8338ec', note: 'Full access',       benefits: ['Gym Access', 'Group Classes', 'Personal Trainer', 'Diet Plan', 'Locker Facility'], monthlyOptions: [MonthlyOption(months: 1, price: 2500), MonthlyOption(months: 3, price: 7000), MonthlyOption(months: 6, price: 13000)]),
+            PlanTier(
+              name: 'Basic',
+              icon: 'fa-leaf',
+              color: '#38b000',
+              note: 'Essential access',
+              benefits: ['Gym Access', 'Locker Facility'],
+              monthlyOptions: [
+                MonthlyOption(months: 1, price: 999),
+                MonthlyOption(months: 3, price: 2700),
+                MonthlyOption(months: 6, price: 5000),
+              ],
+            ),
+            PlanTier(
+              name: 'Standard',
+              icon: 'fa-star',
+              color: '#3a86ff',
+              note: 'Most popular',
+              benefits: ['Gym Access', 'Group Classes', 'Locker Facility'],
+              monthlyOptions: [
+                MonthlyOption(months: 1, price: 1500, isPopular: true),
+                MonthlyOption(months: 3, price: 4000),
+                MonthlyOption(months: 6, price: 7500),
+              ],
+            ),
+            PlanTier(
+              name: 'Premium',
+              icon: 'fa-crown',
+              color: '#8338ec',
+              note: 'Full access',
+              benefits: [
+                'Gym Access',
+                'Group Classes',
+                'Personal Trainer',
+                'Diet Plan',
+                'Locker Facility',
+              ],
+              monthlyOptions: [
+                MonthlyOption(months: 1, price: 2500),
+                MonthlyOption(months: 3, price: 7000),
+                MonthlyOption(months: 6, price: 13000),
+              ],
+            ),
           ]
-        : _membershipPlan!.tiers.map((t) => PlanTier(name: t.name, icon: t.icon, color: t.color, note: t.note, benefits: List.from(t.benefits), monthlyOptions: t.monthlyOptions.map((o) => MonthlyOption(months: o.months, price: o.price, discount: o.discount, isPopular: o.isPopular)).toList())).toList();
+        : _membershipPlan!.tiers
+              .map(
+                (t) => PlanTier(
+                  name: t.name,
+                  icon: t.icon,
+                  color: t.color,
+                  note: t.note,
+                  benefits: List.from(t.benefits),
+                  monthlyOptions: t.monthlyOptions
+                      .map(
+                        (o) => MonthlyOption(
+                          months: o.months,
+                          price: o.price,
+                          discount: o.discount,
+                          isPopular: o.isPopular,
+                        ),
+                      )
+                      .toList(),
+                ),
+              )
+              .toList();
 
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
@@ -3627,115 +4381,415 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // ── Helper Widgets ──────────────────────────────────────
     List<DropdownMenuItem<String>> iconItems() => const [
-      DropdownMenuItem(value: 'fa-star',  child: Row(children: [FaIcon(FontAwesomeIcons.star,  size: 14), SizedBox(width: 8), Text('Star')])),
-      DropdownMenuItem(value: 'fa-gem',   child: Row(children: [FaIcon(FontAwesomeIcons.gem,   size: 14), SizedBox(width: 8), Text('Gem')])),
-      DropdownMenuItem(value: 'fa-crown', child: Row(children: [FaIcon(FontAwesomeIcons.crown, size: 14), SizedBox(width: 8), Text('Crown')])),
-      DropdownMenuItem(value: 'fa-leaf',  child: Row(children: [FaIcon(FontAwesomeIcons.leaf,  size: 14), SizedBox(width: 8), Text('Leaf')])),
-      DropdownMenuItem(value: 'fa-fire',  child: Row(children: [FaIcon(FontAwesomeIcons.fire,  size: 14), SizedBox(width: 8), Text('Fire')])),
-      DropdownMenuItem(value: 'fa-bolt',  child: Row(children: [FaIcon(FontAwesomeIcons.bolt,  size: 14), SizedBox(width: 8), Text('Bolt')])),
+      DropdownMenuItem(
+        value: 'fa-star',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.star, size: 14),
+            SizedBox(width: 8),
+            Text('Star'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'fa-gem',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.gem, size: 14),
+            SizedBox(width: 8),
+            Text('Gem'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'fa-crown',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.crown, size: 14),
+            SizedBox(width: 8),
+            Text('Crown'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'fa-leaf',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.leaf, size: 14),
+            SizedBox(width: 8),
+            Text('Leaf'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'fa-fire',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.fire, size: 14),
+            SizedBox(width: 8),
+            Text('Fire'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: 'fa-bolt',
+        child: Row(
+          children: [
+            FaIcon(FontAwesomeIcons.bolt, size: 14),
+            SizedBox(width: 8),
+            Text('Bolt'),
+          ],
+        ),
+      ),
     ];
 
     List<DropdownMenuItem<String>> colorItems() => [
-      DropdownMenuItem(value: '#3a86ff', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF3a86ff)), const SizedBox(width: 8), const Text('Blue')])),
-      DropdownMenuItem(value: '#8338ec', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF8338ec)), const SizedBox(width: 8), const Text('Purple')])),
-      DropdownMenuItem(value: '#38b000', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFF38b000)), const SizedBox(width: 8), const Text('Green')])),
-      DropdownMenuItem(value: '#ff006e', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFFff006e)), const SizedBox(width: 8), const Text('Pink')])),
-      DropdownMenuItem(value: '#fb5607', child: Row(children: [Container(width: 16, height: 16, color: const Color(0xFFfb5607)), const SizedBox(width: 8), const Text('Orange')])),
+      DropdownMenuItem(
+        value: '#3a86ff',
+        child: Row(
+          children: [
+            Container(width: 16, height: 16, color: const Color(0xFF3a86ff)),
+            const SizedBox(width: 8),
+            const Text('Blue'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: '#8338ec',
+        child: Row(
+          children: [
+            Container(width: 16, height: 16, color: const Color(0xFF8338ec)),
+            const SizedBox(width: 8),
+            const Text('Purple'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: '#38b000',
+        child: Row(
+          children: [
+            Container(width: 16, height: 16, color: const Color(0xFF38b000)),
+            const SizedBox(width: 8),
+            const Text('Green'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: '#ff006e',
+        child: Row(
+          children: [
+            Container(width: 16, height: 16, color: const Color(0xFFff006e)),
+            const SizedBox(width: 8),
+            const Text('Pink'),
+          ],
+        ),
+      ),
+      DropdownMenuItem(
+        value: '#fb5607',
+        child: Row(
+          children: [
+            Container(width: 16, height: 16, color: const Color(0xFFfb5607)),
+            const SizedBox(width: 8),
+            const Text('Orange'),
+          ],
+        ),
+      ),
     ];
 
     await showDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) {
-
           // ── Monthly-option row builder (shared) ──────────────
-          Widget buildMonthRow(List<MonthlyOption> opts, void Function(List<MonthlyOption>) onUpdate) {
+          Widget buildMonthRow(
+            List<MonthlyOption> opts,
+            void Function(List<MonthlyOption>) onUpdate,
+          ) {
             return Column(
               children: [
                 ...opts.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final opt = entry.value;
                   // Local controllers kept stable per index (recreated on rebuild but values are set)
-                  final mCtrl = TextEditingController(text: opt.months.toString());
-                  final pCtrl = TextEditingController(text: opt.price.toStringAsFixed(0));
-                  final dCtrl = TextEditingController(text: opt.discount.toString());
-                  mCtrl.selection = TextSelection.collapsed(offset: mCtrl.text.length);
-                  pCtrl.selection = TextSelection.collapsed(offset: pCtrl.text.length);
-                  dCtrl.selection = TextSelection.collapsed(offset: dCtrl.text.length);
+                  final mCtrl = TextEditingController(
+                    text: opt.months.toString(),
+                  );
+                  final pCtrl = TextEditingController(
+                    text: opt.price.toStringAsFixed(0),
+                  );
+                  final dCtrl = TextEditingController(
+                    text: opt.discount.toString(),
+                  );
+                  mCtrl.selection = TextSelection.collapsed(
+                    offset: mCtrl.text.length,
+                  );
+                  pCtrl.selection = TextSelection.collapsed(
+                    offset: pCtrl.text.length,
+                  );
+                  dCtrl.selection = TextSelection.collapsed(
+                    offset: dCtrl.text.length,
+                  );
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
                     child: Padding(
                       padding: const EdgeInsets.all(10),
                       child: isMobile
-                          ? Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Row(children: [
-                                Expanded(
-                                  child: TextField(controller: mCtrl, decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
-                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months); onUpdate(updated); }),
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: mCtrl,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Months',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (v) {
+                                          final updated =
+                                              List<MonthlyOption>.from(opts);
+                                          updated[idx] = opt.copyWith(
+                                            months:
+                                                int.tryParse(v) ?? opt.months,
+                                          );
+                                          onUpdate(updated);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: TextField(
+                                        controller: pCtrl,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Price (₹)',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (v) {
+                                          final updated =
+                                              List<MonthlyOption>.from(opts);
+                                          updated[idx] = opt.copyWith(
+                                            price:
+                                                double.tryParse(v) ?? opt.price,
+                                          );
+                                          onUpdate(updated);
+                                        },
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
-                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price); onUpdate(updated); }),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextField(
+                                        controller: dCtrl,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Discount %',
+                                          border: OutlineInputBorder(),
+                                          isDense: true,
+                                        ),
+                                        keyboardType: TextInputType.number,
+                                        onChanged: (v) {
+                                          final updated =
+                                              List<MonthlyOption>.from(opts);
+                                          updated[idx] = opt.copyWith(
+                                            discount:
+                                                int.tryParse(v) ?? opt.discount,
+                                          );
+                                          onUpdate(updated);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Checkbox(
+                                          value: opt.isPopular,
+                                          onChanged: (v) {
+                                            setState(() {
+                                              final updated = opts
+                                                  .map(
+                                                    (o) => o.copyWith(
+                                                      isPopular: false,
+                                                    ),
+                                                  )
+                                                  .toList();
+                                              updated[idx] = updated[idx]
+                                                  .copyWith(
+                                                    isPopular: v ?? false,
+                                                  );
+                                              onUpdate(updated);
+                                            });
+                                          },
+                                        ),
+                                        const Text(
+                                          'Popular',
+                                          style: TextStyle(fontSize: 12),
+                                        ),
+                                      ],
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                        size: 18,
+                                      ),
+                                      onPressed: opts.length > 1
+                                          ? () {
+                                              setState(() {
+                                                final updated =
+                                                    List<MonthlyOption>.from(
+                                                      opts,
+                                                    )..removeAt(idx);
+                                                onUpdate(updated);
+                                              });
+                                            }
+                                          : null,
+                                    ),
+                                  ],
                                 ),
-                              ]),
-                              const SizedBox(height: 8),
-                              Row(children: [
-                                Expanded(
-                                  child: TextField(controller: dCtrl, decoration: const InputDecoration(labelText: 'Discount %', border: OutlineInputBorder(), isDense: true), keyboardType: TextInputType.number,
-                                    onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount); onUpdate(updated); }),
-                                ),
-                                const SizedBox(width: 8),
-                                Row(mainAxisSize: MainAxisSize.min, children: [
-                                  Checkbox(value: opt.isPopular, onChanged: (v) {
-                                    setState(() {
-                                      final updated = opts.map((o) => o.copyWith(isPopular: false)).toList();
-                                      updated[idx] = updated[idx].copyWith(isPopular: v ?? false);
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                SizedBox(
+                                  width: 70,
+                                  child: TextField(
+                                    controller: mCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Months',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (v) {
+                                      final updated = List<MonthlyOption>.from(
+                                        opts,
+                                      );
+                                      updated[idx] = opt.copyWith(
+                                        months: int.tryParse(v) ?? opt.months,
+                                      );
                                       onUpdate(updated);
-                                    });
-                                  }),
-                                  const Text('Popular', style: TextStyle(fontSize: 12)),
-                                ]),
-                                IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 18), onPressed: opts.length > 1 ? () { setState(() { final updated = List<MonthlyOption>.from(opts)..removeAt(idx); onUpdate(updated); }); } : null),
-                              ]),
-                            ])
-                          : Row(children: [
-                              SizedBox(width: 70, child: TextField(controller: mCtrl, decoration: const InputDecoration(labelText: 'Months', border: OutlineInputBorder()), keyboardType: TextInputType.number,
-                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(months: int.tryParse(v) ?? opt.months); onUpdate(updated); })),
-                              const SizedBox(width: 8),
-                              Expanded(child: TextField(controller: pCtrl, decoration: const InputDecoration(labelText: 'Price (₹)', border: OutlineInputBorder()), keyboardType: TextInputType.number,
-                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(price: double.tryParse(v) ?? opt.price); onUpdate(updated); })),
-                              const SizedBox(width: 8),
-                              SizedBox(width: 90, child: TextField(controller: dCtrl, decoration: const InputDecoration(labelText: 'Disc %', border: OutlineInputBorder()), keyboardType: TextInputType.number,
-                                onChanged: (v) { final updated = List<MonthlyOption>.from(opts); updated[idx] = opt.copyWith(discount: int.tryParse(v) ?? opt.discount); onUpdate(updated); })),
-                              const SizedBox(width: 4),
-                              Column(children: [
-                                const Text('Popular', style: TextStyle(fontSize: 10)),
-                                Checkbox(value: opt.isPopular, onChanged: (v) {
-                                  setState(() {
-                                    final updated = opts.map((o) => o.copyWith(isPopular: false)).toList();
-                                    updated[idx] = updated[idx].copyWith(isPopular: v ?? false);
-                                    onUpdate(updated);
-                                  });
-                                }),
-                              ]),
-                              IconButton(icon: const Icon(Icons.delete, color: Colors.red, size: 18), onPressed: opts.length > 1 ? () { setState(() { final updated = List<MonthlyOption>.from(opts)..removeAt(idx); onUpdate(updated); }); } : null),
-                            ]),
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: TextField(
+                                    controller: pCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Price (₹)',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (v) {
+                                      final updated = List<MonthlyOption>.from(
+                                        opts,
+                                      );
+                                      updated[idx] = opt.copyWith(
+                                        price: double.tryParse(v) ?? opt.price,
+                                      );
+                                      onUpdate(updated);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 90,
+                                  child: TextField(
+                                    controller: dCtrl,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Disc %',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    keyboardType: TextInputType.number,
+                                    onChanged: (v) {
+                                      final updated = List<MonthlyOption>.from(
+                                        opts,
+                                      );
+                                      updated[idx] = opt.copyWith(
+                                        discount:
+                                            int.tryParse(v) ?? opt.discount,
+                                      );
+                                      onUpdate(updated);
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Column(
+                                  children: [
+                                    const Text(
+                                      'Popular',
+                                      style: TextStyle(fontSize: 10),
+                                    ),
+                                    Checkbox(
+                                      value: opt.isPopular,
+                                      onChanged: (v) {
+                                        setState(() {
+                                          final updated = opts
+                                              .map(
+                                                (o) => o.copyWith(
+                                                  isPopular: false,
+                                                ),
+                                              )
+                                              .toList();
+                                          updated[idx] = updated[idx].copyWith(
+                                            isPopular: v ?? false,
+                                          );
+                                          onUpdate(updated);
+                                        });
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete,
+                                    color: Colors.red,
+                                    size: 18,
+                                  ),
+                                  onPressed: opts.length > 1
+                                      ? () {
+                                          setState(() {
+                                            final updated =
+                                                List<MonthlyOption>.from(opts)
+                                                  ..removeAt(idx);
+                                            onUpdate(updated);
+                                          });
+                                        }
+                                      : null,
+                                ),
+                              ],
+                            ),
                     ),
                   );
                 }),
                 OutlinedButton.icon(
-                  onPressed: () => setState(() { final updated = List<MonthlyOption>.from(opts)..add(MonthlyOption(months: 1, price: 1500)); onUpdate(updated); }),
-                  icon: const Icon(Icons.add, size: 16), label: const Text('Add Option'),
+                  onPressed: () => setState(() {
+                    final updated = List<MonthlyOption>.from(opts)
+                      ..add(MonthlyOption(months: 1, price: 1500));
+                    onUpdate(updated);
+                  }),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Add Option'),
                 ),
               ],
             );
           }
 
           // ── Benefits chip builder (shared) ────────────────────
-          Widget buildBenefitsChips(List<String> selected, void Function(List<String>) onUpdate) {
+          Widget buildBenefitsChips(
+            List<String> selected,
+            void Function(List<String>) onUpdate,
+          ) {
             return Wrap(
-              spacing: 8, runSpacing: 8,
+              spacing: 8,
+              runSpacing: 8,
               children: PredefinedBenefits.all.map((benefit) {
                 final isSel = selected.contains(benefit);
                 return FilterChip(
@@ -3743,7 +4797,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   selected: isSel,
                   onSelected: (v) => setState(() {
                     final updated = List<String>.from(selected);
-                    if (v) updated.add(benefit); else updated.remove(benefit);
+                    if (v)
+                      updated.add(benefit);
+                    else
+                      updated.remove(benefit);
                     onUpdate(updated);
                   }),
                   selectedColor: AppTheme.primaryColor.withValues(alpha: 0.25),
@@ -3754,222 +4811,601 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // ── Single tier editor ─────────────────────────────────
           Widget buildSingleEditor() {
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              isMobile
-                  ? Column(children: [
-                      TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Plan Name', border: OutlineInputBorder())),
-                      const SizedBox(height: 10),
-                      Row(children: [
-                        Expanded(child: DropdownButtonFormField<String>(initialValue: selectedIcon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder()), items: iconItems(), onChanged: (v) => setState(() => selectedIcon = v!))),
-                        const SizedBox(width: 8),
-                        Expanded(child: DropdownButtonFormField<String>(initialValue: selectedColor, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder()), items: colorItems(), onChanged: (v) => setState(() => selectedColor = v!))),
-                      ]),
-                    ])
-                  : Row(children: [
-                      Expanded(flex: 2, child: TextField(controller: nameController, decoration: const InputDecoration(labelText: 'Plan Name', border: OutlineInputBorder()))),
-                      const SizedBox(width: 10),
-                      Expanded(child: DropdownButtonFormField<String>(initialValue: selectedIcon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder()), items: iconItems(), onChanged: (v) => setState(() => selectedIcon = v!))),
-                      const SizedBox(width: 10),
-                      Expanded(child: DropdownButtonFormField<String>(initialValue: selectedColor, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder()), items: colorItems(), onChanged: (v) => setState(() => selectedColor = v!))),
-                    ]),
-              const SizedBox(height: 12),
-              TextField(controller: noteController, decoration: const InputDecoration(labelText: 'Plan Note (optional)', border: OutlineInputBorder())),
-              const SizedBox(height: 20),
-              const Text('Pricing Options:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              buildMonthRow(monthOptions, (updated) => setState(() => monthOptions = updated)),
-              const SizedBox(height: 20),
-              const Text('Benefits:', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 10),
-              buildBenefitsChips(selectedBenefits, (updated) => setState(() => selectedBenefits = updated)),
-            ]);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                isMobile
+                    ? Column(
+                        children: [
+                          TextField(
+                            controller: nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Plan Name',
+                              border: OutlineInputBorder(),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedIcon,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Icon',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: iconItems(),
+                                  onChanged: (v) =>
+                                      setState(() => selectedIcon = v!),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  initialValue: selectedColor,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Color',
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  items: colorItems(),
+                                  onChanged: (v) =>
+                                      setState(() => selectedColor = v!),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: nameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Plan Name',
+                                border: OutlineInputBorder(),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedIcon,
+                              decoration: const InputDecoration(
+                                labelText: 'Icon',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: iconItems(),
+                              onChanged: (v) =>
+                                  setState(() => selectedIcon = v!),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: DropdownButtonFormField<String>(
+                              initialValue: selectedColor,
+                              decoration: const InputDecoration(
+                                labelText: 'Color',
+                                border: OutlineInputBorder(),
+                              ),
+                              items: colorItems(),
+                              onChanged: (v) =>
+                                  setState(() => selectedColor = v!),
+                            ),
+                          ),
+                        ],
+                      ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: noteController,
+                  decoration: const InputDecoration(
+                    labelText: 'Plan Note (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Pricing Options:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                buildMonthRow(
+                  monthOptions,
+                  (updated) => setState(() => monthOptions = updated),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Benefits:',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                buildBenefitsChips(
+                  selectedBenefits,
+                  (updated) => setState(() => selectedBenefits = updated),
+                ),
+              ],
+            );
           }
 
           // ── Multi-tier editor ──────────────────────────────────
           Widget buildMultiEditor() {
-            return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Tier cards
-              ...tiers.asMap().entries.map((entry) {
-                final tIdx = entry.key;
-                final tier = entry.value;
-                final nameCtrl = TextEditingController(text: tier.name);
-                final noteCtrl = TextEditingController(text: tier.note);
-                nameCtrl.selection = TextSelection.collapsed(offset: nameCtrl.text.length);
-                noteCtrl.selection = TextSelection.collapsed(offset: noteCtrl.text.length);
-                final tierColor = (() { try { return Color(int.parse(tier.color.replaceFirst('#', '0xFF'))); } catch (_) { return AppTheme.primaryColor; } })();
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: tierColor.withValues(alpha: 0.4), width: 1.5),
-                  ),
-                  child: ExpansionTile(
-                    initiallyExpanded: tIdx == 0,
-                    leading: CircleAvatar(
-                      backgroundColor: tierColor.withValues(alpha: 0.15),
-                      child: FaIcon(_getIconData(tier.icon), color: tierColor, size: 16),
-                    ),
-                    title: Text(tier.name.isEmpty ? 'Tier ${tIdx + 1}' : tier.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: tier.note.isNotEmpty ? Text(tier.note, style: const TextStyle(fontSize: 12)) : null,
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      if (tiers.length > 1)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20),
-                          onPressed: () => setState(() => tiers.removeAt(tIdx)),
-                          tooltip: 'Remove tier',
-                        ),
-                      const Icon(Icons.expand_more),
-                    ]),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          // Name / Icon / Color row
-                          isMobile
-                              ? Column(children: [
-                                  TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Tier Name', border: OutlineInputBorder(), isDense: true),
-                                    onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(name: v))),
-                                  const SizedBox(height: 8),
-                                  Row(children: [
-                                    Expanded(child: DropdownButtonFormField<String>(initialValue: tier.icon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder(), isDense: true), items: iconItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(icon: v!)))),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: DropdownButtonFormField<String>(initialValue: tier.color, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder(), isDense: true), items: colorItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(color: v!)))),
-                                  ]),
-                                ])
-                              : Row(children: [
-                                  Expanded(flex: 2, child: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Tier Name', border: OutlineInputBorder(), isDense: true),
-                                    onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(name: v)))),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: DropdownButtonFormField<String>(initialValue: tier.icon, decoration: const InputDecoration(labelText: 'Icon', border: OutlineInputBorder(), isDense: true), items: iconItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(icon: v!)))),
-                                  const SizedBox(width: 8),
-                                  Expanded(child: DropdownButtonFormField<String>(initialValue: tier.color, decoration: const InputDecoration(labelText: 'Color', border: OutlineInputBorder(), isDense: true), items: colorItems(), onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(color: v!)))),
-                                ]),
-                          const SizedBox(height: 8),
-                          TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Note (optional)', border: OutlineInputBorder(), isDense: true),
-                            onChanged: (v) => setState(() => tiers[tIdx] = tier.copyWith(note: v))),
-                          const SizedBox(height: 14),
-                          const Text('Pricing Options:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          buildMonthRow(tier.monthlyOptions, (updated) => setState(() => tiers[tIdx] = tier.copyWith(monthlyOptions: updated))),
-                          const SizedBox(height: 14),
-                          const Text('Included Benefits:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
-                          buildBenefitsChips(tier.benefits, (updated) => setState(() => tiers[tIdx] = tier.copyWith(benefits: updated))),
-                        ]),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Tier cards
+                ...tiers.asMap().entries.map((entry) {
+                  final tIdx = entry.key;
+                  final tier = entry.value;
+                  final nameCtrl = TextEditingController(text: tier.name);
+                  final noteCtrl = TextEditingController(text: tier.note);
+                  nameCtrl.selection = TextSelection.collapsed(
+                    offset: nameCtrl.text.length,
+                  );
+                  noteCtrl.selection = TextSelection.collapsed(
+                    offset: noteCtrl.text.length,
+                  );
+                  final tierColor = (() {
+                    try {
+                      return Color(
+                        int.parse(tier.color.replaceFirst('#', '0xFF')),
+                      );
+                    } catch (_) {
+                      return AppTheme.primaryColor;
+                    }
+                  })();
+                  return Card(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: BorderSide(
+                        color: tierColor.withValues(alpha: 0.4),
+                        width: 1.5,
                       ),
-                    ],
+                    ),
+                    child: ExpansionTile(
+                      initiallyExpanded: tIdx == 0,
+                      leading: CircleAvatar(
+                        backgroundColor: tierColor.withValues(alpha: 0.15),
+                        child: FaIcon(
+                          _getIconData(tier.icon),
+                          color: tierColor,
+                          size: 16,
+                        ),
+                      ),
+                      title: Text(
+                        tier.name.isEmpty ? 'Tier ${tIdx + 1}' : tier.name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: tier.note.isNotEmpty
+                          ? Text(
+                              tier.note,
+                              style: const TextStyle(fontSize: 12),
+                            )
+                          : null,
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (tiers.length > 1)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.red,
+                                size: 20,
+                              ),
+                              onPressed: () =>
+                                  setState(() => tiers.removeAt(tIdx)),
+                              tooltip: 'Remove tier',
+                            ),
+                          const Icon(Icons.expand_more),
+                        ],
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // Name / Icon / Color row
+                              isMobile
+                                  ? Column(
+                                      children: [
+                                        TextField(
+                                          controller: nameCtrl,
+                                          decoration: const InputDecoration(
+                                            labelText: 'Tier Name',
+                                            border: OutlineInputBorder(),
+                                            isDense: true,
+                                          ),
+                                          onChanged: (v) => setState(
+                                            () => tiers[tIdx] = tier.copyWith(
+                                              name: v,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child:
+                                                  DropdownButtonFormField<
+                                                    String
+                                                  >(
+                                                    initialValue: tier.icon,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                          labelText: 'Icon',
+                                                          border:
+                                                              OutlineInputBorder(),
+                                                          isDense: true,
+                                                        ),
+                                                    items: iconItems(),
+                                                    onChanged: (v) => setState(
+                                                      () => tiers[tIdx] = tier
+                                                          .copyWith(icon: v!),
+                                                    ),
+                                                  ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Expanded(
+                                              child:
+                                                  DropdownButtonFormField<
+                                                    String
+                                                  >(
+                                                    initialValue: tier.color,
+                                                    decoration:
+                                                        const InputDecoration(
+                                                          labelText: 'Color',
+                                                          border:
+                                                              OutlineInputBorder(),
+                                                          isDense: true,
+                                                        ),
+                                                    items: colorItems(),
+                                                    onChanged: (v) => setState(
+                                                      () => tiers[tIdx] = tier
+                                                          .copyWith(color: v!),
+                                                    ),
+                                                  ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: TextField(
+                                            controller: nameCtrl,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Tier Name',
+                                              border: OutlineInputBorder(),
+                                              isDense: true,
+                                            ),
+                                            onChanged: (v) => setState(
+                                              () => tiers[tIdx] = tier.copyWith(
+                                                name: v,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child:
+                                              DropdownButtonFormField<String>(
+                                                initialValue: tier.icon,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText: 'Icon',
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                      isDense: true,
+                                                    ),
+                                                items: iconItems(),
+                                                onChanged: (v) => setState(
+                                                  () => tiers[tIdx] = tier
+                                                      .copyWith(icon: v!),
+                                                ),
+                                              ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child:
+                                              DropdownButtonFormField<String>(
+                                                initialValue: tier.color,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      labelText: 'Color',
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                      isDense: true,
+                                                    ),
+                                                items: colorItems(),
+                                                onChanged: (v) => setState(
+                                                  () => tiers[tIdx] = tier
+                                                      .copyWith(color: v!),
+                                                ),
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                              const SizedBox(height: 8),
+                              TextField(
+                                controller: noteCtrl,
+                                decoration: const InputDecoration(
+                                  labelText: 'Note (optional)',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                onChanged: (v) => setState(
+                                  () => tiers[tIdx] = tier.copyWith(note: v),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Pricing Options:',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              buildMonthRow(
+                                tier.monthlyOptions,
+                                (updated) => setState(
+                                  () => tiers[tIdx] = tier.copyWith(
+                                    monthlyOptions: updated,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              const Text(
+                                'Included Benefits:',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              buildBenefitsChips(
+                                tier.benefits,
+                                (updated) => setState(
+                                  () => tiers[tIdx] = tier.copyWith(
+                                    benefits: updated,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                // Add tier button
+                if (tiers.length < 5)
+                  OutlinedButton.icon(
+                    onPressed: () => setState(
+                      () => tiers.add(
+                        PlanTier(
+                          name: 'Tier ${tiers.length + 1}',
+                          icon: 'fa-star',
+                          color: '#3a86ff',
+                          note: '',
+                          benefits: [],
+                          monthlyOptions: [
+                            MonthlyOption(months: 1, price: 1500),
+                          ],
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Tier'),
                   ),
-                );
-              }),
-              // Add tier button
-              if (tiers.length < 5)
-                OutlinedButton.icon(
-                  onPressed: () => setState(() => tiers.add(PlanTier(
-                    name: 'Tier ${tiers.length + 1}',
-                    icon: 'fa-star', color: '#3a86ff', note: '',
-                    benefits: [], monthlyOptions: [MonthlyOption(months: 1, price: 1500)],
-                  ))),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Tier'),
-                ),
-            ]);
+              ],
+            );
           }
 
           return AlertDialog(
-            title: Row(children: [
-              const FaIcon(FontAwesomeIcons.crown, size: 18, color: Color(0xFFFFBE0B)),
-              const SizedBox(width: 10),
-              Flexible(child: Text(isCreating ? 'Create Membership Plan' : 'Edit Membership Plan', overflow: TextOverflow.ellipsis)),
-            ]),
+            title: Row(
+              children: [
+                const FaIcon(
+                  FontAwesomeIcons.crown,
+                  size: 18,
+                  color: Color(0xFFFFBE0B),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    isCreating
+                        ? 'Create Membership Plan'
+                        : 'Edit Membership Plan',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             content: SizedBox(
               width: isMobile ? size.width * 0.95 : (isTablet ? 620 : 900),
               height: isMobile ? size.height * 0.75 : 640,
               child: SingleChildScrollView(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // ── Plan Mode Toggle ─────────────────────────────
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                      borderRadius: BorderRadius.circular(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Plan Mode Toggle ─────────────────────────────
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.all(4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => planMode = 'single'),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: planMode == 'single'
+                                      ? AppTheme.primaryColor
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    FaIcon(
+                                      FontAwesomeIcons.layerGroup,
+                                      size: 14,
+                                      color: planMode == 'single'
+                                          ? Colors.white
+                                          : Colors.grey,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Single Plan',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: planMode == 'single'
+                                            ? Colors.white
+                                            : Colors.grey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => planMode = 'multi'),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 200),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: planMode == 'multi'
+                                      ? AppTheme.primaryColor
+                                      : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(9),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    FaIcon(
+                                      FontAwesomeIcons.tableList,
+                                      size: 14,
+                                      color: planMode == 'multi'
+                                          ? Colors.white
+                                          : Colors.grey,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Multi-Tier',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: planMode == 'multi'
+                                            ? Colors.white
+                                            : Colors.grey,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    padding: const EdgeInsets.all(4),
-                    child: Row(children: [
-                      Expanded(child: GestureDetector(
-                        onTap: () => setState(() => planMode = 'single'),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: planMode == 'single' ? AppTheme.primaryColor : Colors.transparent,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            FaIcon(FontAwesomeIcons.layerGroup, size: 14, color: planMode == 'single' ? Colors.white : Colors.grey),
-                            const SizedBox(width: 8),
-                            Text('Single Plan', style: TextStyle(fontWeight: FontWeight.w600, color: planMode == 'single' ? Colors.white : Colors.grey, fontSize: 13)),
-                          ]),
-                        ),
-                      )),
-                      Expanded(child: GestureDetector(
-                        onTap: () => setState(() => planMode = 'multi'),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(vertical: 10),
-                          decoration: BoxDecoration(
-                            color: planMode == 'multi' ? AppTheme.primaryColor : Colors.transparent,
-                            borderRadius: BorderRadius.circular(9),
-                          ),
-                          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                            FaIcon(FontAwesomeIcons.tableList, size: 14, color: planMode == 'multi' ? Colors.white : Colors.grey),
-                            const SizedBox(width: 8),
-                            Text('Multi-Tier', style: TextStyle(fontWeight: FontWeight.w600, color: planMode == 'multi' ? Colors.white : Colors.grey, fontSize: 13)),
-                          ]),
-                        ),
-                      )),
-                    ]),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    planMode == 'single'
-                        ? 'One plan with multiple duration options (e.g., 1 month / 3 months / 6 months)'
-                        : 'Multiple tier plans (e.g., Basic / Standard / Premium), each with own pricing',
-                    style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 8),
+                    Text(
+                      planMode == 'single'
+                          ? 'One plan with multiple duration options (e.g., 1 month / 3 months / 6 months)'
+                          : 'Multiple tier plans (e.g., Basic / Standard / Premium), each with own pricing',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                    ),
+                    const SizedBox(height: 20),
 
-                  // ── Mode-specific editor ─────────────────────────
-                  if (planMode == 'single') buildSingleEditor() else buildMultiEditor(),
-                ]),
+                    // ── Mode-specific editor ─────────────────────────
+                    if (planMode == 'single')
+                      buildSingleEditor()
+                    else
+                      buildMultiEditor(),
+                  ],
+                ),
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
               ElevatedButton(
                 onPressed: () async {
                   // Validate
                   if (planMode == 'single') {
                     if (nameController.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a plan name'))); return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Please enter a plan name'),
+                        ),
+                      );
+                      return;
                     }
                     if (monthOptions.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one pricing option'))); return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Add at least one pricing option'),
+                        ),
+                      );
+                      return;
                     }
                   } else {
                     if (tiers.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one tier'))); return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Add at least one tier')),
+                      );
+                      return;
                     }
                     for (final t in tiers) {
                       if (t.name.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All tiers must have a name'))); return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('All tiers must have a name'),
+                          ),
+                        );
+                        return;
                       }
                       if (t.monthlyOptions.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tier "${t.name}" needs at least one pricing option'))); return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Tier "${t.name}" needs at least one pricing option',
+                            ),
+                          ),
+                        );
+                        return;
                       }
                     }
                   }
 
                   Navigator.pop(dialogContext);
-                  showDialog(context: parentContext, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+                  showDialog(
+                    context: parentContext,
+                    barrierDismissible: false,
+                    builder: (_) =>
+                        const Center(child: CircularProgressIndicator()),
+                  );
 
                   try {
                     final MembershipPlan updatedPlan;
@@ -4001,19 +5437,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     if (!mounted) return;
                     Navigator.pop(parentContext);
-                    ScaffoldMessenger.of(parentContext).showSnackBar(SnackBar(
-                      content: Text(isCreating ? 'Membership plan created successfully' : 'Membership plan updated successfully'),
-                      backgroundColor: AppTheme.successColor,
-                    ));
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          isCreating
+                              ? 'Membership plan created successfully'
+                              : 'Membership plan updated successfully',
+                        ),
+                        backgroundColor: AppTheme.successColor,
+                      ),
+                    );
                     await _loadMembershipPlans();
                     await _loadRecentActivities();
                   } catch (e) {
                     if (!mounted) return;
                     Navigator.pop(parentContext);
-                    ScaffoldMessenger.of(parentContext).showSnackBar(SnackBar(
-                      content: Text(isCreating ? 'Failed to create plan: $e' : 'Failed to update plan: $e'),
-                      backgroundColor: AppTheme.errorColor,
-                    ));
+                    ScaffoldMessenger.of(parentContext).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          isCreating
+                              ? 'Failed to create plan: $e'
+                              : 'Failed to update plan: $e',
+                        ),
+                        backgroundColor: AppTheme.errorColor,
+                      ),
+                    );
                   }
                 },
                 child: Text(isCreating ? 'Create Plan' : 'Save Changes'),
@@ -4029,10 +5477,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showTrialBookingDetailsDialog(TrialBooking booking) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
     Color statusColor;
     IconData statusIcon;
-    
+
     switch (booking.status.toLowerCase()) {
       case 'confirmed':
         statusColor = AppTheme.successColor;
@@ -4079,12 +5527,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Row(
                   children: [
-                    const FaIcon(FontAwesomeIcons.calendarPlus, color: AppTheme.primaryColor),
+                    const FaIcon(
+                      FontAwesomeIcons.calendarPlus,
+                      color: AppTheme.primaryColor,
+                    ),
                     const SizedBox(width: 12),
                     const Expanded(
                       child: Text(
                         'Trial Booking Details',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                     IconButton(
@@ -4099,7 +5553,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   children: [
                     CircleAvatar(
                       radius: 36,
-                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      backgroundColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.1,
+                      ),
                       backgroundImage: booking.profilePicture != null
                           ? NetworkImage(booking.profilePicture!)
                           : null,
@@ -4171,11 +5627,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 24),
                 // Status Badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: statusColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -4195,32 +5656,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 24),
                 // Booking Details
-                _buildDetailRow('Preferred Date', 
-                  DateFormat('EEEE, MMMM dd, yyyy').format(booking.preferredDate),
+                _buildDetailRow(
+                  'Preferred Date',
+                  DateFormat(
+                    'EEEE, MMMM dd, yyyy',
+                  ).format(booking.preferredDate),
                   FontAwesomeIcons.calendarDay,
                 ),
                 const SizedBox(height: 16),
-                _buildDetailRow('Preferred Time', 
+                _buildDetailRow(
+                  'Preferred Time',
                   booking.preferredTime,
                   FontAwesomeIcons.clock,
                 ),
-                if (booking.fitnessGoal != null && booking.fitnessGoal!.isNotEmpty) ...[
+                if (booking.fitnessGoal != null &&
+                    booking.fitnessGoal!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  _buildDetailRow('Fitness Goal/Activity', 
+                  _buildDetailRow(
+                    'Fitness Goal/Activity',
                     booking.fitnessGoal!,
                     FontAwesomeIcons.dumbbell,
                   ),
                 ],
                 if (booking.message != null && booking.message!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  _buildDetailRow('Message', 
+                  _buildDetailRow(
+                    'Message',
                     booking.message!,
                     FontAwesomeIcons.message,
                   ),
                 ],
                 const SizedBox(height: 16),
-                _buildDetailRow('Booking Date', 
-                  DateFormat('MMM dd, yyyy - hh:mm a').format(booking.createdAt),
+                _buildDetailRow(
+                  'Booking Date',
+                  DateFormat(
+                    'MMM dd, yyyy - hh:mm a',
+                  ).format(booking.createdAt),
                   FontAwesomeIcons.calendarCheck,
                 ),
                 const SizedBox(height: 32),
@@ -4289,7 +5760,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           Navigator.pop(context);
                           _updateTrialBookingStatus(booking.id, 'completed');
                         },
-                        icon: const FaIcon(FontAwesomeIcons.checkDouble, size: 14),
+                        icon: const FaIcon(
+                          FontAwesomeIcons.checkDouble,
+                          size: 14,
+                        ),
                         label: const Text('Mark Completed'),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.green.shade700,
@@ -4352,7 +5826,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Future<void> _updateTrialBookingStatus(String bookingId, String newStatus) async {
+  Future<void> _updateTrialBookingStatus(
+    String bookingId,
+    String newStatus,
+  ) async {
     try {
       showDialog(
         context: context,
@@ -4360,7 +5837,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
 
-      final success = await _apiService.updateTrialBookingStatus(bookingId, newStatus);
+      final success = await _apiService.updateTrialBookingStatus(
+        bookingId,
+        newStatus,
+      );
 
       if (!mounted) return;
       Navigator.pop(context); // Close loading
@@ -4413,14 +5893,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 20),
                 CheckboxListTile(
                   value: sendEmail,
-                  onChanged: (value) => setState(() => sendEmail = value ?? true),
+                  onChanged: (value) =>
+                      setState(() => sendEmail = value ?? true),
                   title: const Text('Send Email Confirmation'),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
                 ),
                 CheckboxListTile(
                   value: sendWhatsApp,
-                  onChanged: (value) => setState(() => sendWhatsApp = value ?? false),
+                  onChanged: (value) =>
+                      setState(() => sendWhatsApp = value ?? false),
                   title: const Text('Send WhatsApp Confirmation'),
                   dense: true,
                   contentPadding: EdgeInsets.zero,
@@ -4520,7 +6002,8 @@ class _DashboardAddMemberDialog extends StatefulWidget {
   });
 
   @override
-  State<_DashboardAddMemberDialog> createState() => _DashboardAddMemberDialogState();
+  State<_DashboardAddMemberDialog> createState() =>
+      _DashboardAddMemberDialogState();
 }
 
 class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
@@ -4558,19 +6041,42 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
     if (plan != null) {
       // Multi-tier: use the selected tier's options
       if (plan.isMultiTier && plan.tiers.isNotEmpty) {
-        final tier = plan.tiers.firstWhere((t) => t.name == _plan, orElse: () => plan.tiers.first);
+        final tier = plan.tiers.firstWhere(
+          (t) => t.name == _plan,
+          orElse: () => plan.tiers.first,
+        );
         if (tier.monthlyOptions.isNotEmpty) {
           return tier.monthlyOptions.map((opt) {
-            final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
-            return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+            final label = opt.months == 1
+                ? '1 Month'
+                : opt.months == 12
+                ? '12 Months'
+                : '${opt.months} Months';
+            return <String, dynamic>{
+              'value': label,
+              'months': opt.months,
+              'price': opt.finalPrice,
+              'discount': opt.discount,
+              'isPopular': opt.isPopular,
+            };
           }).toList();
         }
       }
       // Single-tier: use top-level monthlyOptions
       if (plan.monthlyOptions.isNotEmpty) {
         return plan.monthlyOptions.map((opt) {
-          final label = opt.months == 1 ? '1 Month' : opt.months == 12 ? '12 Months' : '${opt.months} Months';
-          return <String, dynamic>{'value': label, 'months': opt.months, 'price': opt.finalPrice, 'discount': opt.discount, 'isPopular': opt.isPopular};
+          final label = opt.months == 1
+              ? '1 Month'
+              : opt.months == 12
+              ? '12 Months'
+              : '${opt.months} Months';
+          return <String, dynamic>{
+            'value': label,
+            'months': opt.months,
+            'price': opt.finalPrice,
+            'discount': opt.discount,
+            'isPopular': opt.isPopular,
+          };
         }).toList();
       }
     }
@@ -4667,7 +6173,9 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
         planSelected: _plan,
         monthlyPlan: _duration,
         activityPreference: _selectedActivities.join(', '),
-        address: _addressController.text.trim().isEmpty ? null : _addressController.text.trim(),
+        address: _addressController.text.trim().isEmpty
+            ? null
+            : _addressController.text.trim(),
         profileImage: _profileImage,
       );
 
@@ -4697,7 +6205,8 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final hasPlanPricing = widget.membershipPlan != null &&
+    final hasPlanPricing =
+        widget.membershipPlan != null &&
         widget.membershipPlan!.monthlyOptions.isNotEmpty;
 
     return AlertDialog(
@@ -4723,20 +6232,28 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     onTap: _pickImage,
                     child: CircleAvatar(
                       radius: 48,
-                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                      backgroundImage:
-                          _profileImageBytes != null ? MemoryImage(_profileImageBytes!) : null,
+                      backgroundColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.1,
+                      ),
+                      backgroundImage: _profileImageBytes != null
+                          ? MemoryImage(_profileImageBytes!)
+                          : null,
                       child: _profileImageBytes == null
-                          ? const FaIcon(FontAwesomeIcons.camera,
-                              size: 32, color: AppTheme.primaryColor)
+                          ? const FaIcon(
+                              FontAwesomeIcons.camera,
+                              size: 32,
+                              color: AppTheme.primaryColor,
+                            )
                           : null,
                     ),
                   ),
                 ),
                 const SizedBox(height: 8),
                 const Center(
-                  child: Text('Tap to add profile photo',
-                      style: TextStyle(fontSize: 12, color: Colors.grey)),
+                  child: Text(
+                    'Tap to add profile photo',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
                 ),
                 const SizedBox(height: 20),
 
@@ -4749,7 +6266,9 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     border: OutlineInputBorder(),
                   ),
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Name is required'
+                      : null,
                 ),
                 const SizedBox(height: 14),
 
@@ -4768,7 +6287,8 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Required';
                           final age = int.tryParse(v.trim());
-                          if (age == null || age < 1 || age > 120) return 'Invalid age';
+                          if (age == null || age < 1 || age > 120)
+                            return 'Invalid age';
                           return null;
                         },
                       ),
@@ -4784,8 +6304,14 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                         ),
                         items: const [
                           DropdownMenuItem(value: 'Male', child: Text('Male')),
-                          DropdownMenuItem(value: 'Female', child: Text('Female')),
-                          DropdownMenuItem(value: 'Other', child: Text('Other')),
+                          DropdownMenuItem(
+                            value: 'Female',
+                            child: Text('Female'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'Other',
+                            child: Text('Other'),
+                          ),
                         ],
                         onChanged: (v) => setState(() => _gender = v!),
                       ),
@@ -4803,7 +6329,9 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     border: OutlineInputBorder(),
                   ),
                   keyboardType: TextInputType.phone,
-                  validator: (v) => (v == null || v.trim().isEmpty) ? 'Phone is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Phone is required'
+                      : null,
                 ),
                 const SizedBox(height: 14),
 
@@ -4817,7 +6345,8 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                   ),
                   keyboardType: TextInputType.emailAddress,
                   validator: (v) {
-                    if (v == null || v.trim().isEmpty) return 'Email is required';
+                    if (v == null || v.trim().isEmpty)
+                      return 'Email is required';
                     if (!v.contains('@')) return 'Invalid email';
                     return null;
                   },
@@ -4847,8 +6376,14 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     ),
                     items: const [
                       DropdownMenuItem(value: 'Basic', child: Text('Basic')),
-                      DropdownMenuItem(value: 'Standard', child: Text('Standard')),
-                      DropdownMenuItem(value: 'Premium', child: Text('Premium')),
+                      DropdownMenuItem(
+                        value: 'Standard',
+                        child: Text('Standard'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Premium',
+                        child: Text('Premium'),
+                      ),
                     ],
                     onChanged: (v) => setState(() => _plan = v!),
                   ),
@@ -4857,21 +6392,37 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     decoration: const InputDecoration(
                       labelText: 'Membership Plan',
                       border: OutlineInputBorder(),
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
                     ),
                     child: Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                            color: AppTheme.primaryColor.withValues(
+                              alpha: 0.12,
+                            ),
                             borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppTheme.primaryColor.withValues(alpha: 0.4)),
+                            border: Border.all(
+                              color: AppTheme.primaryColor.withValues(
+                                alpha: 0.4,
+                              ),
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              FaIcon(FontAwesomeIcons.star, size: 12, color: AppTheme.primaryColor),
+                              FaIcon(
+                                FontAwesomeIcons.star,
+                                size: 12,
+                                color: AppTheme.primaryColor,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 _plan,
@@ -4885,7 +6436,11 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                           ),
                         ),
                         const Spacer(),
-                        Icon(Icons.lock_outline, size: 16, color: Colors.grey.shade500),
+                        Icon(
+                          Icons.lock_outline,
+                          size: 16,
+                          color: Colors.grey.shade500,
+                        ),
                       ],
                     ),
                   ),
@@ -4893,7 +6448,11 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                     padding: const EdgeInsets.only(top: 4, left: 2),
                     child: Text(
                       'Single-plan gym — plan name is fixed',
-                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ],
@@ -4931,9 +6490,14 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                           if (discount > 0) ...[
                             const SizedBox(width: 4),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppTheme.successColor.withValues(alpha: 0.1),
+                                color: AppTheme.successColor.withValues(
+                                  alpha: 0.1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
@@ -4949,9 +6513,14 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                           if (isPopular) ...[
                             const SizedBox(width: 4),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                                color: AppTheme.primaryColor.withValues(
+                                  alpha: 0.1,
+                                ),
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: const Text(
@@ -5004,7 +6573,10 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                           DropdownMenuItem(value: 'Cash', child: Text('Cash')),
                           DropdownMenuItem(value: 'Card', child: Text('Card')),
                           DropdownMenuItem(value: 'UPI', child: Text('UPI')),
-                          DropdownMenuItem(value: 'Online', child: Text('Online')),
+                          DropdownMenuItem(
+                            value: 'Online',
+                            child: Text('Online'),
+                          ),
                         ],
                         onChanged: (v) => setState(() => _paymentMode = v!),
                       ),
@@ -5018,7 +6590,9 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                           prefixIcon: Icon(Icons.currency_rupee),
                           border: OutlineInputBorder(),
                         ),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
                         onChanged: (v) {
                           setState(() {
                             _paymentAmount = double.tryParse(v) ?? 0;
@@ -5026,7 +6600,8 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                         },
                         validator: (v) {
                           if (v == null || v.trim().isEmpty) return 'Required';
-                          if (double.tryParse(v) == null) return 'Invalid amount';
+                          if (double.tryParse(v) == null)
+                            return 'Invalid amount';
                           return null;
                         },
                       ),
@@ -5040,27 +6615,41 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
                   decoration: InputDecoration(
                     labelText: 'Activity Preference *',
                     border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    errorText: _selectedActivities.isEmpty ? 'Select at least one activity' : null,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    errorText: _selectedActivities.isEmpty
+                        ? 'Select at least one activity'
+                        : null,
                   ),
                   child: Wrap(
                     spacing: 8,
                     runSpacing: 6,
                     children: _activityOptions.map((activity) {
-                      final isSelected = _selectedActivities.contains(activity.name);
+                      final isSelected = _selectedActivities.contains(
+                        activity.name,
+                      );
                       return FilterChip(
                         avatar: FaIcon(
                           FontAwesomeIconMapper.getIcon(activity.icon),
                           size: 12,
-                          color: isSelected ? Colors.white : AppTheme.primaryColor,
+                          color: isSelected
+                              ? Colors.white
+                              : AppTheme.primaryColor,
                         ),
-                        label: Text(activity.name, style: const TextStyle(fontSize: 12)),
+                        label: Text(
+                          activity.name,
+                          style: const TextStyle(fontSize: 12),
+                        ),
                         selected: isSelected,
                         selectedColor: AppTheme.primaryColor,
                         checkmarkColor: Colors.white,
                         labelStyle: TextStyle(
                           color: isSelected ? Colors.white : null,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                         onSelected: (selected) {
                           setState(() {
@@ -5095,7 +6684,10 @@ class _DashboardAddMemberDialogState extends State<_DashboardAddMemberDialog> {
               ? const SizedBox(
                   width: 18,
                   height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Text('Add Member'),
         ),

@@ -1,7 +1,7 @@
 /* Gym Wale Registration Page Styles */
 :root {
     --primary-color: #3a86ff;
-    --secondary-color: #8338ec;
+    --secondary-color: #2563eb;
     --success-color: #06d6a0;
     --error-color: #ef476f;
     --warning-color: #ffd60a;
@@ -20,8 +20,8 @@
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    font-family: 'Poppins', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: radial-gradient(circle at 15% 20%, #e6f2ff 0%, #f4f9ff 30%, #dceeff 100%);
     min-height: 100vh;
     padding: 2rem 1rem;
     line-height: 1.6;
@@ -72,7 +72,7 @@ body {
 
 /* Header */
 .header {
-    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    background: linear-gradient(135deg, #0f3a84 0%, #1d5ed8 100%);
     padding: 2rem;
     color: white;
     text-align: center;
@@ -82,12 +82,17 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.75rem;
     margin-bottom: 1rem;
 }
 
-.gym-wale-brand i {
-    font-size: 2rem;
+.app-logo {
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 4px;
+    object-fit: contain;
 }
 
 .gym-wale-brand h1 {
