@@ -30,11 +30,11 @@ const gymSchema = new mongoose.Schema({
 
   description: {
     type: String,
-    default: 'NA',
+    default: '',
     set: (value) => {
-      if (typeof value !== 'string') return 'NA';
+      if (typeof value !== 'string') return '';
       const trimmed = value.trim();
-      return trimmed.length === 0 ? 'NA' : trimmed;
+      return trimmed;
     }
   },
   gymPhotos: [{
@@ -171,11 +171,10 @@ const gymSchema = new mongoose.Schema({
   }
 });
 
-// Normalize required text fields before validation so empty strings do not fail strict schemas.
+// Keep description optional while guaranteeing string type.
 gymSchema.pre('validate', function (next) {
-  if (typeof this.description !== 'string' || this.description.trim().length === 0) {
-    const fallbackName = typeof this.gymName === 'string' ? this.gymName.trim() : '';
-    this.description = fallbackName ? `${fallbackName} gym` : 'NA';
+  if (typeof this.description !== 'string') {
+    this.description = '';
   }
   next();
 });

@@ -1008,7 +1008,7 @@ exports.registerGym = async (req, res) => {
       }
     }
 
-    const finalDescription = toTrimmedString(description) || `${gymName} gym`;
+    const finalDescription = toTrimmedString(description);
     const safeRegistrationPhotos = registrationPhotos.map((photo, index) => ({
       ...photo,
       title: toTrimmedString(photo.title) || `NA-${index + 1}`,
@@ -1057,9 +1057,9 @@ exports.registerGym = async (req, res) => {
       status: 'pending',
     });
 
-    // Final safety net for strict/legacy schema variants.
-    if (!toTrimmedString(newGym.description)) {
-      newGym.description = `${gymName} gym`;
+    // Description is optional; keep it as an empty string when omitted.
+    if (typeof newGym.description !== 'string') {
+      newGym.description = '';
     }
 
     await newGym.save();
