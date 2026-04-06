@@ -28,7 +28,15 @@ const gymSchema = new mongoose.Schema({
     geofenceRadius: { type: Number, default: 100 } // Radius in meters for geofencing, default 100m
   },
 
-  description: { type: String, default: '' },
+  description: {
+    type: String,
+    default: 'NA',
+    set: (value) => {
+      if (typeof value !== 'string') return 'NA';
+      const trimmed = value.trim();
+      return trimmed.length === 0 ? 'NA' : trimmed;
+    }
+  },
   gymPhotos: [{
     title: { type: String, required: true },
     description: { type: String, required: true },

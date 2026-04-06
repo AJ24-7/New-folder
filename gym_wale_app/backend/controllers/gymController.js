@@ -987,6 +987,14 @@ exports.registerGym = async (req, res) => {
       }
     }
 
+    const finalDescription = toTrimmedString(description) || 'NA';
+    const safeRegistrationPhotos = registrationPhotos.map((photo, index) => ({
+      ...photo,
+      title: toTrimmedString(photo.title) || `NA-${index + 1}`,
+      description: toTrimmedString(photo.description) || 'NA',
+      category: toTrimmedString(photo.category) || 'general',
+    }));
+
     const newGym = new Gym({
       gymName,
       admin: req.admin ? req.admin.id : null,
@@ -1003,8 +1011,8 @@ exports.registerGym = async (req, res) => {
         lng: coordinates?.lng || null,
         geofenceRadius: Number(req.body.geofenceRadius) || 100,
       },
-      description,
-      gymPhotos: registrationPhotos,
+      description: finalDescription,
+      gymPhotos: safeRegistrationPhotos,
       logoUrl,
       equipment: [],
       activities: [],
@@ -1027,6 +1035,11 @@ exports.registerGym = async (req, res) => {
       membersCount: Number(req.body.currentMembers) || 0,
       status: 'pending',
     });
+
+    // Final safety net for strict/legacy schema variants.
+    if (!toTrimmedString(newGym.description)) {
+      newGym.description = 'NA';
+    }
 
     await newGym.save();
 
