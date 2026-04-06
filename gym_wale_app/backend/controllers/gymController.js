@@ -19,18 +19,28 @@ const speakeasy = require('speakeasy');
 const geocodeAddress = async (address, city, state, pincode) => {
   try {
     const fullAddress = [address, city, state, pincode].filter(Boolean).join(', ');
+    if (!fullAddress) return null;
     const encodedAddress = encodeURIComponent(fullAddress);
-    
-    
-    // Using Nominatim (free geocoding service)
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in`);
-    
+
+    // Using Nominatim (free geocoding service). Set explicit headers to avoid 403.
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in`,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'GymWaleBackend/1.0 (support@gymwale.app)',
+          'Referer': process.env.APP_URL || 'https://gym-wale.onrender.com',
+        },
+      }
+    );
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      console.warn(`Geocoding skipped due to HTTP ${response.status}`);
+      return null;
     }
-    
+
     const data = await response.json();
-    
+
     if (data && data.length > 0) {
       return {
         lat: parseFloat(data[0].lat),
@@ -40,7 +50,7 @@ const geocodeAddress = async (address, city, state, pincode) => {
     
     return null;
   } catch (error) {
-    console.warn('Geocoding failed:', error);
+    console.warn('Geocoding failed, continuing without coordinates.');
     return null;
   }
 };
@@ -849,7 +859,7 @@ exports.registerGym = async (req, res) => {
     const contactPerson = toTrimmedString(req.body.contactPerson || req.body.ownerName);
     const supportEmail = toTrimmedString(req.body.supportEmail || req.body.email);
     const supportPhone = toTrimmedString(req.body.supportPhone || req.body.phone);
-    const description = toTrimmedString(req.body.description);
+    const description = toTrimmedString(req.body.description) || 'NA';
 
     const address = toTrimmedString(req.body.address || req.body['location[address]'] || req.body.location?.address);
     const city = toTrimmedString(req.body.city || req.body['location[city]'] || req.body.location?.city);

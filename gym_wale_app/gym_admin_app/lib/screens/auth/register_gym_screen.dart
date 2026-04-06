@@ -160,7 +160,6 @@ class _RegisterGymScreenState extends State<RegisterGymScreen> {
 
     final newPhotos = <XFile>[];
     for (final file in picked) {
-      if (_gymPhotos.length + newPhotos.length >= 5) break;
       if (_gymPhotos.any((p) => p.path == file.path)) continue;
       newPhotos.add(file);
     }
@@ -975,7 +974,7 @@ class _RegisterGymScreenState extends State<RegisterGymScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Selected: ${_gymPhotos.length}/5',
+                            'Selected: ${_gymPhotos.length}',
                             style: const TextStyle(color: Colors.grey),
                           ),
                           const SizedBox(height: 10),
