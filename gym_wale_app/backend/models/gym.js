@@ -171,6 +171,15 @@ const gymSchema = new mongoose.Schema({
   }
 });
 
+// Normalize required text fields before validation so empty strings do not fail strict schemas.
+gymSchema.pre('validate', function (next) {
+  if (typeof this.description !== 'string' || this.description.trim().length === 0) {
+    const fallbackName = typeof this.gymName === 'string' ? this.gymName.trim() : '';
+    this.description = fallbackName ? `${fallbackName} gym` : 'NA';
+  }
+  next();
+});
+
 // Automatically update `updatedAt` on save
 gymSchema.pre('save', function (next) {
   this.updatedAt = new Date();

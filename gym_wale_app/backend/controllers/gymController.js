@@ -22,35 +22,56 @@ const geocodeAddress = async (address, city, state, pincode) => {
     if (!fullAddress) return null;
     const encodedAddress = encodeURIComponent(fullAddress);
 
-    // Using Nominatim (free geocoding service). Set explicit headers to avoid 403.
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in`,
+    // Prefer OpenCage when API key is configured.
+    if (process.env.OPENCAGE_API_KEY) {
+      const openCageUrl = `https://api.opencagedata.com/geocode/v1/json?q=${encodedAddress}&key=${process.env.OPENCAGE_API_KEY}&limit=1&countrycode=in&no_annotations=1`;
+      const openCageResponse = await fetch(openCageUrl, {
+        headers: { Accept: 'application/json' },
+      });
+
+      if (openCageResponse.ok) {
+        const openCageData = await openCageResponse.json();
+        const geometry = openCageData?.results?.[0]?.geometry;
+        if (geometry && Number.isFinite(geometry.lat) && Number.isFinite(geometry.lng)) {
+          return { lat: geometry.lat, lng: geometry.lng };
+        }
+      } else {
+        console.warn(`OpenCage geocoding skipped due to HTTP ${openCageResponse.status}`);
+      }
+    }
+
+    // Fallback: Nominatim free endpoint (may return 403/429 on some hosted infra).
+    const emailHint = encodeURIComponent(
+      process.env.NOMINATIM_CONTACT_EMAIL || process.env.SUPPORT_EMAIL || 'support@gymwale.app'
+    );
+    const nominatimResponse = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodedAddress}&limit=1&countrycodes=in&addressdetails=0&email=${emailHint}`,
       {
         headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'GymWaleBackend/1.0 (support@gymwale.app)',
-          'Referer': process.env.APP_URL || 'https://gym-wale.onrender.com',
+          Accept: 'application/json',
+          'User-Agent': process.env.NOMINATIM_USER_AGENT || 'GymWaleBackend/1.0',
+          Referer: process.env.APP_URL || 'https://gym-wale.onrender.com',
         },
       }
     );
 
-    if (!response.ok) {
-      console.warn(`Geocoding skipped due to HTTP ${response.status}`);
+    if (!nominatimResponse.ok) {
+      console.warn(`Nominatim geocoding skipped due to HTTP ${nominatimResponse.status}`);
       return null;
     }
 
-    const data = await response.json();
+    const nominatimData = await nominatimResponse.json();
 
-    if (data && data.length > 0) {
+    if (Array.isArray(nominatimData) && nominatimData.length > 0) {
       return {
-        lat: parseFloat(data[0].lat),
-        lng: parseFloat(data[0].lon)
+        lat: parseFloat(nominatimData[0].lat),
+        lng: parseFloat(nominatimData[0].lon)
       };
     }
     
     return null;
   } catch (error) {
-    console.warn('Geocoding failed, continuing without coordinates.');
+    console.warn('Geocoding failed, continuing without coordinates:', error.message);
     return null;
   }
 };
@@ -859,7 +880,7 @@ exports.registerGym = async (req, res) => {
     const contactPerson = toTrimmedString(req.body.contactPerson || req.body.ownerName);
     const supportEmail = toTrimmedString(req.body.supportEmail || req.body.email);
     const supportPhone = toTrimmedString(req.body.supportPhone || req.body.phone);
-    const description = toTrimmedString(req.body.description) || 'NA';
+    const description = toTrimmedString(req.body.description || req.body.about || req.body.gymDescription);
 
     const address = toTrimmedString(req.body.address || req.body['location[address]'] || req.body.location?.address);
     const city = toTrimmedString(req.body.city || req.body['location[city]'] || req.body.location?.city);
@@ -987,7 +1008,7 @@ exports.registerGym = async (req, res) => {
       }
     }
 
-    const finalDescription = toTrimmedString(description) || 'NA';
+    const finalDescription = toTrimmedString(description) || `${gymName} gym`;
     const safeRegistrationPhotos = registrationPhotos.map((photo, index) => ({
       ...photo,
       title: toTrimmedString(photo.title) || `NA-${index + 1}`,
@@ -1038,7 +1059,7 @@ exports.registerGym = async (req, res) => {
 
     // Final safety net for strict/legacy schema variants.
     if (!toTrimmedString(newGym.description)) {
-      newGym.description = 'NA';
+      newGym.description = `${gymName} gym`;
     }
 
     await newGym.save();
@@ -1146,6 +1167,18 @@ exports.registerGym = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Error during gym registration:", error);
+
+    if (error?.name === 'ValidationError') {
+      const fields = Object.values(error.errors || {}).map((e) => e.path);
+      return res.status(400).json({
+        message: 'Validation failed while registering gym',
+        fields,
+        details: Object.fromEntries(
+          Object.entries(error.errors || {}).map(([key, val]) => [key, val?.message || 'Invalid value'])
+        ),
+      });
+    }
+
     res.status(500).json({ message: "Server error while registering gym" });
   }
 };
