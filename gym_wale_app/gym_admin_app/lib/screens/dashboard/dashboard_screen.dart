@@ -646,6 +646,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ),
         PopupMenuItem(
+          value: 'setup_guide',
+          child: Row(
+            children: [
+              const Icon(Icons.school_outlined, size: 18),
+              const SizedBox(width: 12),
+              const Text('Setup Guide'),
+            ],
+          ),
+        ),
+        PopupMenuItem(
           value: 'logout',
           child: Row(
             children: [
@@ -664,6 +674,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _handleLogout();
         } else if (value == 'profile') {
           Navigator.pushNamed(context, '/gym-profile');
+        } else if (value == 'setup_guide') {
+          Navigator.pushNamed(context, '/setup-guide');
         }
       },
     );

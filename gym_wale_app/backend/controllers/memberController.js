@@ -20,21 +20,24 @@ const IMPORT_REQUIRED_FIELDS = [
   'activityPreference'
 ];
 
+const DEFAULT_PREVIEW_LIMIT = 500;
+const MAX_PREVIEW_LIMIT = 2000;
+
 const IMPORT_FIELD_ALIASES = {
-  memberName: ['membername', 'member_name', 'name', 'fullname', 'full_name', 'customername'],
+  memberName: ['membername', 'member_name', 'name', 'fullname', 'full_name', 'customername', 'customer_name', 'clientname', 'member'],
   age: ['age', 'memberage', 'member_age', 'years'],
   gender: ['gender', 'sex', 'membergender', 'member_gender'],
-  phone: ['phone', 'mobile', 'mobileno', 'mobilenumber', 'contact', 'contactnumber', 'memberphone'],
-  email: ['email', 'mail', 'emailid', 'memberemail'],
+  phone: ['phone', 'mobile', 'mobileno', 'mobilenumber', 'contact', 'contactnumber', 'memberphone', 'phone_no', 'phone_number', 'contact_no', 'contact_number', 'whatsapp', 'whatsappnumber'],
+  email: ['email', 'mail', 'emailid', 'memberemail', 'email_id', 'emailaddress', 'email_address'],
   address: ['address', 'location', 'residence', 'memberaddress'],
   paymentMode: ['paymentmode', 'payment_mode', 'modeofpayment', 'paymentmethod', 'mode'],
   paymentAmount: ['paymentamount', 'payment_amount', 'amount', 'amountpaid', 'paidamount', 'fees', 'fee'],
   planSelected: ['plan', 'planselected', 'membershipplan', 'membership', 'tier'],
   monthlyPlan: ['monthlyplan', 'duration', 'validity', 'tenure', 'months', 'planperiod'],
   activityPreference: ['activitypreference', 'activity', 'activities', 'workouttype', 'preference'],
-  membershipId: ['membershipid', 'membership_id', 'memberid', 'member_id', 'id'],
-  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill'],
-  joinDate: ['joindate', 'join_date', 'joiningdate', 'joining_date', 'dateofjoining', 'doj', 'enrollmentdate', 'enrolledon', 'memberjoindate']
+  membershipId: ['membershipid', 'membership_id', 'memberid', 'member_id', 'id', 'membercode', 'member_code', 'admissionid', 'admission_id', 'enrollmentid', 'enrollment_id'],
+  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill', 'validupto', 'valid_upto', 'expireson', 'expiry_date', 'expiredate'],
+  joinDate: ['joindate', 'join_date', 'joiningdate', 'joining_date', 'dateofjoining', 'doj', 'enrollmentdate', 'enrolledon', 'memberjoindate', 'registrationdate', 'registeredon', 'admissiondate', 'member_since']
 };
 
 function formatYyyyMmDdLocal(date) {
@@ -80,13 +83,17 @@ function parseDateValue(value) {
     }
   }
 
-  const ddmmyyyy = raw.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{2,4})$/);
+  const ddmmyyyy = raw.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
   if (ddmmyyyy) {
     const day = Number(ddmmyyyy[1]);
     const month = Number(ddmmyyyy[2]) - 1;
     const year = Number(ddmmyyyy[3].length === 2 ? `20${ddmmyyyy[3]}` : ddmmyyyy[3]);
     const parsed = new Date(year, month, day, 12, 0, 0, 0);
     if (!Number.isNaN(parsed.getTime())) return parsed;
+
+    // Fallback for MM/DD/YYYY style values if DD/MM/YYYY failed.
+    const monthFirst = new Date(year, Number(ddmmyyyy[1]) - 1, Number(ddmmyyyy[2]), 12, 0, 0, 0);
+    if (!Number.isNaN(monthFirst.getTime())) return monthFirst;
   }
 
   const yyyymmdd = raw.match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})$/);
@@ -124,6 +131,29 @@ function toNaIfEmpty(value) {
   if (value == null) return 'NA';
   const text = String(value).trim();
   return text.length === 0 ? 'NA' : text;
+}
+
+function normalizeIdentifierValue(value) {
+  if (value == null) return 'NA';
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (Number.isInteger(value)) {
+      return String(value);
+    }
+    return value.toString();
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return 'NA';
+
+  if (/^[+-]?\d+(\.\d+)?e[+-]?\d+$/i.test(raw)) {
+    const num = Number(raw);
+    if (Number.isFinite(num)) {
+      return Number.isInteger(num) ? num.toFixed(0) : num.toString();
+    }
+  }
+
+  return raw;
 }
 
 function canonicalFieldFromHeader(header) {
@@ -267,7 +297,7 @@ function parsePdfRows(rawText) {
   return rows;
 }
 
-function normalizeImportedRows(rawRows) {
+function normalizeImportedRows(rawRows, previewLimit = DEFAULT_PREVIEW_LIMIT) {
   const normalizedRows = [];
   const previewRows = [];
 
@@ -295,7 +325,7 @@ function normalizeImportedRows(rawRows) {
     const memberName = toNaIfEmpty(mappedValues.memberName);
     const age = parseNumeric(mappedValues.age, 0);
     const gender = normalizeGender(mappedValues.gender);
-    const phone = toNaIfEmpty(mappedValues.phone);
+    const phone = normalizeIdentifierValue(mappedValues.phone);
     const email = toNaIfEmpty(mappedValues.email);
     const paymentMode = normalizePaymentMode(mappedValues.paymentMode);
     const paymentAmount = parseNumeric(mappedValues.paymentAmount, 0);
@@ -303,7 +333,7 @@ function normalizeImportedRows(rawRows) {
     const monthlyPlan = normalizeDuration(mappedValues.monthlyPlan);
     const activityPreference = toNaIfEmpty(mappedValues.activityPreference);
     const address = toNaIfEmpty(mappedValues.address);
-    const membershipId = toNaIfEmpty(mappedValues.membershipId);
+    const membershipId = normalizeIdentifierValue(mappedValues.membershipId);
     const membershipValidUntil = toYyyyMmDdDate(mappedValues.membershipValidUntil);
     const joinDate = parseDateValue(mappedValues.joinDate);
 
@@ -326,7 +356,7 @@ function normalizeImportedRows(rawRows) {
       missingFields
     });
 
-    if (previewRows.length < 25) {
+    if (previewRows.length < previewLimit) {
       previewRows.push({
         rowNumber: rowIndex + 2,
         memberName,
@@ -426,7 +456,12 @@ async function parseImportFile(file) {
     const firstSheet = workbook.SheetNames[0];
     if (!firstSheet) return [];
     const sheet = workbook.Sheets[firstSheet];
-    return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    return XLSX.utils.sheet_to_json(sheet, {
+      defval: '',
+      raw: false,
+      blankrows: false,
+      dateNF: 'yyyy-mm-dd'
+    });
   }
 
   if (fileName.endsWith('.pdf')) {
@@ -451,6 +486,10 @@ exports.importMembers = async (req, res) => {
     const chunkSize = Number.isFinite(parsedChunkSize)
       ? Math.min(Math.max(parsedChunkSize, 100), 2000)
       : 500;
+    const parsedPreviewLimit = Number(req.body.previewLimit || DEFAULT_PREVIEW_LIMIT);
+    const previewLimit = Number.isFinite(parsedPreviewLimit)
+      ? Math.min(Math.max(parsedPreviewLimit, 50), MAX_PREVIEW_LIMIT)
+      : DEFAULT_PREVIEW_LIMIT;
 
     let rawRows = [];
     if (Array.isArray(req.body.members)) {
@@ -468,7 +507,7 @@ exports.importMembers = async (req, res) => {
       });
     }
 
-    const { normalizedRows, previewRows } = normalizeImportedRows(rawRows);
+    const { normalizedRows, previewRows } = normalizeImportedRows(rawRows, previewLimit);
     if (normalizedRows.length === 0) {
       return res.status(400).json({
         success: false,
@@ -587,7 +626,7 @@ exports.importMembers = async (req, res) => {
 
         const duplicateReason = hasFileDuplicate ? 'duplicate_in_file' : 'duplicate_existing_member';
 
-        if (duplicates.length < 200) {
+        if (duplicates.length < previewLimit) {
           duplicates.push({
             rowNumber: row.sourceRowNumber,
             duplicateReason,
@@ -622,7 +661,7 @@ exports.importMembers = async (req, res) => {
           }
           mergedCount += 1;
 
-          if (resultsPreview.length < 25) {
+          if (resultsPreview.length < previewLimit) {
             resultsPreview.push({
               rowNumber: row.sourceRowNumber,
               memberName: row.memberName,
@@ -637,7 +676,7 @@ exports.importMembers = async (req, res) => {
         }
 
         skippedDuplicateCount += 1;
-        if (resultsPreview.length < 25) {
+        if (resultsPreview.length < previewLimit) {
           resultsPreview.push({
             rowNumber: row.sourceRowNumber,
             memberName: row.memberName,
@@ -656,7 +695,7 @@ exports.importMembers = async (req, res) => {
       if (normalizedPhone) seenPhoneSet.add(normalizedPhone);
 
       if (!shouldCommit) {
-        if (resultsPreview.length < 25) {
+        if (resultsPreview.length < previewLimit) {
           resultsPreview.push({
             rowNumber: row.sourceRowNumber,
             memberName: row.memberName,
@@ -693,7 +732,7 @@ exports.importMembers = async (req, res) => {
 
       docsToInsert.push({ memberDoc });
 
-      if (resultsPreview.length < 25) {
+      if (resultsPreview.length < previewLimit) {
         resultsPreview.push({
           rowNumber: row.sourceRowNumber,
           memberName: row.memberName,
@@ -730,6 +769,7 @@ exports.importMembers = async (req, res) => {
         skippedInvalidCount,
         totalMissingFields,
         chunkSize,
+        previewLimit,
         duplicateStrategy: mergeDuplicates ? 'merge' : 'skip',
         committed: shouldCommit
       },

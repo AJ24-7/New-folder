@@ -133,14 +133,38 @@ class LocationPermissionService {
     }
 
     try {
+      // First attempt: current position with high accuracy and reasonable timeout.
       final position = await Geolocator.getCurrentPosition(
         desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 15),
       );
       return LatLng(position.latitude, position.longitude);
     } catch (e) {
-      debugPrint('Error getting current location: $e');
-      return null;
+      debugPrint('High accuracy location attempt failed: $e');
     }
+
+    try {
+      // Second attempt: balanced accuracy can succeed faster on unstable GPS.
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 12),
+      );
+      return LatLng(position.latitude, position.longitude);
+    } catch (e) {
+      debugPrint('Balanced accuracy location attempt failed: $e');
+    }
+
+    try {
+      // Final fallback: return last known location if live fix fails.
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null) {
+        return LatLng(lastKnown.latitude, lastKnown.longitude);
+      }
+    } catch (e) {
+      debugPrint('Error reading last known location: $e');
+    }
+
+    return null;
   }
   
   /// Get current position (mobile platforms only)

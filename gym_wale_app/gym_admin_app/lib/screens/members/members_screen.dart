@@ -1789,6 +1789,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
         file: _selectedFile!,
         commit: false,
         chunkSize: 700,
+        previewLimit: 500,
       );
 
       if (!mounted) return;
@@ -1823,6 +1824,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
         file: _selectedFile!,
         commit: true,
         chunkSize: 700,
+        previewLimit: 500,
         mergeDuplicates: _mergeDuplicates,
       );
 
@@ -1895,6 +1897,7 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
     final dialogWidth = screenWidth > 860 ? 760.0 : screenWidth * 0.9;
     final canImport = _summary != null && _selectedFile != null && !_isLoading && !_isImporting;
     final parsedRows = _summary?['parsedRows']?.toString() ?? '0';
+    final previewLimit = _summary?['previewLimit']?.toString() ?? '500';
     final duplicates = _summary?['skippedDuplicateCount']?.toString() ?? '0';
     final merged = _summary?['mergedCount']?.toString() ?? '0';
     final missingFields = _summary?['totalMissingFields']?.toString() ?? '0';
@@ -2068,8 +2071,8 @@ class _ImportMembersDialogState extends State<_ImportMembersDialog> {
               ],
               if (_previewRows.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                const Text(
-                  'Preview (first rows)',
+                Text(
+                  'Preview (up to $previewLimit rows)',
                   style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),

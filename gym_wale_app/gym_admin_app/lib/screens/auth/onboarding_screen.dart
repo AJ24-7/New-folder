@@ -3,6 +3,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../config/app_theme.dart';
 import 'login_screen.dart';
+import 'register_gym_screen.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -53,6 +54,17 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  Future<void> _openRegisterGym() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_completed', true);
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const RegisterGymScreen()),
+    );
+  }
+
   void _nextPage() {
     if (_currentPage < _onboardingPages.length - 1) {
       _pageController.nextPage(
@@ -60,7 +72,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         curve: Curves.easeInOut,
       );
     } else {
-      _completeOnboarding();
+      _openRegisterGym();
     }
   }
 
@@ -188,7 +200,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 ),
                 padding: const EdgeInsets.all(6),
                 child: Image.asset(
-                  'assets/images/logo.png',
+                  'assets/images/gym-adminlogo.png',
                   fit: BoxFit.contain,
                 ),
               ),
@@ -479,7 +491,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    isLastPage ? 'Get Started' : 'Next',
+                    isLastPage ? 'Register Gym' : 'Next',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,

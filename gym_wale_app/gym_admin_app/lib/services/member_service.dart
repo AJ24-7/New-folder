@@ -359,6 +359,7 @@ class MemberService {
     required PlatformFile file,
     bool commit = false,
     int chunkSize = 500,
+    int previewLimit = 500,
     bool mergeDuplicates = false,
   }) async {
     try {
@@ -382,6 +383,7 @@ class MemberService {
         'file': multipartFile,
         'commit': commit.toString(),
         'chunkSize': chunkSize.toString(),
+        'previewLimit': previewLimit.toString(),
         'mergeDuplicates': mergeDuplicates.toString(),
       });
 

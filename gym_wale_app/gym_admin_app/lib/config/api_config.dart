@@ -12,6 +12,7 @@ class ApiConfig {
   
   // Auth Endpoints - Gym Admin routes (not Super Admin)
   static const String login = '$_apiPrefix/gyms/login';
+  static const String registerGym = '$_apiPrefix/gyms/register';
   static const String verify2FA = '$_apiPrefix/gyms/verify-login-2fa';
   static const String resend2FA = '$_apiPrefix/gyms/resend-2fa-code';
   static const String requestPasswordOTP = '$_apiPrefix/gyms/request-password-otp';

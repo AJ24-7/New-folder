@@ -1444,6 +1444,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
               },
             ),
             const Divider(height: 1),
+
+            _buildSettingTile(
+              context,
+              title: 'Setup Guide',
+              subtitle: 'Open first-time tutorial and completion checklist',
+              leading: Icon(
+                Icons.school_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              onTap: () {
+                Navigator.pushNamed(context, '/setup-guide');
+              },
+            ),
+            const Divider(height: 1),
             
             // Reset Settings
             Padding(
