@@ -371,15 +371,32 @@ class AuthService {
       final response = await _dio.post(
         ApiConfig.registerGym,
         data: requestBody,
-        options: requestOptions,
+        options: (requestOptions ?? Options()).copyWith(
+          // Gym registration can take longer because image upload, cloud storage,
+          // DB writes, notifications, and email happen in one request.
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: const Duration(minutes: 2),
+        ),
       );
 
       final data = response.data is Map<String, dynamic>
           ? response.data as Map<String, dynamic>
           : <String, dynamic>{};
 
-      final isSuccess = (response.statusCode == 200 || response.statusCode == 201) &&
-          (data['status'] == 'pending' || data['success'] == true || data['message'] != null);
+      final statusCode = response.statusCode ?? 0;
+      final isHttpSuccess = statusCode >= 200 && statusCode < 300;
+      final successField = data['success'];
+      final statusField = (data['status'] ?? '').toString().toLowerCase();
+      final messageField = (data['message'] ?? '').toString().toLowerCase();
+
+      final hasSuccessSignal = successField == true ||
+          successField == 'true' ||
+          statusField == 'pending' ||
+          statusField == 'success' ||
+          messageField.contains('submitted') ||
+          messageField.contains('success');
+
+      final isSuccess = isHttpSuccess && (hasSuccessSignal || data.isNotEmpty);
 
       return {
         'success': isSuccess,
@@ -387,11 +404,36 @@ class AuthService {
         'message': data['message'] ?? 'Registration submitted successfully',
       };
     } on DioException catch (e) {
+      final message = e.response?.data is Map<String, dynamic>
+          ? (e.response?.data['message'] ?? 'Registration failed').toString()
+          : 'Registration failed';
+
+      // If backend processing exceeded client wait time, the submission may still be saved.
+      // Treat receive timeout as pending success to avoid duplicate resubmits.
+      if (e.type == DioExceptionType.receiveTimeout) {
+        return {
+          'success': true,
+          'status': 'pending',
+          'message':
+              'Registration submitted and is being processed. If you already received confirmation, please do not resubmit.',
+        };
+      }
+
+      // Common when first request actually succeeded but user retries after timeout.
+      final normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.contains('already exists') &&
+          normalizedMessage.contains('email or phone')) {
+        return {
+          'success': true,
+          'status': 'pending',
+          'message':
+              'Registration already submitted for this email/phone and is likely pending admin approval.',
+        };
+      }
+
       return {
         'success': false,
-        'message': e.response?.data is Map<String, dynamic>
-            ? (e.response?.data['message'] ?? 'Registration failed')
-            : 'Registration failed',
+        'message': message,
       };
     } catch (_) {
       return {
