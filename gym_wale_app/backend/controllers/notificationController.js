@@ -8,6 +8,7 @@ const Gym = require('../models/gym');
 const Member = require('../models/Member');
 const Trainer = require('../models/trainerModel');
 const Admin = require('../models/admin');
+const Support = require('../models/Support');
 const fcmService = require('../services/fcmService');
 
 class NotificationController {
@@ -531,7 +532,7 @@ class NotificationController {
             } = req.body;
 
             const gymId = req.gym?.id;
-            const gymData = await Gym.findById(gymId).select('gymName email').lean();
+            const gymData = await Gym.findById(gymId).select('gymName email phone').lean();
 
             if (!title || !message) {
                 return res.status(400).json({
@@ -561,6 +562,52 @@ class NotificationController {
                     message: 'Super admin not found'
                 });
             }
+
+            // Persist gym-admin report as a support ticket so it appears in super-admin Support tab.
+            const categoryMap = {
+                bug: 'technical',
+                issue: 'technical',
+                support: 'general',
+                feature: 'general'
+            };
+
+            const reportCategory = (metadata?.category || '').toString().toLowerCase();
+            const normalizedCategory = categoryMap[reportCategory] || 'general';
+
+            const supportTicket = new Support({
+                ticketId: `GYM-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+                userId: gymId,
+                gymId,
+                userType: 'Gym',
+                userEmail: gymData?.email || 'unknown@gym.local',
+                userName: gymData?.gymName || 'Unknown Gym',
+                userPhone: gymData?.phone,
+                category: normalizedCategory,
+                priority,
+                status: 'open',
+                subject: title,
+                description: message,
+                messages: [{
+                    sender: 'user',
+                    senderName: gymData?.gymName || 'Gym Admin',
+                    message,
+                    timestamp: new Date(),
+                    sentVia: ['notification'],
+                    metadata: {
+                        type,
+                        originalCategory: reportCategory || 'bug',
+                    },
+                }],
+                metadata: {
+                    source: 'mobile',
+                    fromGymAdminBugReport: true,
+                    isGrievance: false,
+                    reportType: type,
+                    ...metadata,
+                }
+            });
+
+            await supportTicket.save();
 
             // Create notification for super admin
             const notification = new Notification({
@@ -608,7 +655,8 @@ class NotificationController {
             res.json({
                 success: true,
                 message: 'Report sent to super admin',
-                notification
+                notification,
+                ticketId: supportTicket.ticketId
             });
 
         } catch (error) {
