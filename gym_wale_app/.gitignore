@@ -107,3 +107,6 @@ lib/firebase_options.dart
 
 # Web local secrets — contain API keys
 **/web/env.js
+
+# Sensitive super admin frontend (never commit)
+/super admin/
