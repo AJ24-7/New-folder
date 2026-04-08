@@ -38,6 +38,291 @@ router.get('/test-auth', authMiddleware, async (req, res) => {
 
 console.log('🎫 Support Routes loaded successfully');
 
+// ========== GYM ADMIN GRIEVANCE ROUTES (APP COMPATIBILITY) ==========
+
+// Create grievance from gym admin app
+router.post('/', gymadminAuth, async (req, res) => {
+  try {
+    const gymId = req.body.gymId || req.admin?.id;
+    const { title, description, category = 'general', priority = 'medium' } = req.body;
+
+    if (!gymId || !title || !description) {
+      return res.status(400).json({
+        success: false,
+        message: 'gymId, title and description are required'
+      });
+    }
+
+    const gym = await Gym.findById(gymId).select('gymName email supportPhone phone');
+    if (!gym) {
+      return res.status(404).json({ success: false, message: 'Gym not found' });
+    }
+
+    const categoryMap = {
+      service: 'general',
+      facility: 'general',
+      technical: 'technical',
+      billing: 'billing',
+      other: 'complaint',
+      complaint: 'complaint',
+      general: 'general'
+    };
+
+    const priorityMap = {
+      low: 'low',
+      medium: 'medium',
+      high: 'high',
+      urgent: 'urgent',
+      normal: 'medium'
+    };
+
+    const supportCount = await Support.countDocuments();
+    const ticketId = `GRV-${Date.now()}-${supportCount + 1}`;
+
+    const grievance = new Support({
+      ticketId,
+      userId: gymId,
+      gymId,
+      userType: 'Gym',
+      userEmail: gym.email || 'support@gym-wale.com',
+      userName: gym.gymName || 'Gym Admin',
+      userPhone: gym.supportPhone || gym.phone || '',
+      category: categoryMap[category] || 'complaint',
+      priority: priorityMap[priority] || 'medium',
+      status: 'open',
+      subject: title,
+      description,
+      messages: [{
+        sender: 'user',
+        senderName: gym.gymName || 'Gym Admin',
+        message: description,
+        timestamp: new Date(),
+        sentVia: ['notification']
+      }],
+      metadata: {
+        source: 'gym-admin-app',
+        isGrievance: true,
+        originalCategory: category,
+        originalPriority: priority,
+        gymName: gym.gymName
+      }
+    });
+
+    await grievance.save();
+
+    const admins = await require('../models/admin').find({ status: { $ne: 'inactive' } }).select('_id').limit(10);
+    if (admins.length) {
+      await Notification.insertMany(
+        admins.map((admin) => ({
+          user: admin._id,
+          title: `New Gym Grievance: ${gym.gymName}`,
+          message: `${title} (#${ticketId})`,
+          type: 'support',
+          priority: priority === 'urgent' ? 'high' : (priorityMap[priority] || 'medium'),
+          metadata: { ticketId, gymId, source: 'gym-admin-app' }
+        }))
+      );
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Grievance created successfully',
+      grievance: {
+        _id: grievance._id,
+        ticketId: grievance.ticketId,
+        title: grievance.subject,
+        description: grievance.description,
+        category,
+        priority,
+        status: grievance.status,
+        createdAt: grievance.createdAt,
+        updatedAt: grievance.updatedAt,
+        messages: grievance.messages
+      }
+    });
+  } catch (error) {
+    console.error('Error creating gym grievance:', error);
+    res.status(500).json({ success: false, message: 'Error creating grievance' });
+  }
+});
+
+// Get grievances for gym admin app
+router.get('/grievances/gym/:gymId', gymadminAuth, async (req, res) => {
+  try {
+    const gymId = req.params.gymId;
+    const authGymId = req.admin?.id;
+
+    if (!gymId || String(gymId) !== String(authGymId)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized gym access' });
+    }
+
+    const filter = {
+      gymId,
+      userType: 'Gym',
+      'metadata.isGrievance': true
+    };
+
+    const grievances = await Support.find(filter).sort({ createdAt: -1 }).lean();
+
+    res.json({
+      success: true,
+      grievances: grievances.map((g) => ({
+        _id: g._id,
+        ticketId: g.ticketId,
+        userId: g.userId,
+        userName: g.userName,
+        userEmail: g.userEmail,
+        title: g.subject,
+        description: g.description,
+        category: g.metadata?.originalCategory || g.category,
+        priority: g.metadata?.originalPriority || g.priority,
+        status: g.status,
+        messages: g.messages || [],
+        createdAt: g.createdAt,
+        updatedAt: g.updatedAt,
+        escalatedToAdmin: (g.escalationLevel || 0) > 0,
+        escalationReason: g.metadata?.escalationReason || null
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching gym grievances:', error);
+    res.status(500).json({ success: false, message: 'Error fetching grievances' });
+  }
+});
+
+// Update grievance status from gym admin app
+router.put('/:grievanceId/status', gymadminAuth, async (req, res) => {
+  try {
+    const { grievanceId } = req.params;
+    const { status } = req.body;
+    const validStatuses = ['open', 'in-progress', 'resolved', 'closed'];
+
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status value' });
+    }
+
+    const grievance = await Support.findOne({
+      _id: grievanceId,
+      userId: req.admin?.id,
+      userType: 'Gym'
+    });
+
+    if (!grievance) {
+      return res.status(404).json({ success: false, message: 'Grievance not found' });
+    }
+
+    grievance.status = status;
+    grievance.messages.push({
+      sender: 'user',
+      senderName: grievance.userName,
+      message: `Status updated to ${status}`,
+      timestamp: new Date(),
+      sentVia: ['notification']
+    });
+
+    await grievance.save();
+
+    res.json({ success: true, message: 'Grievance status updated', status: grievance.status });
+  } catch (error) {
+    console.error('Error updating grievance status:', error);
+    res.status(500).json({ success: false, message: 'Error updating grievance status' });
+  }
+});
+
+// Add message to grievance from gym admin app
+router.post('/:grievanceId/message', gymadminAuth, async (req, res) => {
+  try {
+    const { grievanceId } = req.params;
+    const { message, senderType = 'user' } = req.body;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Message is required' });
+    }
+
+    const grievance = await Support.findOne({
+      _id: grievanceId,
+      userId: req.admin?.id,
+      userType: 'Gym'
+    });
+
+    if (!grievance) {
+      return res.status(404).json({ success: false, message: 'Grievance not found' });
+    }
+
+    grievance.messages.push({
+      sender: senderType === 'admin' ? 'admin' : 'user',
+      senderName: grievance.userName,
+      message: message.trim(),
+      timestamp: new Date(),
+      sentVia: ['notification']
+    });
+
+    if (grievance.status === 'resolved' || grievance.status === 'closed') {
+      grievance.status = 'open';
+    }
+
+    await grievance.save();
+
+    res.json({ success: true, message: 'Message added successfully' });
+  } catch (error) {
+    console.error('Error adding grievance message:', error);
+    res.status(500).json({ success: false, message: 'Error adding grievance message' });
+  }
+});
+
+// Escalate grievance from gym admin app
+router.post('/:grievanceId/escalate', gymadminAuth, async (req, res) => {
+  try {
+    const { grievanceId } = req.params;
+    const { reason, priority = 'high' } = req.body;
+
+    const grievance = await Support.findOne({
+      _id: grievanceId,
+      userId: req.admin?.id,
+      userType: 'Gym'
+    });
+
+    if (!grievance) {
+      return res.status(404).json({ success: false, message: 'Grievance not found' });
+    }
+
+    grievance.escalationLevel = (grievance.escalationLevel || 0) + 1;
+    grievance.priority = priority === 'urgent' ? 'urgent' : 'high';
+    grievance.metadata = {
+      ...(grievance.metadata || {}),
+      escalationReason: reason || 'Escalated by gym admin'
+    };
+    grievance.messages.push({
+      sender: 'user',
+      senderName: grievance.userName,
+      message: `Escalated to super admin: ${reason || 'No reason provided'}`,
+      timestamp: new Date(),
+      sentVia: ['notification']
+    });
+
+    await grievance.save();
+
+    const admins = await require('../models/admin').find({ status: { $ne: 'inactive' } }).select('_id').limit(10);
+    if (admins.length) {
+      await Notification.insertMany(
+        admins.map((admin) => ({
+          user: admin._id,
+          title: `Escalated Gym Grievance: #${grievance.ticketId}`,
+          message: reason || 'Escalated by gym admin',
+          type: 'support',
+          priority: grievance.priority === 'urgent' ? 'high' : 'medium',
+          metadata: { ticketId: grievance.ticketId, grievanceId, source: 'gym-admin-escalation' }
+        }))
+      );
+    }
+
+    res.json({ success: true, message: 'Grievance escalated successfully' });
+  } catch (error) {
+    console.error('Error escalating grievance:', error);
+    res.status(500).json({ success: false, message: 'Error escalating grievance' });
+  }
+});
+
 // Get support statistics for admin dashboard
 router.get('/stats', adminAuth, async (req, res) => {
   try {
@@ -989,34 +1274,6 @@ router.put('/:ticketId/close', gymadminAuth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error closing ticket',
-      error: error.message
-    });
-  }
-});
-
-// Get grievances for a specific gym (placeholder endpoint)
-router.get('/grievances/gym/:gymId', gymadminAuth, async (req, res) => {
-  try {
-    const { gymId } = req.params;
-    
-    // For now, return an empty array since grievances aren't fully implemented
-    // This can be expanded when the grievance system is built
-    const grievances = await Support.find({
-      userId: gymId,
-      category: 'grievance',
-      userType: 'Gym'
-    }).populate('user', 'name email').sort({ createdAt: -1 });
-
-    res.json({
-      success: true,
-      grievances,
-      message: 'Grievance system will be fully implemented in the next phase'
-    });
-  } catch (error) {
-    console.error('Error fetching grievances:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching grievances',
       error: error.message
     });
   }

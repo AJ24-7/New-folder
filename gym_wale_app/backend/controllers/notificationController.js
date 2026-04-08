@@ -275,7 +275,7 @@ class NotificationController {
                 scheduleFor = null
             } = req.body;
 
-            const gymId = req.gym?.id;
+            const gymId = req.gym?.id || req.admin?.id;
 
             if (!title || !message) {
                 return res.status(400).json({
@@ -540,10 +540,22 @@ class NotificationController {
                 });
             }
 
-            // Find super admin
-            const superAdmin = await Admin.findOne({ role: 'super-admin' });
-            
-            if (!superAdmin) {
+            // Find super admin (support both legacy and current role keys)
+            const superAdmin = await Admin.findOne({
+                role: { $in: ['super_admin', 'super-admin'] },
+                status: { $ne: 'inactive' }
+            });
+
+            // Fallback recipient for inconsistent role data
+            const recipientAdmin = superAdmin || await Admin.findOne({
+                status: { $ne: 'inactive' },
+                $or: [
+                    { permissions: 'manage_support' },
+                    { role: 'admin' }
+                ]
+            });
+
+            if (!recipientAdmin) {
                 return res.status(404).json({
                     success: false,
                     message: 'Super admin not found'
@@ -556,7 +568,7 @@ class NotificationController {
                 message,
                 type,
                 priority,
-                user: superAdmin._id,
+                user: recipientAdmin._id,
                 read: false,
                 isRead: false,
                 timestamp: new Date(),
@@ -574,7 +586,7 @@ class NotificationController {
 
             // FCM: Push notification to super admin devices if they have tokens
             try {
-                const freshAdmin = await Admin.findById(superAdmin._id).select('fcmTokens').lean();
+                const freshAdmin = await Admin.findById(recipientAdmin._id).select('fcmTokens').lean();
                 const adminTokens = (freshAdmin?.fcmTokens || []).map(t => t.token).filter(Boolean);
                 if (adminTokens.length > 0) {
                     await fcmService.sendToMultipleDevices(adminTokens, {
@@ -655,8 +667,6 @@ class NotificationController {
                     metadata: {
                         source: 'gym-admin',
                         gymId,
-                        memberId: member._id,
-                        membershipEndDate: member.membershipEndDate,
                         daysUntilExpiry: daysLeft
                     }
                 };

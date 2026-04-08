@@ -169,6 +169,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/grievances', supportRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/member-problems', memberProblemReportRoutes);
 app.use('/api/workouts', workoutRoutes);
