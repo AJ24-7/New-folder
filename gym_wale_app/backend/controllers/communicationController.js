@@ -48,6 +48,13 @@ class CommunicationController {
             // Calculate average response time
             const avgResponseTime = await this.calculateAverageResponseTime();
 
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const resolvedToday = await Support.countDocuments({
+                status: 'resolved',
+                updatedAt: { $gte: startOfToday }
+            });
+
             const formattedStats = {
                 open: stats.find(s => s._id === 'open')?.count || 0,
                 inProgress: stats.find(s => s._id === 'in-progress')?.count || 0,
@@ -64,7 +71,17 @@ class CommunicationController {
                     gyms: userTypeStats.find(s => s._id === 'Gym')?.count || 0,
                     trainers: userTypeStats.find(s => s._id === 'Trainer')?.count || 0
                 },
-                avgResponseTime: avgResponseTime
+                avgResponseTime: avgResponseTime,
+
+                // Backward-compatible keys used by super admin support UI.
+                openTickets: stats.find(s => s._id === 'open')?.count || 0,
+                resolvedToday,
+                averageResponseTime: avgResponseTime,
+                byUserType: {
+                    user: userTypeStats.find(s => s._id === 'User')?.count || 0,
+                    gym: userTypeStats.find(s => s._id === 'Gym')?.count || 0,
+                    trainer: userTypeStats.find(s => s._id === 'Trainer')?.count || 0
+                }
             };
 
             res.json({
