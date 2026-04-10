@@ -1,6 +1,16 @@
 // Gym Wale Registration Page JavaScript
 // API Configuration
-const API_BASE_URL = window.GYM_WALE_API_BASE_URL || 'https://api.gym-wale.com/api';
+// Priority: query param -> global override -> default.
+const urlParams = new URLSearchParams(window.location.search);
+const resolvedApiBase =
+    urlParams.get('apiBase') ||
+    urlParams.get('api') ||
+    window.GYM_WALE_API_BASE_URL ||
+    'https://api.gym-wale.com/api';
+
+const API_BASE_URL = resolvedApiBase.replace(/\/+$/, '').endsWith('/api')
+    ? resolvedApiBase.replace(/\/+$/, '')
+    : `${resolvedApiBase.replace(/\/+$/, '')}/api`;
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 // Global State
@@ -15,7 +25,6 @@ let memberData = {};
 
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
-    const urlParams = new URLSearchParams(window.location.search);
     gymId = urlParams.get('gymId') || urlParams.get('gym') || '';
     qrToken = urlParams.get('token') || urlParams.get('qrToken') || '';
 

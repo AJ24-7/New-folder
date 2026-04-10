@@ -158,6 +158,7 @@ const geofenceConfigRoutes = require('./routes/geofenceConfig');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const memberLocationStatusRoutes = require('./routes/memberLocationStatus');
+const qrCodeRoutes = require('./routes/qrCodeRoutes');
 
 // API Routes
 app.use('/api/admin', adminRoutes);
@@ -185,6 +186,7 @@ app.use('/api/geofence', geofenceConfigRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/member', memberLocationStatusRoutes);
+app.use('/api/qr-codes', qrCodeRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
