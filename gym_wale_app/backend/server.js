@@ -19,11 +19,14 @@ app.use(cors({
     // List of allowed origins
     const allowedOrigins = [
       // Production (Render)
+      'https://gym-wale.onrender.com',
       'https://gym-wale-backend.onrender.com',
       'https://api.gym-wale.com',
       'https://gym-wale.com',
       'https://www.gym-wale.com',
       'https://admin.gym-wale.com',
+      process.env.FRONTEND_URL,
+      process.env.ADMIN_FRONTEND_URL,
       process.env.API_BASE_URL,
       // Development
       'http://localhost:5000',
