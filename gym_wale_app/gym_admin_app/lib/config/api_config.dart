@@ -7,7 +7,7 @@ class ApiConfig {
   // Production API origin (without /api)
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://gym-wale.com',
+    defaultValue: 'https://api.gym-wale.com',
   );
 
   // Public website origin used for internal website links (QR registration, etc.)

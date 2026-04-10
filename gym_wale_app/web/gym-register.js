@@ -1,6 +1,6 @@
 // Gym Wale Registration Page JavaScript
 // API Configuration
-const API_BASE_URL = window.GYM_WALE_API_BASE_URL || 'https://gym-wale.com/api';
+const API_BASE_URL = window.GYM_WALE_API_BASE_URL || 'https://api.gym-wale.com/api';
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 // Global State
