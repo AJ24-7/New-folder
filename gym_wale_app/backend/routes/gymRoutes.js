@@ -69,9 +69,10 @@ router.get('/:gymId/membership-plans', membershipPlanController.getGymMembership
 // ✅ Register Gym [POST] /register
 router.options('/register', (req, res) => {
   console.log('<<<< OPTIONS request to /register received >>>>');
-  res.header('Access-Control-Allow-Origin', 'http://127.0.0.1:5500'); // Or your specific client origin
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
   res.header('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Origin, Accept'); // Add common headers
+  res.header('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With, Origin, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   res.sendStatus(204); // No Content - standard for successful OPTIONS
 });
 

@@ -38,6 +38,6 @@ Thumbs.db
 
 # Build outputs
 dist/
-build/
+/build
 *.min.js
 *.min.css
