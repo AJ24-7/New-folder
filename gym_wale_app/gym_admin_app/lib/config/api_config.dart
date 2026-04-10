@@ -133,6 +133,8 @@ class ApiConfig {
     final queryParams = <String, String>{
       'gymId': gymId,
       'gym': gymId,
+      // Pass backend origin so the registration page can call the same API environment.
+      'apiBase': baseUrl,
     };
 
     if (token != null && token.trim().isNotEmpty) {
