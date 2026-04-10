@@ -1,14 +1,31 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 class ApiConfig {
+  static const String _defaultApiOrigin = 'https://gym-wale.onrender.com';
+
+  static String _normalizedApiOrigin() {
+    final raw = (dotenv.env['API_BASE_URL'] ?? _defaultApiOrigin).trim();
+    if (raw.isEmpty) {
+      return _defaultApiOrigin;
+    }
+
+    var origin = raw.replaceAll(RegExp(r'/$'), '');
+    if (origin.endsWith('/api')) {
+      origin = origin.substring(0, origin.length - 4);
+    }
+    return origin;
+  }
+
   // Base URL - Update this with your actual backend URL
   // For local development: http://localhost:5000
   // For production: https://your-domain.com
   static String get baseUrl {
-    return '${dotenv.env['API_BASE_URL']}/api'; }
+    return '${_normalizedApiOrigin()}/api';
+  }
   
   // Base URL without /api suffix for assets/images
   static String get baseUrlWithoutApi {
-    return dotenv.env['API_BASE_URL'] ?? ''; }
+    return _normalizedApiOrigin();
+  }
   
   // ========== Authentication Endpoints ==========
   static const String login = '/users/login';

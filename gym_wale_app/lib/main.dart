@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'firebase_options.dart';
+import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_provider.dart';
@@ -45,7 +46,7 @@ Future<void> main() async {
     // Persist the API base URL so the killed-app background isolate can call
     // the backend directly (it has no access to dotenv or ApiConfig).
     try {
-      final rawBase = dotenv.env['API_BASE_URL'] ?? '';
+      final rawBase = ApiConfig.baseUrlWithoutApi;
       await ForegroundTaskService.persistApiBaseUrl(rawBase);
     } catch (_) {}
   }
