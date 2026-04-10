@@ -11,6 +11,7 @@ import 'package:dio/dio.dart';
 
 import 'package:gym_admin_app/l10n/app_localizations.dart';
 import '../../config/app_theme.dart';
+import '../../config/api_config.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/locale_provider.dart';
@@ -3468,9 +3469,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     // Generate registration URL for QR code
-    final baseUrl = 'https://gym-wale.com';
-    final registrationUrl =
-        '$baseUrl/gym-register.html?gymId=${qrData['gymId']}&gym=${qrData['gymId']}';
+    final registrationUrl = ApiConfig.gymRegistrationUrl(
+      gymId: (qrData['gymId'] ?? '').toString(),
+    );
     final gymName = qrData['gymName'] ?? 'Gym';
     final gymId = qrData['gymId'] ?? '';
 
