@@ -20,8 +20,10 @@ app.use(cors({
     const allowedOrigins = [
       // Production (Render)
       'https://gym-wale-backend.onrender.com',
+      'https://api.gym-wale.com',
       'https://gym-wale.com',
       'https://www.gym-wale.com',
+      'https://admin.gym-wale.com',
       process.env.API_BASE_URL,
       // Development
       'http://localhost:5000',
