@@ -22,7 +22,6 @@ import 'services/foreground_task_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'l10n/app_localizations.dart';
 import 'services/location_service.dart';
 import 'services/firebase_notification_service.dart';
@@ -37,7 +36,6 @@ Future<void> main() async {
     FlutterForegroundTask.initCommunicationPort();
   }
 
-  await dotenv.load(fileName: ".env");
 
   if (!kIsWeb) {
     // ── Configure & init the persistent foreground service ──────────────────
