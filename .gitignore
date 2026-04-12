@@ -41,3 +41,6 @@ dist/
 /build
 *.min.js
 *.min.css
+
+# Misc
+home.html

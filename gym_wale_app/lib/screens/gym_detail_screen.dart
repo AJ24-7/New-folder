@@ -3702,7 +3702,36 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: () {
+                onPressed: () async {
+                  final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                  if (!authProvider.isAuthenticated) {
+                    final shouldLogin = await showDialog<bool>(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Login Required'),
+                        content: const Text('Please login to purchase a membership.'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context, false),
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context, true),
+                            child: const Text('Login'),
+                          ),
+                        ],
+                      ),
+                    );
+
+                    if (shouldLogin == true && mounted) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                      );
+                    }
+                    return;
+                  }
+
                   final pricePerMonth = opt.months > 0 ? opt.price / opt.months : opt.price;
                   final planName = _isMultiTier ? _activePlanName : widget.membershipPlan.name;
                   final planNote = _isMultiTier ? _activePlanNote : widget.membershipPlan.note;

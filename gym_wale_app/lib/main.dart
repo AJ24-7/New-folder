@@ -197,8 +197,10 @@ class _SplashScreenState extends State<SplashScreen>
     // Initialize local notification service
     await LocalNotificationService.instance.initialize();
 
-    // Request permissions
-    await _requestPermissions();
+    // Request permissions only on mobile platforms.
+    if (!kIsWeb) {
+      await _requestPermissions();
+    }
 
     // Restore geofence only when the user is authenticated — never auto-start
     // location tracking or foreground service for a logged-out user.
@@ -221,7 +223,7 @@ class _SplashScreenState extends State<SplashScreen>
       if (!restoredGeofence && !geofencingService.isServiceRunning) {
         await _bootstrapGeofenceFromMemberships(attendanceProvider, geofencingService);
       }
-    } else {
+    } else if (!kIsWeb) {
       try {
         await ForegroundTaskService().stopService();
       } catch (_) {}
@@ -232,7 +234,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (mounted) {
       Widget destination;
-      if (authProvider.isAuthenticated) {
+      if (kIsWeb) {
+        destination = const HomeScreen();
+      } else if (authProvider.isAuthenticated) {
         destination = const HomeScreen();
       } else if (await OnboardingScreen.shouldShow()) {
         destination = const OnboardingScreen();
