@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -1294,12 +1295,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
             ],
             const SizedBox(height: 12),
             
-            // Attendance Widget - Show for gym memberships
-            AttendanceWidget(
-              gymId: _extractGymId(membership) ?? '',
-              gymName: gymName,
-            ),
-            const SizedBox(height: 12),
+            // Attendance tracking is mobile-only.
+            if (!kIsWeb) ...[
+              AttendanceWidget(
+                gymId: _extractGymId(membership) ?? '',
+                gymName: gymName,
+              ),
+              const SizedBox(height: 12),
+            ],
             
             // Show info when freeze is disabled by gym
             if (_gymFreezeSettings[_extractGymId(membership)] == false && !currentlyFrozen) ...[
