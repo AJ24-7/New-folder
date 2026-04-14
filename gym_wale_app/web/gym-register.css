@@ -83,7 +83,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 0.75rem;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
 }
 
 .app-logo {
@@ -98,12 +98,30 @@ body {
 .gym-wale-brand h1 {
     font-size: 2rem;
     font-weight: 700;
+    line-height: 1.1;
+}
+
+.brand-tagline {
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.9;
 }
 
 .gym-specific-brand {
     margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(255,255,255,0.3);
+    padding: 1rem;
+    border: 1px solid rgba(255,255,255,0.24);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.gym-brand-label {
+    margin-bottom: 0.35rem;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
+    color: rgba(255, 255, 255, 0.78);
 }
 
 .gym-logo {
@@ -387,6 +405,24 @@ body {
     border-radius: 8px;
 }
 
+.loading-inline {
+    grid-column: 1 / -1;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #6c757d;
+}
+
+.activity-chip {
+    border: 1px solid #dbe4f0;
+    background: #f9fbff;
+    padding: 0.6rem 0.75rem;
+}
+
+.activity-chip:hover {
+    background: #edf4ff;
+}
+
 /* Membership Plans */
 .membership-plans {
     display: grid;
@@ -420,19 +456,6 @@ body {
     border-color: var(--warning-color);
 }
 
-.plan-card.popular::before {
-    content: 'POPULAR';
-    position: absolute;
-    top: -10px;
-    right: 10px;
-    background: var(--warning-color);
-    color: var(--dark-color);
-    padding: 0.25rem 0.75rem;
-    border-radius: 20px;
-    font-size: 0.75rem;
-    font-weight: 700;
-}
-
 .plan-card:hover,
 .plan-card.selected {
     border-color: var(--primary-color);
@@ -442,6 +465,29 @@ body {
 
 .plan-card.selected {
     border-width: 3px;
+}
+
+.plan-tier {
+    display: inline-flex;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #0b4f9b;
+    background: #e8f1ff;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+}
+
+.plan-popular-tag {
+    position: absolute;
+    top: -11px;
+    right: 10px;
+    background: var(--warning-color);
+    color: #3c2a03;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
 }
 
 .plan-duration {
