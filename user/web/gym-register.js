@@ -6,12 +6,20 @@ const resolvedApiBase =
     urlParams.get('apiBase') ||
     urlParams.get('api') ||
     window.GYM_WALE_API_BASE_URL ||
-    'https://api.gym-wale.com/api';
+    'https://gym-wale.onrender.com/api';
 
 const API_BASE_URL = resolvedApiBase.replace(/\/+$/, '').endsWith('/api')
     ? resolvedApiBase.replace(/\/+$/, '')
     : `${resolvedApiBase.replace(/\/+$/, '')}/api`;
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+const FALLBACK_ACTIVITIES = [
+    'Cardio',
+    'Weight Training',
+    'Yoga',
+    'CrossFit',
+    'Zumba',
+    'Swimming'
+];
 
 // Global State
 let currentStep = 1;
@@ -19,6 +27,7 @@ let registrationType = '';
 let gymId = '';
 let qrToken = '';
 let gymData = {};
+let gymActivities = [];
 let membershipPlans = [];
 let selectedPlan = null;
 let memberData = {};
@@ -59,11 +68,12 @@ async function loadQRCodeContext() {
         gymId = data.gym.id;
         gymData = {
             id: data.gym.id,
-            name: data.gym.name || 'Gym Registration',
-            logoUrl: resolveAssetUrl(data.gym.logo)
+            name: data.gym.name || data.gym.gymName || 'Gym Registration',
+            logoUrl: resolveAssetUrl(data.gym.logoUrl || data.gym.logo)
         };
 
         applyGymBranding();
+        await loadGymInfo(false);
         showLoading(false);
     } catch (error) {
         console.error('Error validating QR code:', error);
@@ -80,23 +90,70 @@ async function loadQRCodeContext() {
 }
 
 // Load Gym Information
-async function loadGymInfo() {
-    showLoading(true);
+async function loadGymInfo(manageLoader = true) {
+    return loadGymInfoInternal(manageLoader);
+}
+
+async function loadGymInfoInternal(manageLoader) {
+    if (manageLoader) {
+        showLoading(true);
+    }
+
     try {
-        const response = await fetch(`${API_BASE_URL}/gyms/info/${gymId}`);
-        if (!response.ok) throw new Error('Failed to load gym information');
+        const [infoResponse, profileResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/gyms/info/${gymId}`),
+            fetch(`${API_BASE_URL}/gyms/${gymId}`)
+        ]);
 
-        gymData = await response.json();
+        let infoPayload = null;
+        let profilePayload = null;
 
-        if (gymData.logoUrl) {
-            gymData.logoUrl = resolveAssetUrl(gymData.logoUrl);
+        if (infoResponse.ok) {
+            infoPayload = await infoResponse.json();
         }
 
+        if (profileResponse.ok) {
+            profilePayload = await profileResponse.json();
+        }
+
+        if (!infoPayload && !profilePayload) {
+            throw new Error('Failed to load gym information');
+        }
+
+        const profileGym = profilePayload?.gym || profilePayload?.data || profilePayload || {};
+        gymData = {
+            ...gymData,
+            ...(infoPayload || {}),
+            ...(profileGym || {}),
+            id: gymId,
+            name:
+                (profileGym && (profileGym.name || profileGym.gymName)) ||
+                (infoPayload && (infoPayload.name || infoPayload.gymName)) ||
+                gymData.name ||
+                'Gym Registration',
+            logoUrl: resolveAssetUrl(
+                (profileGym && profileGym.logoUrl) ||
+                (infoPayload && (infoPayload.logoUrl || infoPayload.logo)) ||
+                gymData.logoUrl
+            )
+        };
+
+        gymActivities = normalizeActivities(profileGym?.activities || infoPayload?.activities || []);
+
         applyGymBranding();
-        showLoading(false);
+        renderActivityOptions();
+
+        if (manageLoader) {
+            showLoading(false);
+        }
     } catch (error) {
         console.error('Error loading gym info:', error);
-        showLoading(false);
+        gymActivities = normalizeActivities([]);
+        renderActivityOptions();
+
+        if (manageLoader) {
+            showLoading(false);
+        }
 
         document.getElementById('gymName').textContent = 'Gym Registration';
     }
@@ -108,6 +165,9 @@ function applyGymBranding() {
     const gymLogo = document.getElementById('gymLogo');
     if (gymData.logoUrl) {
         gymLogo.src = gymData.logoUrl;
+        gymLogo.onerror = () => {
+            gymLogo.classList.add('hidden');
+        };
         gymLogo.classList.remove('hidden');
     } else {
         gymLogo.classList.add('hidden');
@@ -175,7 +235,7 @@ async function loadMembershipPlans() {
         if (!response.ok) throw new Error('Failed to load membership plans');
 
         const data = await response.json();
-        membershipPlans = data.monthlyOptions || [];
+        membershipPlans = normalizeMembershipPlans(data);
 
         displayMembershipPlans();
     } catch (error) {
@@ -206,9 +266,13 @@ function displayMembershipPlans() {
     container.innerHTML = membershipPlans.map((plan, index) => {
         const discount = plan.discount || 0;
         const originalPrice = discount > 0 ? Math.round(plan.price / (1 - discount / 100)) : null;
+        const tierName = plan.tierName ? `<div class="plan-tier">${escapeHtml(plan.tierName)}</div>` : '';
+        const popularBadge = plan.isPopular ? '<div class="plan-popular-tag">Most Popular</div>' : '';
         
         return `
             <div class="plan-card ${plan.isPopular ? 'popular' : ''}" onclick="selectPlan(${index})">
+                ${popularBadge}
+                ${tierName}
                 <div class="plan-duration">${plan.months} Month${plan.months > 1 ? 's' : ''}</div>
                 <div class="plan-price">
                     ₹${plan.price.toLocaleString('en-IN')}
@@ -218,6 +282,141 @@ function displayMembershipPlans() {
             </div>
         `;
     }).join('');
+}
+
+function normalizeMembershipPlans(data) {
+    const plans = [];
+
+    if (Array.isArray(data?.memberships) && data.memberships.length > 0) {
+        data.memberships.forEach((item) => {
+            const durationDays = Number(item?.duration || 0);
+            const months = durationDays > 0 ? Math.max(1, Math.round(durationDays / 30)) : 1;
+            const price = Number(item?.price);
+
+            if (!Number.isFinite(price) || price <= 0) {
+                return;
+            }
+
+            plans.push({
+                months,
+                price,
+                discount: 0,
+                isPopular: Boolean(item?.isPopular),
+                tierName: item?.name || null
+            });
+        });
+    }
+
+    if (Array.isArray(data?.monthlyOptions) && data.monthlyOptions.length > 0) {
+        data.monthlyOptions.forEach((option) => {
+            const normalized = normalizeMonthlyOption(option, data?.name || null);
+            if (normalized) {
+                plans.push(normalized);
+            }
+        });
+    }
+
+    if (Array.isArray(data?.tiers) && data.tiers.length > 0) {
+        data.tiers.forEach((tier) => {
+            if (!Array.isArray(tier?.monthlyOptions)) {
+                return;
+            }
+
+            tier.monthlyOptions.forEach((option) => {
+                const normalized = normalizeMonthlyOption(option, tier?.name || null);
+                if (normalized) {
+                    plans.push(normalized);
+                }
+            });
+        });
+    }
+
+    return plans.sort((a, b) => {
+        if (a.months !== b.months) {
+            return a.months - b.months;
+        }
+        return a.price - b.price;
+    });
+}
+
+function normalizeMonthlyOption(option, tierName) {
+    const months = Number(option?.months);
+    const price = Number(option?.price ?? option?.finalPrice);
+
+    if (!Number.isFinite(months) || months <= 0 || !Number.isFinite(price) || price <= 0) {
+        return null;
+    }
+
+    return {
+        months,
+        price,
+        discount: Number(option?.discount || 0),
+        isPopular: Boolean(option?.isPopular),
+        tierName: tierName || null
+    };
+}
+
+function normalizeActivities(activities) {
+    if (!Array.isArray(activities) || activities.length === 0) {
+        return FALLBACK_ACTIVITIES.map((name) => ({ name }));
+    }
+
+    return activities
+        .map((activity) => {
+            if (typeof activity === 'string') {
+                return { name: activity };
+            }
+
+            if (activity && typeof activity === 'object' && activity.name) {
+                return {
+                    name: activity.name,
+                    icon: activity.icon || null
+                };
+            }
+
+            return null;
+        })
+        .filter(Boolean);
+}
+
+function renderActivityOptions() {
+    renderActivitiesIntoContainer('previousActivities', 'activities');
+    renderActivitiesIntoContainer('newActivities', 'newActivities');
+}
+
+function renderActivitiesIntoContainer(containerId, inputName) {
+    const container = document.getElementById(containerId);
+    if (!container) {
+        return;
+    }
+
+    const activities = gymActivities.length > 0
+        ? gymActivities
+        : FALLBACK_ACTIVITIES.map((name) => ({ name }));
+
+    container.innerHTML = activities.map((activity, index) => {
+        const value = String(activity.name || '').trim();
+        if (!value) {
+            return '';
+        }
+
+        const safeId = `${containerId}-${index}`;
+        return `
+            <label class="checkbox-label activity-chip" for="${safeId}">
+                <input type="checkbox" id="${safeId}" name="${inputName}" value="${escapeHtml(value)}">
+                <span>${escapeHtml(value)}</span>
+            </label>
+        `;
+    }).join('');
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 }
 
 // Select Membership Plan
