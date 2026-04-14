@@ -23,9 +23,13 @@
         <header class="header">
             <div class="gym-wale-brand">
                 <img src="icons/Icon-192.png" alt="Gym Wale App Logo" class="app-logo">
-                <h1>Gym Wale</h1>
+                <div>
+                    <h1>Gym Wale</h1>
+                    <p class="brand-tagline">Powered by Gym Wale Services</p>
+                </div>
             </div>
             <div id="gymBranding" class="gym-specific-brand">
+                <p class="gym-brand-label">Partner Gym</p>
                 <img id="gymLogo" class="gym-logo hidden" src="" alt="Gym Logo">
                 <h2 id="gymName" class="gym-name"></h2>
             </div>
@@ -99,31 +103,11 @@
 
                 <div class="form-group">
                     <label><i class="fas fa-heartbeat"></i> Preferred Activities</label>
-                    <div class="checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="Cardio">
-                            <span>Cardio</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="Weight Training">
-                            <span>Weight Training</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="Yoga">
-                            <span>Yoga</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="CrossFit">
-                            <span>CrossFit</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="Zumba">
-                            <span>Zumba</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="activities" value="Swimming">
-                            <span>Swimming</span>
-                        </label>
+                    <div id="previousActivities" class="checkbox-group">
+                        <div class="loading-inline">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Loading gym activities...</span>
+                        </div>
                     </div>
                 </div>
 
@@ -203,31 +187,11 @@
                     </div>
 
                     <h3 class="step-title" style="margin-top: 2rem;">Preferred Activities</h3>
-                    <div class="checkbox-group">
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="Cardio">
-                            <span>Cardio</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="Weight Training">
-                            <span>Weight Training</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="Yoga">
-                            <span>Yoga</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="CrossFit">
-                            <span>CrossFit</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="Zumba">
-                            <span>Zumba</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" name="newActivities" value="Swimming">
-                            <span>Swimming</span>
-                        </label>
+                    <div id="newActivities" class="checkbox-group">
+                        <div class="loading-inline">
+                            <i class="fas fa-spinner fa-spin"></i>
+                            <span>Loading gym activities...</span>
+                        </div>
                     </div>
 
                     <div class="form-actions">
