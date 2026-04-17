@@ -1226,6 +1226,16 @@ exports.getMyProfile = async (req, res) => {
     } else {
       gymProfile.activities = [];
     }
+
+    // Normalize location coordinates for clients expecting latitude/longitude keys.
+    if (gymProfile.location && typeof gymProfile.location === 'object') {
+      if (gymProfile.location.latitude == null && gymProfile.location.lat != null) {
+        gymProfile.location.latitude = gymProfile.location.lat;
+      }
+      if (gymProfile.location.longitude == null && gymProfile.location.lng != null) {
+        gymProfile.location.longitude = gymProfile.location.lng;
+      }
+    }
     
     res.status(200).json(gymProfile);
   } catch (error) {
@@ -1261,13 +1271,22 @@ async function handlePasswordChange(gym, newPassword) {
 }
 
 // Helper: Update location fields
-function updateLocation(gym, { address, city, state, pincode, landmark }) {
+function updateLocation(gym, { address, city, state, pincode, landmark, latitude, longitude }) {
   if (!gym.location) gym.location = {};
   if (address) gym.location.address = address;
   if (city) gym.location.city = city;
   if (state) gym.location.state = state;
   if (pincode) gym.location.pincode = pincode;
   if (landmark) gym.location.landmark = landmark;
+  if (latitude !== null && latitude !== undefined) gym.location.lat = latitude;
+  if (longitude !== null && longitude !== undefined) gym.location.lng = longitude;
+}
+
+function parseCoordinate(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const parsed = Number(String(value).trim());
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 // Helper: Handle logo upload
@@ -1289,10 +1308,14 @@ exports.updateMyProfile = async (req, res) => {
     gymName, email, phone, address, city, state, pincode, landmark, 
     description, contactPerson, supportEmail, supportPhone, 
     morningOpening, morningClosing, eveningOpening, eveningClosing,
+    latitude, longitude, lat, lng,
     activeDays,
     openingTime, closingTime, // Legacy support
     status, currentPassword, newPassword, gymLogo 
   } = req.body;
+
+  const parsedLatitude = parseCoordinate(latitude ?? lat ?? req.body.location?.latitude ?? req.body.location?.lat);
+  const parsedLongitude = parseCoordinate(longitude ?? lng ?? req.body.location?.longitude ?? req.body.location?.lng);
 
   try {
     const gym = await Gym.findById(adminId);
@@ -1333,7 +1356,15 @@ exports.updateMyProfile = async (req, res) => {
     if (openingTime) gym.openingTime = openingTime;
     if (closingTime) gym.closingTime = closingTime;
 
-    updateLocation(gym, { address, city, state, pincode, landmark });
+    updateLocation(gym, {
+      address,
+      city,
+      state,
+      pincode,
+      landmark,
+      latitude: parsedLatitude,
+      longitude: parsedLongitude,
+    });
 
     // Secure Current Password Check
     const passwordValidation = await validateCurrentPassword(gym, currentPassword);

@@ -455,16 +455,27 @@ class ApiService {
     double? maxPrice,
   }) async {
     try {
-      final Map<String, dynamic> queryParams = {};
+      final Map<String, String> queryParams = {};
+      final cleanedActivities = (activities ?? [])
+          .map((a) => a.trim())
+          .where((a) => a.isNotEmpty)
+          .toList();
       if (search != null && search.isNotEmpty) queryParams['search'] = search;
       if (city != null && city.isNotEmpty) queryParams['city'] = city;
-      if (activities != null && activities.isNotEmpty) queryParams['activities'] = activities;
       if (maxPrice != null) queryParams['maxPrice'] = maxPrice.toStringAsFixed(0);
       if (lat != null) queryParams['lat'] = lat.toString();
       if (lng != null) queryParams['lng'] = lng.toString();
       if (radius != null) queryParams['radius'] = radius.toString();
 
-      final uri = Uri.parse(ApiConfig.baseUrl + '/gyms/search').replace(queryParameters: queryParams);
+      final base = Uri.parse(ApiConfig.baseUrl + '/gyms/search');
+      final uri = Uri.https(
+        base.authority,
+        base.path,
+        {
+          ...queryParams,
+          if (cleanedActivities.isNotEmpty) 'activities': cleanedActivities,
+        },
+      );
       print('Fetching gyms from: $uri');
       
       final response = await http.get(

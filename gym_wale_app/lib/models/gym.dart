@@ -108,6 +108,10 @@ class Gym {
       if (json['latitude'] != null) {
         return safeParseDouble(json['latitude']);
       }
+      // Try location.latitude
+      if (json['location']?['latitude'] != null) {
+        return safeParseDouble(json['location']['latitude']);
+      }
       // Try location.lat
       if (json['location']?['lat'] != null) {
         return safeParseDouble(json['location']['lat']);
@@ -128,6 +132,10 @@ class Gym {
       // Try direct longitude field
       if (json['longitude'] != null) {
         return safeParseDouble(json['longitude']);
+      }
+      // Try location.longitude
+      if (json['location']?['longitude'] != null) {
+        return safeParseDouble(json['location']['longitude']);
       }
       // Try location.lng
       if (json['location']?['lng'] != null) {

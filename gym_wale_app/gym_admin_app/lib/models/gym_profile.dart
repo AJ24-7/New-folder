@@ -177,8 +177,8 @@ class GymLocation {
       state: json['state'],
       pincode: json['pincode'],
       landmark: json['landmark'],
-      latitude: json['latitude']?.toDouble(),
-      longitude: json['longitude']?.toDouble(),
+      latitude: (json['latitude'] ?? json['lat'])?.toDouble(),
+      longitude: (json['longitude'] ?? json['lng'])?.toDouble(),
     );
   }
 
