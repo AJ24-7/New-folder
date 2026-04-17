@@ -1,3 +1,5 @@
+import '../config/api_config.dart';
+
 class WorkoutPlan {
   final String id;
   final String name;
@@ -26,19 +28,23 @@ class WorkoutPlan {
   });
 
   factory WorkoutPlan.fromJson(Map<String, dynamic> json) {
+    final rawImageUrl =
+      (json['imageUrl'] ?? json['image'] ?? json['thumbnail'] ?? '')
+        .toString();
+
     return WorkoutPlan(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       level: json['level'] ?? 'beginner',
       bmiRange: json['bmiRange'] ?? 'normal',
-      durationWeeks: json['durationWeeks'] ?? 4,
+      durationWeeks: (json['durationWeeks'] as num?)?.toInt() ?? 4,
       goals: List<String>.from(json['goals'] ?? []),
       weeklySchedule: (json['weeklySchedule'] as List<dynamic>?)
               ?.map((day) => WorkoutDay.fromJson(day))
               .toList() ??
           [],
-      imageUrl: json['imageUrl'] ?? '',
+      imageUrl: _normalizeImageUrl(rawImageUrl),
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'])
           : null,
@@ -62,6 +68,25 @@ class WorkoutPlan {
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
     };
+  }
+
+  static String _normalizeImageUrl(String rawUrl) {
+    const fallbackImage =
+        'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800';
+
+    if (rawUrl.isEmpty) return fallbackImage;
+    if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+      return rawUrl;
+    }
+
+    final baseUrl = ApiConfig.baseUrlWithoutApi;
+    if (baseUrl.isEmpty) return fallbackImage;
+
+    if (rawUrl.startsWith('/')) {
+      return '$baseUrl$rawUrl';
+    }
+
+    return '$baseUrl/$rawUrl';
   }
 }
 
@@ -144,18 +169,22 @@ class Exercise {
   });
 
   factory Exercise.fromJson(Map<String, dynamic> json) {
+    final rawImageUrl =
+        (json['imageUrl'] ?? json['image'] ?? json['thumbnail'] ?? '')
+            .toString();
+
     return Exercise(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: json['name'] ?? '',
       description: json['description'] ?? '',
       category: json['category'] ?? 'strength',
       muscleGroup: json['muscleGroup'] ?? 'full-body',
-      sets: json['sets'] ?? 3,
-      reps: json['reps'] ?? 10,
-      duration: json['duration'],
-      restBetweenSets: json['restBetweenSets'] ?? 60,
+      sets: (json['sets'] as num?)?.toInt() ?? 3,
+      reps: (json['reps'] as num?)?.toInt() ?? 10,
+      duration: (json['duration'] as num?)?.toInt(),
+      restBetweenSets: (json['restBetweenSets'] as num?)?.toInt() ?? 60,
       difficulty: json['difficulty'] ?? 'beginner',
-      imageUrl: json['imageUrl'] ?? '',
+      imageUrl: WorkoutPlan._normalizeImageUrl(rawImageUrl),
       videoUrl: json['videoUrl'],
       instructions: List<String>.from(json['instructions'] ?? []),
       tips: List<String>.from(json['tips'] ?? []),

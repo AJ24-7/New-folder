@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'firebase_options.dart';
+import 'config/api_config.dart';
 import 'config/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/notification_provider.dart';
@@ -21,7 +22,6 @@ import 'services/foreground_task_service.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'l10n/app_localizations.dart';
 import 'services/location_service.dart';
 import 'services/firebase_notification_service.dart';
@@ -36,7 +36,6 @@ Future<void> main() async {
     FlutterForegroundTask.initCommunicationPort();
   }
 
-  await dotenv.load(fileName: ".env");
 
   if (!kIsWeb) {
     // ── Configure & init the persistent foreground service ──────────────────
@@ -45,7 +44,7 @@ Future<void> main() async {
     // Persist the API base URL so the killed-app background isolate can call
     // the backend directly (it has no access to dotenv or ApiConfig).
     try {
-      final rawBase = dotenv.env['API_BASE_URL'] ?? '';
+      final rawBase = ApiConfig.baseUrlWithoutApi;
       await ForegroundTaskService.persistApiBaseUrl(rawBase);
     } catch (_) {}
   }
@@ -179,6 +178,7 @@ class _SplashScreenState extends State<SplashScreen>
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final geofencingService = Provider.of<GeofencingService>(context, listen: false);
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
+    bool restoredGeofence = false;
 
     await authProvider.init();
 
@@ -195,15 +195,17 @@ class _SplashScreenState extends State<SplashScreen>
     // Initialize local notification service
     await LocalNotificationService.instance.initialize();
 
-    // Request permissions
-    await _requestPermissions();
+    // Request permissions only on mobile platforms.
+    if (!kIsWeb) {
+      await _requestPermissions();
+    }
 
     // Restore geofence only when the user is authenticated — never auto-start
     // location tracking or foreground service for a logged-out user.
     if (authProvider.isAuthenticated) {
       try {
-        final restored = await geofencingService.restoreGeofenceFromPreferences();
-        if (restored) {
+        restoredGeofence = await geofencingService.restoreGeofenceFromPreferences();
+        if (restoredGeofence) {
           final restoredGymId = geofencingService.currentGymId;
           if (restoredGymId != null) {
             debugPrint('[MAIN] Loading attendance settings after restore for gym: $restoredGymId');
@@ -213,7 +215,13 @@ class _SplashScreenState extends State<SplashScreen>
       } catch (e) {
         print('[GEOFENCE] Error restoring geofence: $e');
       }
-    } else {
+
+      // Fallback: if nothing was restored, bootstrap geofencing from active
+      // memberships here so attendance works even before HomeScreen logic runs.
+      if (!restoredGeofence && !geofencingService.isServiceRunning) {
+        await _bootstrapGeofenceFromMemberships(attendanceProvider, geofencingService);
+      }
+    } else if (!kIsWeb) {
       try {
         await ForegroundTaskService().stopService();
       } catch (_) {}
@@ -224,7 +232,9 @@ class _SplashScreenState extends State<SplashScreen>
 
     if (mounted) {
       Widget destination;
-      if (authProvider.isAuthenticated) {
+      if (kIsWeb) {
+        destination = const HomeScreen();
+      } else if (authProvider.isAuthenticated) {
         destination = const HomeScreen();
       } else if (await OnboardingScreen.shouldShow()) {
         destination = const OnboardingScreen();
@@ -234,6 +244,50 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => destination),
       );
+    }
+  }
+
+  Future<void> _bootstrapGeofenceFromMemberships(
+    AttendanceProvider attendanceProvider,
+    GeofencingService geofencingService,
+  ) async {
+    try {
+      final activeMemberships = await ApiService.getActiveMemberships();
+      if (activeMemberships.isEmpty) return;
+
+      for (final membership in activeMemberships) {
+        final isFrozen = membership['currentlyFrozen'] == true;
+        if (isFrozen) continue;
+
+        String? gymId;
+        if (membership['gymId'] != null) {
+          gymId = membership['gymId'].toString();
+        } else if (membership['gym']?['_id'] != null) {
+          gymId = membership['gym']['_id'].toString();
+        } else if (membership['gym']?['id'] != null) {
+          gymId = membership['gym']['id'].toString();
+        }
+        if (gymId == null || gymId.isEmpty) continue;
+
+        final response = await ApiService.getGymAttendanceSettings(gymId);
+        if (response['success'] != true) continue;
+
+        final settings = response['settings'];
+        if (settings is! Map<String, dynamic>) continue;
+
+        final geofenceEnabled = settings['geofenceEnabled'] == true ||
+            settings['mode'] == 'geofence' ||
+            settings['mode'] == 'hybrid';
+        if (!geofenceEnabled) continue;
+
+        debugPrint('[MAIN] Bootstrapping geofence from active membership for gym: $gymId');
+        final setupOk = await attendanceProvider.setupGeofencingWithSettings(gymId);
+        if (setupOk || geofencingService.isServiceRunning) {
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('[MAIN] Geofence bootstrap skipped: $e');
     }
   }
 

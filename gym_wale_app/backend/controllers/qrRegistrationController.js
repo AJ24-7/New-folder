@@ -277,21 +277,26 @@ const registerMemberViaQR = async (req, res) => {
 const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => {
   try {
     let subject, htmlContent;
+    const memberName = member.memberName || member.name || 'Member';
+    const gymName = gym.name || gym.gymName || 'Gym Wale';
+    const joinDate = member.joinDate || member.joinedDate || new Date();
+    const startDate = member.membershipStartDate || member.joinDate || new Date();
+    const endDate = member.membershipEndDate || member.validUntil || member.membershipValidUntil || new Date();
 
     if (registrationType === 'trial') {
-      subject = `Welcome to ${gym.name} - Your 3-Day Trial Starts Now! 🎉`;
+      subject = `Welcome to ${gymName} - Your 3-Day Trial Starts Now! 🎉`;
       htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">
           <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 2.5rem;">🎉 Welcome to ${gym.name}!</h1>
+            <h1 style="margin: 0; font-size: 2.5rem;">🎉 Welcome to ${gymName}!</h1>
             <p style="margin: 10px 0 0 0; font-size: 1.2rem;">Your 3-Day Trial Starts Now</p>
           </div>
           
           <div style="padding: 30px; background: white;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hi ${member.name}!</h2>
+            <h2 style="color: #333; margin-bottom: 20px;">Hi ${memberName}!</h2>
             
             <p style="font-size: 16px; line-height: 1.6; color: #555;">
-              Congratulations! Your 3-day trial membership at <strong>${gym.name}</strong> is now active. 
+              Congratulations! Your 3-day trial membership at <strong>${gymName}</strong> is now active. 
               You can start your fitness journey immediately!
             </p>
             
@@ -300,8 +305,8 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
               <ul style="margin: 0; padding-left: 20px; color: #555;">
                 <li>Duration: 3 Days</li>
                 <li>Plan: ${member.planSelected}</li>
-                <li>Start Date: ${member.membershipStartDate.toLocaleDateString()}</li>
-                <li>End Date: ${member.membershipEndDate.toLocaleDateString()}</li>
+                <li>Start Date: ${new Date(startDate).toLocaleDateString()}</li>
+                <li>End Date: ${new Date(endDate).toLocaleDateString()}</li>
               </ul>
             </div>
             
@@ -332,19 +337,19 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
         </div>
       `;
     } else {
-      subject = `Welcome to ${gym.name} - Complete Your Membership! 🎉`;
+      subject = `Welcome to ${gymName} - Complete Your Membership! 🎉`;
       htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">
           <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 30px; text-align: center;">
-            <h1 style="margin: 0; font-size: 2.5rem;">🎉 Welcome to ${gym.name}!</h1>
+            <h1 style="margin: 0; font-size: 2.5rem;">🎉 Welcome to ${gymName}!</h1>
             <p style="margin: 10px 0 0 0; font-size: 1.2rem;">Your Registration is Almost Complete</p>
           </div>
           
           <div style="padding: 30px; background: white;">
-            <h2 style="color: #333; margin-bottom: 20px;">Hi ${member.name}!</h2>
+            <h2 style="color: #333; margin-bottom: 20px;">Hi ${memberName}!</h2>
             
             <p style="font-size: 16px; line-height: 1.6; color: #555;">
-              Thank you for registering at <strong>${gym.name}</strong>! Your membership details have been recorded,
+              Thank you for registering at <strong>${gymName}</strong>! Your membership details have been recorded,
               and you're just one step away from starting your fitness journey.
             </p>
             
@@ -360,7 +365,7 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
               <ul style="margin: 0; padding-left: 20px; color: #555;">
                 <li>Plan: ${member.planSelected}</li>
                 <li>Type: ${registrationType === 'premium' ? 'Premium Registration' : 'Standard Registration'}</li>
-                <li>Registration Date: ${member.joinedDate.toLocaleDateString()}</li>
+                <li>Registration Date: ${new Date(joinDate).toLocaleDateString()}</li>
                 <li>Status: Pending Payment</li>
               </ul>
             </div>
@@ -396,11 +401,11 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
     await sendEmail({
       to: member.email,
       subject,
-      title: `Welcome to ${gym.name}!`,
+      title: `Welcome to ${gymName}!`,
       preheader: registrationType === 'instant' ? 'Your membership is confirmed and active' : 'Complete your payment to activate membership',
       bodyHtml: `
-        <p>Hi <strong style="color:#10b981;">${member.name}</strong>,</p>
-        <p>🎉 Welcome to <strong>${gym.name}</strong>! Your registration via QR code is complete.</p>
+        <p>Hi <strong style="color:#10b981;">${memberName}</strong>,</p>
+        <p>🎉 Welcome to <strong>${gymName}</strong>! Your registration via QR code is complete.</p>
         
         <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
           <table style="width:100%;font-size:13px;">
@@ -454,8 +459,8 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
 const getGymInfo = async (req, res) => {
   try {
     const { gymId } = req.params;
-    
-    const gym = await Gym.findById(gymId).select('name logoUrl address phone email');
+
+    const gym = await Gym.findById(gymId).select('name gymName logoUrl logo address location phone email');
     
     if (!gym) {
       return res.status(404).json({ message: 'Gym not found' });
@@ -463,9 +468,9 @@ const getGymInfo = async (req, res) => {
     
     res.json({
       id: gym._id,
-      name: gym.name,
-      logoUrl: gym.logoUrl,
-      address: gym.address,
+      name: gym.name || gym.gymName,
+      logoUrl: gym.logoUrl || (gym.logo ? `/uploads/gym-logos/${gym.logo}` : null),
+      address: gym.address || gym.location?.address,
       phone: gym.phone,
       email: gym.email
     });
@@ -509,14 +514,14 @@ const registerPreviousMember = async (req, res) => {
     }
     
     // Check if member already exists with this phone or email
-    const existingMember = await Member.findOne({ 
-      gymId,
+    const existingMember = await Member.findOne({
+      gym: gymId,
       $or: [{ phone }, { email }]
     });
     
     if (existingMember) {
       // Update existing member information
-      existingMember.name = name;
+      existingMember.memberName = name;
       existingMember.phone = phone;
       existingMember.email = email;
       if (preferredActivities && preferredActivities.length > 0) {
@@ -549,25 +554,32 @@ const registerPreviousMember = async (req, res) => {
       return res.status(200).json({
         message: 'Member information updated successfully',
         memberId: existingMember.membershipId,
-        name: existingMember.name,
+        name: existingMember.memberName,
         phone: existingMember.phone,
         email: existingMember.email,
         membershipExpiry: existingMember.validUntil
       });
     }
     
-    // If member doesn't exist, create new member record (without payment/membership)
+    // If member doesn't exist, create a pending record with safe defaults required by schema.
     const newMembershipId = `GW${Date.now()}`;
     const newMember = new Member({
-      gymId,
+      gym: gymId,
       membershipId: newMembershipId,
-      name,
+      memberName: name,
+      age: 18,
+      gender: 'Other',
       phone,
       email,
-      activityPreference: preferredActivities ? preferredActivities.join(', ') : '',
-      membershipStatus: 'Pending', // Pending until they complete payment at gym
-      registrationSource: 'QR Code - Previous Member',
-      createdAt: new Date()
+      activityPreference: preferredActivities && preferredActivities.length > 0
+        ? preferredActivities.join(', ')
+        : 'General Fitness',
+      paymentMode: 'pending',
+      paymentAmount: 0,
+      planSelected: 'Basic',
+      monthlyPlan: '1 Month',
+      paymentStatus: 'pending',
+      joinDate: new Date()
     });
     
     await newMember.save();
@@ -596,7 +608,7 @@ const registerPreviousMember = async (req, res) => {
     res.status(201).json({
       message: 'Registration submitted successfully. Please visit the gym to complete your membership.',
       memberId: newMember.membershipId,
-      name: newMember.name,
+      name: newMember.memberName,
       phone: newMember.phone,
       email: newMember.email
     });
@@ -613,124 +625,132 @@ const registerPreviousMember = async (req, res) => {
  */
 const registerNewMember = async (req, res) => {
   try {
-    const { 
-      gymId, 
-      name, 
-      phone, 
-      email, 
-      gender,
-      dateOfBirth,
-      bloodGroup,
-      address,
-      emergencyContact,
-      preferredActivities,
-      membershipPlan,
-      payment
-    } = req.body;
-    
-    // Validate required fields
-    if (!gymId || !name || !phone || !email || !gender || !dateOfBirth || !address || !emergencyContact) {
-      return res.status(400).json({ 
-        message: 'Missing required personal information fields' 
-      });
-    }
-    
-    if (!membershipPlan || !membershipPlan.months || !membershipPlan.price) {
-      return res.status(400).json({ 
-        message: 'Missing membership plan information' 
-      });
-    }
-    
-    if (!payment || !payment.method || !payment.amount) {
-      return res.status(400).json({ 
-        message: 'Missing payment information' 
-      });
-    }
-    
-    // Validate formats
-    const phoneRegex = /^[0-9]{10}$/;
-    if (!phoneRegex.test(phone) || !phoneRegex.test(emergencyContact)) {
-      return res.status(400).json({ message: 'Invalid phone number format. Must be 10 digits.' });
-    }
-    
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ message: 'Invalid email format' });
-    }
-    
-    // Check if gym exists
-    const gym = await Gym.findById(gymId);
-    if (!gym) {
-      return res.status(404).json({ message: 'Gym not found' });
-    }
-    
-    // Check if member already exists
-    const existingMember = await Member.findOne({ 
+    const {
       gymId,
-      $or: [{ phone }, { email }]
-    });
-    
-    if (existingMember) {
-      return res.status(400).json({ 
-        message: 'A member with this phone number or email already exists' 
-      });
-    }
-    
-    // Calculate membership dates
-    const membershipStartDate = new Date();
-    const membershipEndDate = new Date();
-    membershipEndDate.setMonth(membershipEndDate.getMonth() + membershipPlan.months);
-    
-    // Calculate age from date of birth
-    const dob = new Date(dateOfBirth);
-    const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-    
-    // Generate membership ID
-    const newMembershipId = `GW${Date.now()}`;
-    
-    // Create new member
-    const newMember = new Member({
-      gymId,
-      membershipId: newMembershipId,
       name,
+      memberName,
       phone,
       email,
       gender,
       age,
-      dateOfBirth: dob,
-      bloodGroup: bloodGroup || 'Not Specified',
       address,
-      emergencyContact,
-      activityPreference: preferredActivities ? preferredActivities.join(', ') : '',
-      planSelected: `${membershipPlan.months} Month${membershipPlan.months > 1 ? 's' : ''}`,
-      monthlyPlan: membershipPlan.months,
-      paymentAmount: payment.amount,
-      paymentMode: payment.method,
-      membershipStartDate,
-      validUntil: membershipEndDate,
-      membershipStatus: payment.method === 'Cash' ? 'Pending Verification' : 'Active',
-      registrationSource: 'QR Code - New Member',
-      createdAt: new Date()
+      preferredActivities,
+      activityPreference,
+      planSelected,
+      monthlyPlan,
+      paymentMode,
+      paymentAmount,
+      membershipPlan,
+      payment
+    } = req.body;
+
+    const resolvedName = (memberName || name || '').trim();
+    const resolvedAge = Number(age);
+    const resolvedMonths = Number(membershipPlan?.months || parseInt(monthlyPlan, 10));
+    const resolvedAmount = Number(payment?.amount || paymentAmount || membershipPlan?.price);
+    const resolvedPaymentModeRaw = payment?.method || paymentMode;
+    const resolvedPaymentMode = ['Cash', 'Card', 'UPI', 'Online', 'pending'].includes(resolvedPaymentModeRaw)
+      ? resolvedPaymentModeRaw
+      : 'Online';
+
+    let resolvedPlan = planSelected;
+    if (!resolvedPlan) {
+      if (resolvedMonths >= 6) resolvedPlan = 'Premium';
+      else if (resolvedMonths >= 3) resolvedPlan = 'Standard';
+      else resolvedPlan = 'Basic';
+    }
+
+    const resolvedMonthlyPlan = [1, 3, 6, 12].includes(resolvedMonths)
+      ? `${resolvedMonths} Month${resolvedMonths > 1 ? 's' : ''}`
+      : '1 Month';
+
+    const activitiesString = activityPreference ||
+      (Array.isArray(preferredActivities) && preferredActivities.length > 0
+        ? preferredActivities.join(', ')
+        : 'General Fitness');
+
+    if (!gymId || !resolvedName || !phone || !email || !gender || !Number.isFinite(resolvedAge) || resolvedAge <= 0) {
+      return res.status(400).json({
+        message: 'Missing required fields: gymId, name, age, gender, phone, email'
+      });
+    }
+
+    if (!resolvedAmount || resolvedAmount <= 0) {
+      return res.status(400).json({
+        message: 'Missing or invalid payment amount'
+      });
+    }
+
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ message: 'Invalid phone number format. Must be 10 digits.' });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: 'Invalid email format' });
+    }
+
+    const gym = await Gym.findById(gymId);
+    if (!gym) {
+      return res.status(404).json({ message: 'Gym not found' });
+    }
+
+    // Check if member already exists
+    const existingMember = await Member.findOne({
+      gym: gymId,
+      $or: [{ phone }, { email }]
     });
-    
+
+    if (existingMember) {
+      return res.status(400).json({
+        message: 'A member with this phone number or email already exists'
+      });
+    }
+
+    const membershipEndDate = new Date();
+    membershipEndDate.setMonth(membershipEndDate.getMonth() + resolvedMonths);
+
+    const newMembershipId = `GW${Date.now()}`;
+
+    const newMember = new Member({
+      gym: gymId,
+      membershipId: newMembershipId,
+      memberName: resolvedName,
+      phone,
+      email,
+      gender,
+      age: resolvedAge,
+      address: address || '',
+      activityPreference: activitiesString,
+      planSelected: resolvedPlan,
+      monthlyPlan: resolvedMonthlyPlan,
+      paymentAmount: resolvedAmount,
+      paymentMode: resolvedPaymentMode,
+      joinDate: new Date(),
+      membershipValidUntil: membershipEndDate.toISOString().split('T')[0],
+      validUntil: membershipEndDate,
+      paymentStatus: resolvedPaymentMode === 'Cash' ? 'pending' : 'paid'
+    });
+
     await newMember.save();
-    
+
     // Create payment record for non-cash payments (online, UPI, etc.)
-    if (payment.method !== 'Cash') {
+    if (resolvedPaymentMode !== 'Cash') {
       try {
         const paymentRecord = new Payment({
           gymId,
           type: 'received',
           category: 'membership',
-          amount: payment.amount,
-          description: `QR Registration - ${membershipPlan.months} month membership for ${name}`,
-          memberName: name,
+          amount: resolvedAmount,
+          description: `QR Registration - ${resolvedMonthlyPlan} membership for ${resolvedName}`,
+          memberName: resolvedName,
           memberId: newMember._id,
-          paymentMethod: payment.method.toLowerCase(),
+          paymentMethod: resolvedPaymentMode.toLowerCase(),
           status: 'completed',
           registrationSource: 'qr_registration',
-          planSelected: `${membershipPlan.months} Month${membershipPlan.months > 1 ? 's' : ''}`,
-          monthlyPlan: `${membershipPlan.months} Month${membershipPlan.months > 1 ? 's' : ''}`,
+          planSelected: resolvedPlan,
+          monthlyPlan: resolvedMonthlyPlan,
           paidDate: new Date(),
           createdBy: gymId
         });
@@ -742,17 +762,17 @@ const registerNewMember = async (req, res) => {
         const notification = new Notification({
           user: gymId,
           title: '💰 New QR Registration Payment',
-          message: `₹${payment.amount.toLocaleString('en-IN')} received from ${name} via QR code registration`,
+          message: `₹${resolvedAmount.toLocaleString('en-IN')} received from ${resolvedName} via QR code registration`,
           type: 'payment',
           priority: 'normal',
           read: false,
           isRead: false,
           metadata: {
             paymentId: paymentRecord._id,
-            amount: payment.amount,
-            paymentMethod: payment.method,
+            amount: resolvedAmount,
+            paymentMethod: resolvedPaymentMode,
             registrationSource: 'qr_registration',
-            memberName: name,
+            memberName: resolvedName,
             memberId: newMember._id,
             category: 'membership'
           }
@@ -767,16 +787,16 @@ const registerNewMember = async (req, res) => {
     }
     
     // Create cash validation request if payment is cash
-    if (payment.method === 'Cash') {
+    if (resolvedPaymentMode === 'Cash') {
       try {
         await createCashValidationRequest({
           body: {
             gymId,
             memberId: newMember._id,
-            memberName: name,
-            amount: payment.amount,
+            memberName: resolvedName,
+            amount: resolvedAmount,
             transactionType: 'Membership Fee',
-            notes: `QR Code Registration - ${membershipPlan.months} month membership`
+            notes: `QR Code Registration - ${resolvedMonthlyPlan} membership`
           }
         }, {
           status: () => ({ json: () => {} })
@@ -788,7 +808,7 @@ const registerNewMember = async (req, res) => {
     
     // Send welcome email
     try {
-      await sendWelcomeEmail(newMember, gym, payment.method === 'Cash' ? 'pending' : 'instant');
+      await sendWelcomeEmail(newMember, gym, resolvedPaymentMode === 'Cash' ? 'pending' : 'instant');
     } catch (emailError) {
       console.error('Error sending welcome email:', emailError);
     }
@@ -796,11 +816,11 @@ const registerNewMember = async (req, res) => {
     res.status(201).json({
       message: 'Registration completed successfully!',
       memberId: newMember.membershipId,
-      name: newMember.name,
+      name: newMember.memberName,
       phone: newMember.phone,
       email: newMember.email,
       membershipExpiry: newMember.validUntil,
-      paymentStatus: payment.method === 'Cash' ? 'Pending Verification' : 'Completed'
+      paymentStatus: resolvedPaymentMode === 'Cash' ? 'Pending Verification' : 'Completed'
     });
     
   } catch (error) {

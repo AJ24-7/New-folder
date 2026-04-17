@@ -3,15 +3,25 @@
 class ApiConfig {
   // Base URL - Change this based on your environment
   // static const String baseUrl = 'http://localhost:5000';
-  
-  // Production URL
-  static const String baseUrl = 'https://gym-wale.onrender.com';
+
+  // Production API origin (without /api)
+  static const String baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://gym-wale.onrender.com',
+  );
+
+  // Public website origin used for internal website links (QR registration, etc.)
+  static const String websiteBaseUrl = String.fromEnvironment(
+    'WEBSITE_BASE_URL',
+    defaultValue: 'https://gym-wale.com',
+  );
   
   // API Endpoints
   static const String _apiPrefix = '/api';
   
   // Auth Endpoints - Gym Admin routes (not Super Admin)
   static const String login = '$_apiPrefix/gyms/login';
+  static const String registerGym = '$_apiPrefix/gyms/register';
   static const String verify2FA = '$_apiPrefix/gyms/verify-login-2fa';
   static const String resend2FA = '$_apiPrefix/gyms/resend-2fa-code';
   static const String requestPasswordOTP = '$_apiPrefix/gyms/request-password-otp';
@@ -116,6 +126,24 @@ class ApiConfig {
   // Helper method to get full URL
   static String getFullUrl(String endpoint) {
     return '$baseUrl$endpoint';
+  }
+
+  // Gym website QR registration page
+  static String gymRegistrationUrl({required String gymId, String? token}) {
+    final queryParams = <String, String>{
+      'gymId': gymId,
+      'gym': gymId,
+      // Pass backend origin so the registration page can call the same API environment.
+      'apiBase': baseUrl,
+    };
+
+    if (token != null && token.trim().isNotEmpty) {
+      queryParams['token'] = token.trim();
+    }
+
+    return Uri.parse('$websiteBaseUrl/gym-register.html')
+        .replace(queryParameters: queryParams)
+        .toString();
   }
   
   // Timeout durations

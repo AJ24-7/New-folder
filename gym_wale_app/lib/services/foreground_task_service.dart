@@ -1,4 +1,4 @@
-﻿// lib/services/foreground_task_service.dart
+// lib/services/foreground_task_service.dart
 //
 // Keeps geofence-based auto-attendance running even when the app is
 // force-killed from the task switcher.
@@ -40,6 +40,7 @@ class _GeofenceTaskHandler extends TaskHandler {
   bool _wasInsideGeofence = false;
   DateTime? _enterTime;
   bool _entryMarkedToday = false;
+  bool _entryBlockedToday = false;
   bool _exitMarkedToday = false;
   /// True only when entry was genuinely confirmed by the backend (200/201).
   /// Distinguishes real marks from hard-block "stop retrying" flags.
@@ -213,6 +214,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       final today = _todayStr();
       if (_lastMarkedDateKey != today) {
         _entryMarkedToday = false;
+        _entryBlockedToday = false;
         _exitMarkedToday = false;
         _entryReallyMarked = false;
         _lastMarkedDateKey = today;
@@ -224,9 +226,11 @@ class _GeofenceTaskHandler extends TaskHandler {
         _savedEnterTimeAcrossExit = null;
         _lastBackendErrorMsg = null;
         await prefs.remove('bg_task_entry_marked');
+        await prefs.remove('bg_task_entry_blocked_today');
         await prefs.remove('bg_task_exit_marked');
         await prefs.remove('bg_task_entry_really_marked');
         await prefs.remove('bg_task_app_entry_marked');
+        await prefs.remove('bg_task_app_entry_really_marked');
         await prefs.remove('bg_task_app_exit_marked');
         await prefs.remove('bg_task_was_inside');
         await prefs.remove('bg_task_enter_time');
@@ -246,9 +250,12 @@ class _GeofenceTaskHandler extends TaskHandler {
       // hard-block flag back as "externally marked" → false positive.
       if (!_entryMarkedToday) {
         final externallyMarked = prefs.getBool('bg_task_app_entry_marked') ?? false;
+        final externallyReallyMarked =
+            prefs.getBool('bg_task_app_entry_really_marked') ?? false;
         if (externallyMarked && prefs.getString('bg_task_last_date') == today) {
           _entryMarkedToday = true;
-          _entryReallyMarked = true;
+          _entryReallyMarked = externallyReallyMarked;
+          _entryBlockedToday = false;
           debugPrint('[BGTask] Attendance already marked by in-app provider — synced');
         }
       }
@@ -273,6 +280,20 @@ class _GeofenceTaskHandler extends TaskHandler {
         return;
       }
 
+      // ── Guard: attendance fully done for today ───────────────────────────
+      // Once entry is marked AND exit is either already marked or not needed,
+      // stop the service immediately — no GPS polling needed until tomorrow.
+      // This is checked BEFORE acquiring GPS to avoid unnecessary battery drain.
+      final autoMarkExitEnabled = prefs.getBool('geofence_auto_mark_exit') ?? true;
+      if (_entryMarkedToday && (_exitMarkedToday || !autoMarkExitEnabled)) {
+        debugPrint('[BGTask] Attendance complete for today — stopping foreground service');
+        try {
+          FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
+        } catch (_) {}
+        await FlutterForegroundTask.stopService();
+        return;
+      }
+
       // ── get current GPS position ─────────────────────────────────────────
       Position position;
       try {
@@ -285,6 +306,9 @@ class _GeofenceTaskHandler extends TaskHandler {
       }
 
       // ── containment check: polygon OR circular ───────────────────────────
+      // Compute distance once — reused for circular containment and debug logging.
+      final distance = Geolocator.distanceBetween(
+          position.latitude, position.longitude, gymLat, gymLon);
       bool isInside;
       if (geofenceType == 'polygon' && polygonEncoded.isNotEmpty) {
         final polygon = _parsePolygon(polygonEncoded);
@@ -292,36 +316,16 @@ class _GeofenceTaskHandler extends TaskHandler {
           isInside = _isInsidePolygon(position.latitude, position.longitude, polygon);
         } else {
           // Fallback to circular if polygon is malformed
-          final distance = Geolocator.distanceBetween(
-            position.latitude, position.longitude, gymLat, gymLon);
           isInside = distance <= gymRadius;
         }
       } else {
-        final distance = Geolocator.distanceBetween(
-          position.latitude, position.longitude, gymLat, gymLon);
         isInside = distance <= gymRadius;
       }
-
-      // Keep a human-readable distance for debug messages (circular only)
-      final distance = Geolocator.distanceBetween(
-          position.latitude, position.longitude, gymLat, gymLon);
 
       debugPrint(
         '[BGTask] tick — dist~${distance.toStringAsFixed(0)} m '
         'type=$geofenceType inside=$isInside was=$_wasInsideGeofence entryMarked=$_entryMarkedToday exitMarked=$_exitMarkedToday',
       );
-
-      // ── Skip all processing if both entry and exit are done for today ───
-      // Once both marks are complete, stop all GPS-related logic and
-      // notifications for the rest of the day to save battery.
-      if (_entryMarkedToday && _exitMarkedToday) {
-        _updateFgNotif(
-          title: 'Attendance Complete',
-          text: 'Entry and exit recorded for today.',
-          icon: _iconCheck,
-        );
-        return;
-      }
 
       // ── state machine ────────────────────────────────────────────────────
       if (isInside && !_wasInsideGeofence) {
@@ -359,7 +363,7 @@ class _GeofenceTaskHandler extends TaskHandler {
 
         // Check operating hours AFTER state/timer update — affects only
         // whether we show the "Gym Detected" notification, not the timer.
-        final withinPeriod = await _isWithinActivePeriod(prefs);
+        final withinPeriod = _isWithinActivePeriod(prefs);
         if (!withinPeriod) {
           final reason = _buildOperatingHoursDebugText(prefs);
           debugPrint('[BGTask] ENTER outside operating hours — timer running, awaiting gym opening');
@@ -448,8 +452,7 @@ class _GeofenceTaskHandler extends TaskHandler {
 
         // Only mark exit if entry was GENUINELY marked by the backend (not
         // just a hard-block that set _entryMarkedToday to stop retrying).
-        final autoMarkExit = prefs.getBool('geofence_auto_mark_exit') ?? true;
-        if (autoMarkExit && _entryReallyMarked && !_exitMarkedToday) {
+        if (autoMarkExitEnabled && _entryReallyMarked && !_exitMarkedToday) {
           final result = await _callBackend(
             prefs: prefs,
             gymId: gymId,
@@ -459,25 +462,33 @@ class _GeofenceTaskHandler extends TaskHandler {
           );
           if (result == _kBackendOk) {
             _exitMarkedToday = true;
-            debugPrint('[BGTask] Exit marked at ${_fmtTime(actualExitTime)}');
-            _updateFgNotif(
-              title: 'Attendance Complete',
-              text: 'Entry and exit recorded for today.',
-              icon: _iconCheck,
-            );
+            _enterTime = null;
+            _dwellMarkAttempts = 0;
+            await _saveDailyState();
+            debugPrint('[BGTask] Exit marked at ${_fmtTime(actualExitTime)} — stopping foreground service');
             await _showLocalNotif(
               id: 3003,
               title: 'Exit Recorded',
               body: 'Auto check-out at ${_fmtTime(actualExitTime)} — see you next time!',
               icon: 'ic_check',
             );
+            try {
+              FlutterForegroundTask.sendDataToMain({
+                'event': 'attendance_exit',
+                'gymId': gymId,
+                'timestamp': DateTime.now().toIso8601String(),
+              });
+              FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
+            } catch (_) {}
+            await FlutterForegroundTask.stopService();
+            return;
           }
         }
         _enterTime = null;
         _dwellMarkAttempts = 0;
         await _saveDailyState();
 
-      } else if (isInside && _wasInsideGeofence && !_entryMarkedToday) {
+      } else if (isInside && _wasInsideGeofence && !_entryMarkedToday && !_entryBlockedToday) {
         // ── DWELL check ────────────────────────────────────────────────────
         // Reset jitter counter — user is confirmed inside.
         _consecutiveOutsideCount = 0;
@@ -491,7 +502,7 @@ class _GeofenceTaskHandler extends TaskHandler {
             // IMPORTANT: do NOT reset _wasInsideGeofence / _enterTime when
             // outside hours — just skip this tick so marking happens as soon
             // as operating hours start instead of restarting the 5-min timer.
-            final withinPeriod = await _isWithinActivePeriod(prefs);
+            final withinPeriod = _isWithinActivePeriod(prefs);
             if (!withinPeriod) {
               final reason = _buildOperatingHoursDebugText(prefs);
               debugPrint('[BGTask] DWELL skipped — outside operating hours (timer kept, will mark when hours start)');
@@ -525,11 +536,6 @@ class _GeofenceTaskHandler extends TaskHandler {
                   await _notifPlugin.cancel(3001);
                 } catch (_) {}
 
-                _updateFgNotif(
-                  title: 'Attendance Marked',
-                  text: 'Your attendance is recorded for today.',
-                  icon: _iconCheck,
-                );
                 await _showLocalNotif(
                   id: 3002,
                   title: 'Attendance Marked',
@@ -537,12 +543,38 @@ class _GeofenceTaskHandler extends TaskHandler {
                       'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout!',
                   icon: 'ic_check',
                 );
+                try {
+                  FlutterForegroundTask.sendDataToMain({
+                    'event': 'attendance_entry',
+                    'gymId': gymId,
+                    'timestamp': DateTime.now().toIso8601String(),
+                  });
+                  // If exit auto-mark is disabled, attendance is fully done —
+                  // send the stop event in the same try block.
+                  if (!autoMarkExitEnabled) {
+                    FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
+                  }
+                } catch (_) {}
+
+                // If exit auto-mark is disabled, attendance is fully done —
+                // stop the service immediately to save battery.
+                if (!autoMarkExitEnabled) {
+                  debugPrint('[BGTask] Entry marked & autoMarkExit disabled — stopping foreground service');
+                  await FlutterForegroundTask.stopService();
+                  return;
+                }
+
+                _updateFgNotif(
+                  title: 'Attendance Marked',
+                  text: 'Your attendance is recorded for today.',
+                  icon: _iconCheck,
+                );
               } else if (result == _kBackendHardBlock) {
                 // Permanent error (no membership, geofence disabled, mock
                 // location fraud). Stop retrying but do NOT set
                 // _entryReallyMarked — so exit won't be marked either.
                 debugPrint('[BGTask] Hard-block from backend — stopping for today');
-                _entryMarkedToday = true;
+                _entryBlockedToday = true;
                 // _entryReallyMarked stays false — no genuine entry recorded
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
@@ -581,7 +613,7 @@ class _GeofenceTaskHandler extends TaskHandler {
                 // done for today so the task stops cycling and show a clear
                 // error notification so the user knows to mark manually.
                 debugPrint('[BGTask] Max retries ($_maxDwellMarkAttempts) exceeded — stopping auto-mark for today');
-                _entryMarkedToday = true;
+                _entryBlockedToday = true;
                 _dwellMarkAttempts = 0;
                 await _saveDailyState();
 
@@ -615,6 +647,13 @@ class _GeofenceTaskHandler extends TaskHandler {
             );
           }
         }
+      } else if (isInside && _wasInsideGeofence && _entryBlockedToday) {
+        _consecutiveOutsideCount = 0;
+        _updateFgNotif(
+          title: 'Inside Gym',
+          text: _lastBackendErrorMsg ?? 'Auto-attendance unavailable today.',
+          icon: _iconGym,
+        );
       } else if (isInside && _wasInsideGeofence && _entryMarkedToday) {
         // Already processed today — keep notification clean and suppress tracking.
         _consecutiveOutsideCount = 0;
@@ -684,59 +723,45 @@ class _GeofenceTaskHandler extends TaskHandler {
           )
           .timeout(const Duration(seconds: 30));
 
+      Map<String, dynamic>? body;
+      try {
+        final decoded = jsonDecode(resp.body);
+        if (decoded is Map<String, dynamic>) {
+          body = decoded;
+        }
+      } catch (_) {
+        body = null;
+      }
+
       if (resp.statusCode == 200 || resp.statusCode == 201) {
+        // Defensive: some backend paths may still return 2xx with success=false.
+        if (body != null && body['success'] == false) {
+          _lastBackendErrorMsg =
+              body['message'] as String? ?? 'Server rejected attendance request';
+          return _classifyBackendFailure(_lastBackendErrorMsg!);
+        }
         debugPrint('[BGTask] ${isEntry ? "Entry" : "Exit"} backend call OK');
-
-        // ── Notify the main isolate so AttendanceProvider refreshes the UI ──
-        // If the app is open / in background (not killed), the main isolate
-        // receives this data via FlutterForegroundTask.addTaskDataCallback.
-        try {
-          FlutterForegroundTask.sendDataToMain({
-            'event': isEntry ? 'attendance_entry' : 'attendance_exit',
-            'gymId': gymId,
-            'timestamp': DateTime.now().toIso8601String(),
-          });
-        } catch (_) {}
-
+        _lastBackendErrorMsg = null;
         return _kBackendOk;
       }
 
       // ── Classify non-2xx responses ─────────────────────────────────────────
       debugPrint('[BGTask] Backend ${resp.statusCode}: ${resp.body}');
       try {
-        final body = (jsonDecode(resp.body) as Map<String, dynamic>);
-        final msg  = (body['message'] as String? ?? '').toLowerCase();
+        final msg = (body?['message'] as String? ?? '').toLowerCase();
         // Store the raw message for UI display so notifications can show
         // the exact reason (e.g. "attendance can only be marked during gym
         // operating hours") instead of a generic error.
         _lastBackendErrorMsg =
-            body['message'] as String? ?? 'Unknown server error (${resp.statusCode})';
-        // Hard-block: retrying will never help today.
-        const hardBlocks = [
-          'no active membership',
-          'geofencing is disabled',
-          'auto-mark entry is disabled',
-          'auto-mark exit is disabled',
-          'member not found',
-          'mock locations are not allowed',
-          // Auth errors — token is invalid/expired; retrying with the same
-          // token will never succeed.
-          'invalid token',
-          'token missing',
-          'invalid token type',
-          'invalid token format',
-          'user not found',
-          'membership is frozen',
-        ];
+            body?['message'] as String? ?? 'Unknown server error (${resp.statusCode})';
         // NOTE: "attendance can only be marked during gym operating hours"
         // is intentionally NOT a hard-block — the client-side operating
         // hours check handles this, but a slight clock skew between
         // client and server can cause this rejection transiently.
         // Treating it as soft-fail lets the task retry on the next tick
         // once the server's clock crosses into operating hours.
-        if (hardBlocks.any(msg.contains)) {
-          debugPrint('[BGTask] Hard-block: $msg');
-          return _kBackendHardBlock;
+        if (msg.isNotEmpty) {
+          return _classifyBackendFailure(msg);
         }
       } catch (_) {}
 
@@ -747,6 +772,32 @@ class _GeofenceTaskHandler extends TaskHandler {
       _lastBackendErrorMsg = 'Network error: $e';
       return _kBackendSoftFail;
     }
+  }
+
+  int _classifyBackendFailure(String message) {
+    final msg = message.toLowerCase();
+    const hardBlocks = [
+      'no active membership',
+      'geofencing is disabled',
+      'auto-mark entry is disabled',
+      'auto-mark exit is disabled',
+      'member not found',
+      'mock locations are not allowed',
+      // Auth errors — retrying with the same token will never succeed.
+      'invalid token',
+      'token missing',
+      'invalid token type',
+      'invalid token format',
+      'user not found',
+      'membership is frozen',
+      'no attendance entry found for today',
+      'no geofence entry found for today',
+    ];
+    if (hardBlocks.any(msg.contains)) {
+      debugPrint('[BGTask] Hard-block: $msg');
+      return _kBackendHardBlock;
+    }
+    return _kBackendSoftFail;
   }
 
   // ─── operating hours / active-days guard ──────────────────────────────────
@@ -763,7 +814,7 @@ class _GeofenceTaskHandler extends TaskHandler {
 
   /// Returns false if [now] is outside all configured operating shifts or is a
   /// non-working day.  Returns true when no restrictions are stored.
-  Future<bool> _isWithinActivePeriod(SharedPreferences prefs) async {
+  bool _isWithinActivePeriod(SharedPreferences prefs) {
     final now = DateTime.now();
 
     // ── Active days check ──────────────────────────────────────────────────
@@ -948,6 +999,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       final today = _todayStr();
       if (_lastMarkedDateKey == today) {
         _entryMarkedToday = prefs.getBool('bg_task_entry_marked') ?? false;
+        _entryBlockedToday = prefs.getBool('bg_task_entry_blocked_today') ?? false;
         _exitMarkedToday = prefs.getBool('bg_task_exit_marked') ?? false;
         _entryReallyMarked = prefs.getBool('bg_task_entry_really_marked') ?? false;
         // ── Restore timer state so a service restart doesn't reset the 5-min
@@ -975,6 +1027,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       } else {
         // New day — clear everything
         _entryMarkedToday = false;
+        _entryBlockedToday = false;
         _exitMarkedToday = false;
         _entryReallyMarked = false;
         _lastMarkedDateKey = today;
@@ -983,9 +1036,10 @@ class _GeofenceTaskHandler extends TaskHandler {
         await prefs.remove('bg_task_last_exit_time');
         await prefs.remove('bg_task_saved_enter_time');
         await prefs.remove('bg_task_exit_marked');
+        await prefs.remove('bg_task_entry_blocked_today');
         await prefs.remove('bg_task_entry_really_marked');
       }
-      debugPrint('[BGTask] Loaded daily state: entry=$_entryMarkedToday reallyMarked=$_entryReallyMarked exit=$_exitMarkedToday wasInside=$_wasInsideGeofence');
+      debugPrint('[BGTask] Loaded daily state: entry=$_entryMarkedToday blocked=$_entryBlockedToday reallyMarked=$_entryReallyMarked exit=$_exitMarkedToday wasInside=$_wasInsideGeofence');
     } catch (_) {}
   }
 
@@ -994,6 +1048,7 @@ class _GeofenceTaskHandler extends TaskHandler {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('bg_task_last_date', _todayStr());
       await prefs.setBool('bg_task_entry_marked', _entryMarkedToday);
+      await prefs.setBool('bg_task_entry_blocked_today', _entryBlockedToday);
       await prefs.setBool('bg_task_exit_marked', _exitMarkedToday);
       await prefs.setBool('bg_task_entry_really_marked', _entryReallyMarked);
       // Persist the dwell timer so service-restart restores it

@@ -7,6 +7,7 @@ const Support = require('../models/Support');
 const Admin = require('../models/admin');
 const Gym = require('../models/gym');
 const GymNotification = require('../models/GymNotification');
+const Notification = require('../models/Notification');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const sendEmail = require('../utils/sendEmail');
 const whatsappService = require('../services/whatsappService');
@@ -708,23 +709,43 @@ router.put('/admin/messages/:messageId/read', gymadminAuth, async (req, res) => 
 // Helper function to send notification to main admin
 async function sendAdminNotification(notificationData) {
     try {
-        // This would integrate with your admin notification system
-        // For now, we'll use the existing notification routes
-        const adminNotificationUrl = `${process.env.BASE_URL || 'http://localhost:5000'}/api/admin/notifications/send`;
-        
-        const response = await fetch(adminNotificationUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(notificationData)
+        const superAdmin = await Admin.findOne({
+            role: { $in: ['super_admin', 'super-admin'] },
+            status: { $ne: 'inactive' }
         });
 
-        if (!response.ok) {
-            console.error('Failed to send admin notification');
+        const recipientAdmin = superAdmin || await Admin.findOne({
+            status: { $ne: 'inactive' },
+            $or: [
+                { permissions: 'manage_support' },
+                { role: 'admin' }
+            ]
+        });
+
+        if (!recipientAdmin) {
+            console.error('Failed to send admin notification: no admin recipient found');
+            return false;
         }
 
-        return response.ok;
+        const notification = new Notification({
+            user: recipientAdmin._id,
+            title: notificationData.title,
+            message: notificationData.message,
+            type: notificationData.type || 'support',
+            priority: notificationData.priority || 'medium',
+            read: false,
+            isRead: false,
+            timestamp: new Date(),
+            createdAt: new Date(),
+            metadata: {
+                source: 'gym-communication-routes',
+                ...(notificationData.metadata || {}),
+                gym: notificationData.gym || undefined
+            }
+        });
+
+        await notification.save();
+        return true;
     } catch (error) {
         console.error('Error sending admin notification:', error);
         return false;

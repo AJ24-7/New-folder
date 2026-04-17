@@ -3,6 +3,7 @@ import 'dart:io' show Platform;
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:image_picker/image_picker.dart';
 import '../config/api_config.dart';
 import '../models/admin.dart';
 import 'storage_service.dart';
@@ -318,6 +319,126 @@ class AuthService {
       return {
         'success': false,
         'message': 'An unexpected error occurred',
+      };
+    }
+  }
+
+  /// Register Gym (new gym admin onboarding)
+  Future<Map<String, dynamic>> registerGym({
+    required Map<String, dynamic> payload,
+    XFile? logoFile,
+    List<XFile>? gymImages,
+  }) async {
+    try {
+      final hasUploads = logoFile != null || (gymImages != null && gymImages.isNotEmpty);
+
+      dynamic requestBody = payload;
+      Options? requestOptions;
+
+      if (hasUploads) {
+        final formMap = <String, dynamic>{...payload};
+
+        if (logoFile != null) {
+          final logoBytes = await logoFile.readAsBytes();
+          formMap['logo'] = MultipartFile.fromBytes(
+            logoBytes,
+            filename: logoFile.name,
+          );
+        }
+
+        if (gymImages != null && gymImages.isNotEmpty) {
+          final files = <MultipartFile>[];
+          for (final image in gymImages) {
+            final bytes = await image.readAsBytes();
+            files.add(
+              MultipartFile.fromBytes(
+                bytes,
+                filename: image.name,
+              ),
+            );
+          }
+          formMap['gymImages'] = files;
+        }
+
+        requestBody = FormData.fromMap(formMap);
+        requestOptions = Options(
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        );
+      }
+
+      final response = await _dio.post(
+        ApiConfig.registerGym,
+        data: requestBody,
+        options: (requestOptions ?? Options()).copyWith(
+          // Gym registration can take longer because image upload, cloud storage,
+          // DB writes, notifications, and email happen in one request.
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: const Duration(minutes: 2),
+        ),
+      );
+
+      final data = response.data is Map<String, dynamic>
+          ? response.data as Map<String, dynamic>
+          : <String, dynamic>{};
+
+      final statusCode = response.statusCode ?? 0;
+      final isHttpSuccess = statusCode >= 200 && statusCode < 300;
+      final successField = data['success'];
+      final statusField = (data['status'] ?? '').toString().toLowerCase();
+      final messageField = (data['message'] ?? '').toString().toLowerCase();
+
+      final hasSuccessSignal = successField == true ||
+          successField == 'true' ||
+          statusField == 'pending' ||
+          statusField == 'success' ||
+          messageField.contains('submitted') ||
+          messageField.contains('success');
+
+      final isSuccess = isHttpSuccess && (hasSuccessSignal || data.isNotEmpty);
+
+      return {
+        'success': isSuccess,
+        'status': data['status'],
+        'message': data['message'] ?? 'Registration submitted successfully',
+      };
+    } on DioException catch (e) {
+      final message = e.response?.data is Map<String, dynamic>
+          ? (e.response?.data['message'] ?? 'Registration failed').toString()
+          : 'Registration failed';
+
+      // If backend processing exceeded client wait time, the submission may still be saved.
+      // Treat receive timeout as pending success to avoid duplicate resubmits.
+      if (e.type == DioExceptionType.receiveTimeout) {
+        return {
+          'success': true,
+          'status': 'pending',
+          'message':
+              'Registration submitted and is being processed. If you already received confirmation, please do not resubmit.',
+        };
+      }
+
+      // Common when first request actually succeeded but user retries after timeout.
+      final normalizedMessage = message.toLowerCase();
+      if (normalizedMessage.contains('already exists') &&
+          normalizedMessage.contains('email or phone')) {
+        return {
+          'success': true,
+          'status': 'pending',
+          'message':
+              'Registration already submitted for this email/phone and is likely pending admin approval.',
+        };
+      }
+
+      return {
+        'success': false,
+        'message': message,
+      };
+    } catch (_) {
+      return {
+        'success': false,
+        'message': 'An unexpected error occurred during registration',
       };
     }
   }

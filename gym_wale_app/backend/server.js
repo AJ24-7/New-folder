@@ -19,7 +19,14 @@ app.use(cors({
     // List of allowed origins
     const allowedOrigins = [
       // Production (Render)
+      'https://gym-wale.onrender.com',
       'https://gym-wale-backend.onrender.com',
+      'https://api.gym-wale.com',
+      'https://gym-wale.com',
+      'https://www.gym-wale.com',
+      'https://admin.gym-wale.com',
+      process.env.FRONTEND_URL,
+      process.env.ADMIN_FRONTEND_URL,
       process.env.API_BASE_URL,
       // Development
       'http://localhost:5000',
@@ -151,6 +158,7 @@ const geofenceConfigRoutes = require('./routes/geofenceConfig');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const memberLocationStatusRoutes = require('./routes/memberLocationStatus');
+const qrCodeRoutes = require('./routes/qrCodeRoutes');
 
 // API Routes
 app.use('/api/admin', adminRoutes);
@@ -167,6 +175,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/grievances', supportRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/member-problems', memberProblemReportRoutes);
 app.use('/api/workouts', workoutRoutes);
@@ -177,6 +186,7 @@ app.use('/api/geofence', geofenceConfigRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/member', memberLocationStatusRoutes);
+app.use('/api/qr-codes', qrCodeRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

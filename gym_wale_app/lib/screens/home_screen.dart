@@ -55,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Set<String> _activeGymIds = {}; // Track gyms user is an active member of
   List<Map<String, dynamic>> _activeMembershipsData = []; // Full data for membership card
   List<Map<String, dynamic>> _nearbyOffers = []; // Nearby gym offers for top offers section
+  int _registeredGymCount = 0;
 
   // ── Location permission warning for geofence-enabled gyms ───────────────────
   bool _showLocationWarning = false;
@@ -793,6 +794,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         print('[HOME] Gyms after filtering: ${filteredGyms.length}');
         
         setState(() {
+          _registeredGymCount = gyms.length;
           _popularGyms = filteredGyms.take(5).toList();
         });
       }
@@ -1161,7 +1163,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Hero Header with Gradient
-            Container(
+            kIsWeb ? _buildWebHeroSection() : Container(
               decoration: const BoxDecoration(
                 gradient: AppTheme.heroGradient,
               ),
@@ -1405,7 +1407,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               backgroundImage: authProvider.user?.profileImage != null && authProvider.user!.profileImage!.isNotEmpty
                                   ? CachedNetworkImageProvider(authProvider.user!.profileImage!)
                                   : null,
-                              onBackgroundImageError: authProvider.user?.profileImage != null && authProvider.user!.profileImage!.isNotEmpty 
+                              onBackgroundImageError: authProvider.user?.profileImage != null && authProvider.user!.profileImage!.isNotEmpty
                                   ? (exception, stackTrace) {
                                       print('❌ Error loading profile image: ${authProvider.user!.profileImage} - $exception');
                                     }
@@ -1422,7 +1424,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Location Display
                       Row(
                         children: [
@@ -1478,14 +1480,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   if (_showLocationWarning && _geofenceIsActive)
                     _buildLocationWarningBanner(),
 
-                  // Offers Carousel - Always show if available
-                  OfferCarousel(
-                    offers: _offers,
-                    onOfferTap: (offer) {
-                      _handleOfferTap(offer);
-                    },
-                  ),
-                  if (_offers.isNotEmpty) const SizedBox(height: 32),
+                  // Hide the carousel on web to match the requested web home UX.
+                  if (!kIsWeb) ...[
+                    OfferCarousel(
+                      offers: _offers,
+                      onOfferTap: (offer) {
+                        _handleOfferTap(offer);
+                      },
+                    ),
+                    if (_offers.isNotEmpty) const SizedBox(height: 32),
+                  ],
                   
                   // Quick Actions Grid - Only show if FAB is hidden
                   if (!_showCenterFAB) ...[
@@ -1967,6 +1971,143 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildWebHeroSection() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF14532D)],
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.verified, color: Colors.amber, size: 16),
+                        SizedBox(width: 8),
+                        Text(
+                          "India's #1 Gym Finder Platform",
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Find Your Perfect Gym\nTransform Your Fitness Journey',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Discover gyms near you with flexible plans, expert trainers, and modern equipment.',
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.85),
+                  fontSize: 15,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: () => setState(() => _selectedIndex = 1),
+                    icon: const Icon(Icons.search),
+                    label: const Text('Explore Now'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _selectedIndex = 1),
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Watch Demo'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white.withOpacity(0.35)),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 22),
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _buildHeroStat('${_registeredGymCount > 0 ? _registeredGymCount : '--'}+', 'Partner Gyms'),
+                  _buildHeroStat('10K+', 'Happy Members'),
+                  _buildHeroStat('50+', 'Cities'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroStat(String value, String label) {
+    return Container(
+      width: 130,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 12,
+            ),
+          ),
+        ],
       ),
     );
   }

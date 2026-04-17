@@ -3,6 +3,7 @@ import 'attendance_record.dart';
 /// Attendance Statistics Model
 class AttendanceStats {
   final int totalMembers;
+  final int activeMembers;
   final int presentToday;
   final int absentToday;
   final double attendanceRateToday;
@@ -28,6 +29,7 @@ class AttendanceStats {
 
   AttendanceStats({
     required this.totalMembers,
+    required this.activeMembers,
     required this.presentToday,
     required this.absentToday,
     required this.attendanceRateToday,
@@ -43,21 +45,25 @@ class AttendanceStats {
   });
 
   factory AttendanceStats.fromJson(Map<String, dynamic> json) {
+    final activeMembers = _toInt(json['activeMembers']);
+    final totalMembers = _toInt(json['totalMembers']);
+
     return AttendanceStats(
-      totalMembers: json['totalMembers'] ?? 0,
-      presentToday: json['presentToday'] ?? 0,
-      absentToday: json['absentToday'] ?? 0,
+      totalMembers: activeMembers > 0 ? activeMembers : totalMembers,
+      activeMembers: activeMembers > 0 ? activeMembers : totalMembers,
+      presentToday: _toInt(json['presentToday']),
+      absentToday: _toInt(json['absentToday']),
       attendanceRateToday: (json['attendanceRateToday'] ?? 0.0).toDouble(),
-      month: json['month'] ?? DateTime.now().month,
-      year: json['year'] ?? DateTime.now().year,
-      totalWorkingDays: json['totalWorkingDays'] ?? 0,
-      averagePresent: json['averagePresent'] ?? 0,
+      month: _toInt(json['month']) > 0 ? _toInt(json['month']) : DateTime.now().month,
+      year: _toInt(json['year']) > 0 ? _toInt(json['year']) : DateTime.now().year,
+      totalWorkingDays: _toInt(json['totalWorkingDays']),
+      averagePresent: _toInt(json['averagePresent']),
       monthlyAttendanceRate: (json['monthlyAttendanceRate'] ?? 0.0).toDouble(),
       statusBreakdown: json['statusBreakdown'] != null
-          ? Map<String, int>.from(json['statusBreakdown'])
+          ? _toIntMap(json['statusBreakdown'])
           : {},
       attendanceByType: json['attendanceByType'] != null
-          ? Map<String, int>.from(json['attendanceByType'])
+          ? _toIntMap(json['attendanceByType'])
           : {},
       dailyData: json['dailyData'] != null
           ? (json['dailyData'] as List)
@@ -75,6 +81,7 @@ class AttendanceStats {
   Map<String, dynamic> toJson() {
     return {
       'totalMembers': totalMembers,
+      'activeMembers': activeMembers,
       'presentToday': presentToday,
       'absentToday': absentToday,
       'attendanceRateToday': attendanceRateToday,
@@ -88,6 +95,17 @@ class AttendanceStats {
       'dailyData': dailyData?.map((e) => e.toJson()).toList(),
       'peakHours': peakHours?.map((e) => e.toJson()).toList(),
     };
+  }
+
+  static int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
+
+  static Map<String, int> _toIntMap(dynamic value) {
+    if (value is! Map) return {};
+    return value.map((key, val) => MapEntry(key.toString(), _toInt(val)));
   }
 }
 

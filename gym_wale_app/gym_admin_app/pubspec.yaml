@@ -91,6 +91,7 @@ flutter:
   generate: true  # Enable localization generation
   
   assets:
+    - assets/images/gym-adminlogo.png
     - assets/images/
     - assets/icons/
   # https://flutter.dev/to/asset-from-package
@@ -127,8 +128,8 @@ flutter_launcher_icons:
     generate: true
   linux:
     generate: true
-  image_path: "assets/images/logo.png"
+  image_path: "assets/images/gym-adminlogo.png"
   adaptive_icon_background: "#FFFFFF"
-  adaptive_icon_foreground: "assets/images/logo.png"
+  adaptive_icon_foreground: "assets/images/gym-adminlogo.png"
   # Optional: Remove background if you have a transparent logo
   # remove_alpha_ios: true

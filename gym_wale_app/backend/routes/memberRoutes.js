@@ -1,12 +1,20 @@
 const express = require('express');
 const router = express.Router();
-const { addMember, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, removeSingleMember, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
+const multer = require('multer');
+const { addMember, importMembers, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, removeSingleMember, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
 const { registerOnlineMember } = require('../controllers/onlineMembershipController');
 const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember } = require('../controllers/qrRegistrationController');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
 const memberImageUpload = require('../middleware/memberImageUpload');
 const Member = require('../models/Member');
+
+const importUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024,
+  },
+});
 
 
 // Simple test route
@@ -41,6 +49,9 @@ router.post('/', gymadminAuth, memberImageUpload.single('profileImage'), addMemb
 
 // Add member via user authentication (for online membership purchases)
 router.post('/add', authMiddleware, addMember);
+
+// Bulk import members from file (xlsx/xls/csv/pdf)
+router.post('/import', gymadminAuth, importUpload.single('file'), importMembers);
 
 // Register member after successful online payment
 router.post('/register-online', authMiddleware, registerOnlineMember);

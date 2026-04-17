@@ -598,8 +598,16 @@ class ApiService {
         '${ApiConfig.attendance}/stats/$month/$year',
       );
       
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        return AttendanceStats.fromJson(response.data);
+      if (response.statusCode == 200) {
+        final rawData = response.data;
+        if (rawData is Map<String, dynamic>) {
+          // Support both payloads: { success, ...stats } and { success, stats: {...} }
+          if (rawData['success'] == false) return null;
+          final statsPayload = rawData['stats'] is Map<String, dynamic>
+              ? rawData['stats'] as Map<String, dynamic>
+              : rawData;
+          return AttendanceStats.fromJson(statsPayload);
+        }
       }
       return null;
     } catch (e) {

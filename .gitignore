@@ -38,10 +38,6 @@ Thumbs.db
 
 # Build outputs
 dist/
-build/
+/build
 *.min.js
 *.min.css
-
-# Misc
-super admin/
-home.html

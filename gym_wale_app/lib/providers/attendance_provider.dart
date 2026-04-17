@@ -69,22 +69,24 @@ class AttendanceProvider extends ChangeNotifier {
     try {
       if (data is Map) {
         final event  = data['event'] as String?;
+
+        // Handle service-lifecycle events that carry no gymId first.
+        if (event == 'service_stopped') {
+          // Background isolate has halted the foreground service (attendance
+          // complete for today).  Keep the UI in sync.
+          _geofencingService?.onBackgroundServiceStopped();
+          return;
+        }
+
         final gymId  = data['gymId']  as String?;
         if (gymId == null) return;
 
         debugPrint('[ATTENDANCE] Background task event: $event for gym: $gymId');
 
         if (event == 'attendance_entry') {
-          _isAttendanceMarkedToday = true;
-          _checkInTime = DateTime.now();
-          _hasCheckedOut = false;
-          notifyListeners();
-          // Also re-fetch from backend to get the full attendance record
+          // Keep UI state backend-authoritative to avoid false positives.
           fetchTodayAttendance(gymId);
         } else if (event == 'attendance_exit') {
-          _checkOutTime = DateTime.now();
-          _hasCheckedOut = true;
-          notifyListeners();
           fetchTodayAttendance(gymId);
         }
       }
@@ -341,9 +343,18 @@ class AttendanceProvider extends ChangeNotifier {
       await prefs.setString('bg_task_last_date', today);
       if (_isAttendanceMarkedToday) {
         await prefs.setBool('bg_task_app_entry_marked', true);
+        final hasGeofenceEntry =
+            (_todayAttendance?['geofenceEntry']?['timestamp'] != null) ||
+            (_todayAttendance?['isGeofenceAttendance'] == true);
+        await prefs.setBool('bg_task_app_entry_really_marked', hasGeofenceEntry);
+      } else {
+        await prefs.remove('bg_task_app_entry_marked');
+        await prefs.remove('bg_task_app_entry_really_marked');
       }
       if (_hasCheckedOut) {
         await prefs.setBool('bg_task_app_exit_marked', true);
+      } else {
+        await prefs.remove('bg_task_app_exit_marked');
       }
     } catch (e) {
       debugPrint('[ATTENDANCE] Error syncing to bg task: $e');

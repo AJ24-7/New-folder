@@ -28,7 +28,15 @@ const gymSchema = new mongoose.Schema({
     geofenceRadius: { type: Number, default: 100 } // Radius in meters for geofencing, default 100m
   },
 
-  description: { type: String, required: true },
+  description: {
+    type: String,
+    default: '',
+    set: (value) => {
+      if (typeof value !== 'string') return '';
+      const trimmed = value.trim();
+      return trimmed;
+    }
+  },
   gymPhotos: [{
     title: { type: String, required: true },
     description: { type: String, required: true },
@@ -161,6 +169,14 @@ const gymSchema = new mongoose.Schema({
   rejectedAt: {
     type: Date
   }
+});
+
+// Keep description optional while guaranteeing string type.
+gymSchema.pre('validate', function (next) {
+  if (typeof this.description !== 'string') {
+    this.description = '';
+  }
+  next();
 });
 
 // Automatically update `updatedAt` on save

@@ -440,6 +440,34 @@ class GeofencingService extends ChangeNotifier {
 
       debugPrint('[GEOFENCE] Geofence type: ${geofenceSettings.type}');
 
+      // Persist the full geofence data (including polygon coords, operating
+      // schedule, and auto-mark flags) BEFORE starting the service so the
+      // background isolate reads the correct values on its very first tick.
+      // This avoids a race where the service would otherwise start with the
+      // interim circular-type data written by registerGymGeofence.
+      await _saveFullGeofenceToPreferences(
+        gymId: gymId,
+        latitude: geofenceSettings.latitude!,
+        longitude: geofenceSettings.longitude!,
+        radius: geofenceSettings.radius!,
+        type: geofenceSettings.type,
+        polygonCoordinates: isPolygon ? geofenceSettings.polygonCoordinates : [],
+      );
+
+      final hours = _attendanceSettings!.operatingHours;
+      await ForegroundTaskService.persistOperatingSchedule(
+        morningOpening: geofenceSettings.morningShift?.opening ?? hours?.morning?.opening,
+        morningClosing: geofenceSettings.morningShift?.closing ?? hours?.morning?.closing,
+        eveningOpening: geofenceSettings.eveningShift?.opening ?? hours?.evening?.opening,
+        eveningClosing: geofenceSettings.eveningShift?.closing ?? hours?.evening?.closing,
+        activeDays: geofenceSettings.activeDays ?? _attendanceSettings!.activeDays,
+      );
+
+      await ForegroundTaskService.persistAutoMarkFlags(
+        autoMarkEntry: shouldAutoMarkEntry(),
+        autoMarkExit:  shouldAutoMarkExit(),
+      );
+
       // For both circular and polygon, the backend provides pre-computed
       // centroid lat/lng and bounding-circle radius.  The background isolate
       // does its own containment check (polygon ray-casting or circular
@@ -453,35 +481,6 @@ class GeofencingService extends ChangeNotifier {
       );
 
       if (success) {
-        // Persist full geofence data (including polygon coords) for the
-        // background isolate (foreground task service) that does its own
-        // containment check without a backend call.
-        await _saveFullGeofenceToPreferences(
-          gymId: gymId,
-          latitude: geofenceSettings.latitude!,
-          longitude: geofenceSettings.longitude!,
-          radius: geofenceSettings.radius!,
-          type: geofenceSettings.type,
-          polygonCoordinates: isPolygon ? geofenceSettings.polygonCoordinates : [],
-        );
-
-        // Persist operating schedule (morning/evening shifts + active days)
-        // so the background isolate can gate notifications correctly.
-        final hours = _attendanceSettings!.operatingHours;
-        await ForegroundTaskService.persistOperatingSchedule(
-          morningOpening: geofenceSettings.morningShift?.opening ?? hours?.morning?.opening,
-          morningClosing: geofenceSettings.morningShift?.closing ?? hours?.morning?.closing,
-          eveningOpening: geofenceSettings.eveningShift?.opening ?? hours?.evening?.opening,
-          eveningClosing: geofenceSettings.eveningShift?.closing ?? hours?.evening?.closing,
-          activeDays: geofenceSettings.activeDays ?? _attendanceSettings!.activeDays,
-        );
-
-        // Persist auto-mark flags.
-        await ForegroundTaskService.persistAutoMarkFlags(
-          autoMarkEntry: shouldAutoMarkEntry(),
-          autoMarkExit:  shouldAutoMarkExit(),
-        );
-
         debugPrint('[GEOFENCE] Configured successfully from attendance settings');
         debugPrint('[GEOFENCE] Auto-mark entry: ${geofenceSettings.autoMarkEntry}');
         debugPrint('[GEOFENCE] Auto-mark exit: ${geofenceSettings.autoMarkExit}');
@@ -497,6 +496,17 @@ class GeofencingService extends ChangeNotifier {
   /// Check if attendance settings allow geofencing
   bool isGeofenceEnabledInSettings() {
     return _attendanceSettings?.geofenceEnabled ?? false;
+  }
+
+  /// Called when the background foreground service stops itself (e.g. after
+  /// attendance is fully marked for the day).  Updates the running state so
+  /// the UI reflects the actual service status.
+  void onBackgroundServiceStopped() {
+    if (_isServiceRunning) {
+      _isServiceRunning = false;
+      notifyListeners();
+      debugPrint('[GEOFENCE] Background service stopped — UI state updated');
+    }
   }
 
   /// Check if auto-mark entry is enabled

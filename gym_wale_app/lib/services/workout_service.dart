@@ -5,6 +5,19 @@ import '../config/api_config.dart';
 import '../models/workout_plan.dart';
 
 class WorkoutService {
+  static List<WorkoutPlan> _extractPlans(dynamic data) {
+    final rawPlans = (data is Map<String, dynamic>)
+        ? (data['plans'] ?? data['workoutPlans'] ?? data['data'])
+        : data;
+
+    if (rawPlans is! List) return [];
+
+    return rawPlans
+        .whereType<Map<String, dynamic>>()
+        .map(WorkoutPlan.fromJson)
+        .toList();
+  }
+
   static Future<String?> _getToken() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getString('auth_token');
@@ -26,15 +39,13 @@ class WorkoutService {
   static Future<Map<String, dynamic>> getWorkoutPlans() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/workouts/plans'),
+        Uri.parse('${ApiConfig.baseUrl}/workouts/plans?includeImages=true'),
         headers: await _headers,
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final plans = (data['plans'] as List)
-            .map((plan) => WorkoutPlan.fromJson(plan))
-            .toList();
+        final plans = _extractPlans(data);
 
         return {
           'success': true,
@@ -62,15 +73,13 @@ class WorkoutService {
   }) async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/workouts/recommended?bmiCategory=$bmiCategory&level=$fitnessLevel'),
+        Uri.parse('${ApiConfig.baseUrl}/workouts/recommended?bmiCategory=$bmiCategory&level=$fitnessLevel&includeImages=true'),
         headers: await _headers,
       );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final plans = (data['plans'] as List)
-            .map((plan) => WorkoutPlan.fromJson(plan))
-            .toList();
+        final plans = _extractPlans(data);
 
         return {
           'success': true,
@@ -95,7 +104,7 @@ class WorkoutService {
   static Future<Map<String, dynamic>> getWorkoutPlanById(String planId) async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConfig.baseUrl}/workouts/plans/$planId'),
+        Uri.parse('${ApiConfig.baseUrl}/workouts/plans/$planId?includeImages=true'),
         headers: await _headers,
       );
 

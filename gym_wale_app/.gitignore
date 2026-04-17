@@ -73,7 +73,6 @@ app.*.map.json
 **/ios/Runner/GeneratedPluginRegistrant.*
 
 # Web
-lib/generated_plugin_registrant.dart
 
 # Exceptions to above rules.
 !**/ios/**/default.mode1v3
@@ -107,3 +106,6 @@ lib/firebase_options.dart
 
 # Web local secrets — contain API keys
 **/web/env.js
+
+# Sensitive super admin frontend (never commit)
+/super admin/

@@ -48,6 +48,13 @@ class CommunicationController {
             // Calculate average response time
             const avgResponseTime = await this.calculateAverageResponseTime();
 
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const resolvedToday = await Support.countDocuments({
+                status: 'resolved',
+                updatedAt: { $gte: startOfToday }
+            });
+
             const formattedStats = {
                 open: stats.find(s => s._id === 'open')?.count || 0,
                 inProgress: stats.find(s => s._id === 'in-progress')?.count || 0,
@@ -64,7 +71,17 @@ class CommunicationController {
                     gyms: userTypeStats.find(s => s._id === 'Gym')?.count || 0,
                     trainers: userTypeStats.find(s => s._id === 'Trainer')?.count || 0
                 },
-                avgResponseTime: avgResponseTime
+                avgResponseTime: avgResponseTime,
+
+                // Backward-compatible keys used by super admin support UI.
+                openTickets: stats.find(s => s._id === 'open')?.count || 0,
+                resolvedToday,
+                averageResponseTime: avgResponseTime,
+                byUserType: {
+                    user: userTypeStats.find(s => s._id === 'User')?.count || 0,
+                    gym: userTypeStats.find(s => s._id === 'Gym')?.count || 0,
+                    trainer: userTypeStats.find(s => s._id === 'Trainer')?.count || 0
+                }
             };
 
             res.json({
@@ -564,6 +581,9 @@ class CommunicationController {
     // Send ticket reply notifications
     async sendTicketReplyNotifications(ticket, replyMessage, sendVia) {
         try {
+            const normalizedRecipientType = (ticket.userType || '').toLowerCase();
+            const notificationUserField = normalizedRecipientType === 'gym' ? ticket.userId : null;
+
             const notification = {
                 title: `Reply to Ticket #${ticket.ticketId}`,
                 message: replyMessage.message.substring(0, 100) + (replyMessage.message.length > 100 ? '...' : ''),
@@ -573,10 +593,29 @@ class CommunicationController {
                 metadata: {
                     ticketId: ticket.ticketId,
                     originalSubject: ticket.subject
-                }
+                },
+                // Gym admin app reads Notification by `user` field.
+                user: notificationUserField
             };
 
             await this.sendNotificationViaChannels(notification, sendVia);
+
+            if (normalizedRecipientType === 'gym') {
+                await GymNotification.create({
+                    gymId: ticket.userId,
+                    type: 'grievance-reply',
+                    title: `Admin Reply: #${ticket.ticketId}`,
+                    message: replyMessage.message,
+                    priority: ticket.priority || 'medium',
+                    metadata: {
+                        ticketId: ticket.ticketId,
+                        ticketSubject: ticket.subject,
+                        ticketStatus: ticket.status,
+                        ticketPriority: ticket.priority,
+                        source: 'super-admin-reply'
+                    }
+                });
+            }
         } catch (error) {
             console.error('Error sending ticket reply notifications:', error);
         }
@@ -585,6 +624,9 @@ class CommunicationController {
     // Send status change notification
     async sendStatusChangeNotification(ticket, oldStatus, newStatus) {
         try {
+            const normalizedRecipientType = (ticket.userType || '').toLowerCase();
+            const notificationUserField = normalizedRecipientType === 'gym' ? ticket.userId : null;
+
             const notification = {
                 title: `Ticket Status Updated`,
                 message: `Your ticket #${ticket.ticketId} status has been updated from "${oldStatus}" to "${newStatus}"`,
@@ -595,10 +637,28 @@ class CommunicationController {
                     ticketId: ticket.ticketId,
                     oldStatus,
                     newStatus
-                }
+                },
+                user: notificationUserField
             };
 
             await this.sendNotificationViaChannels(notification, ['notification']);
+
+            if (normalizedRecipientType === 'gym') {
+                await GymNotification.create({
+                    gymId: ticket.userId,
+                    type: 'support-reply',
+                    title: `Ticket Status Updated: #${ticket.ticketId}`,
+                    message: `Status changed from ${oldStatus} to ${newStatus}`,
+                    priority: ticket.priority || 'medium',
+                    metadata: {
+                        ticketId: ticket.ticketId,
+                        ticketSubject: ticket.subject,
+                        ticketStatus: newStatus,
+                        oldStatus,
+                        source: 'super-admin-status-update'
+                    }
+                });
+            }
         } catch (error) {
             console.error('Error sending status change notification:', error);
         }
@@ -747,15 +807,25 @@ class CommunicationController {
     // Send in-app notification
     async sendInAppNotification(notification) {
         try {
+            const priorityMap = {
+                low: 'low',
+                medium: 'medium',
+                normal: 'normal',
+                high: 'high',
+                urgent: 'high'
+            };
+
             // Create notification record
             const notificationRecord = new Notification({
                 title: notification.title,
                 message: notification.message,
+                priority: priorityMap[notification.priority] || 'normal',
                 recipient: notification.recipient,
                 recipientType: notification.recipientType,
                 sender: notification.sender,
                 senderType: notification.senderType || 'Admin',
                 type: notification.type || 'general',
+                user: notification.user || undefined,
                 metadata: notification.metadata || {},
                 read: false,
                 createdAt: new Date()

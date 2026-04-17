@@ -1,10 +1,16 @@
 // lib/screens/settings/gym_profile_screen.dart
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/gym_profile.dart';
 import '../../services/gym_service.dart';
+import '../../services/location_permission_service.dart';
 import '../../config/app_theme.dart';
 
 class GymProfileScreen extends StatefulWidget {
@@ -37,6 +43,12 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   final _pincodeController = TextEditingController();
   final _landmarkController = TextEditingController();
   final _currentPasswordController = TextEditingController();
+
+  LatLng? _selectedLocation;
+  GoogleMapController? _mapController;
+  bool _isFetchingLocation = false;
+  bool _isReverseGeocoding = false;
+  static const LatLng _fallbackMapCenter = LatLng(20.5937, 78.9629);
   
   // Morning slot times
   TimeOfDay? _morningOpening;
@@ -78,6 +90,7 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
     _pincodeController.dispose();
     _landmarkController.dispose();
     _currentPasswordController.dispose();
+    _mapController?.dispose();
     super.dispose();
   }
   
@@ -115,6 +128,10 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
     _stateController.text = _gymProfile!.location?.state ?? '';
     _pincodeController.text = _gymProfile!.location?.pincode ?? '';
     _landmarkController.text = _gymProfile!.location?.landmark ?? '';
+
+    final lat = _gymProfile!.location?.latitude;
+    final lng = _gymProfile!.location?.longitude;
+    _selectedLocation = (lat != null && lng != null) ? LatLng(lat, lng) : null;
     
     // Parse morning and evening operating hours
     if (_gymProfile!.operatingHours?.morning?.opening != null) {
@@ -185,6 +202,8 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
         state: _stateController.text,
         pincode: _pincodeController.text,
         landmark: _landmarkController.text.isEmpty ? null : _landmarkController.text,
+        latitude: _selectedLocation?.latitude,
+        longitude: _selectedLocation?.longitude,
         morningOpening: _morningOpening != null 
           ? '${_morningOpening!.hour.toString().padLeft(2, '0')}:${_morningOpening!.minute.toString().padLeft(2, '0')}'
           : null,
@@ -235,6 +254,223 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  Future<void> _focusMapOnSelectedLocation({double zoom = 16}) async {
+    final target = _selectedLocation;
+    final controller = _mapController;
+    if (target == null || controller == null) return;
+
+    await controller.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: target, zoom: zoom),
+      ),
+    );
+  }
+
+  Future<void> _useCurrentLocation() async {
+    if (_isFetchingLocation) return;
+    setState(() => _isFetchingLocation = true);
+
+    try {
+      final permission = await LocationPermissionService.requestPermission();
+      if (!permission.canUseLocation) {
+        if (!mounted) return;
+        _showError(permission.message);
+        return;
+      }
+
+      final coords = await LocationPermissionService.getCurrentLocation();
+      if (coords == null) {
+        if (!mounted) return;
+        _showError('Unable to fetch current location. Ensure GPS/location services are ON, then try again.');
+        return;
+      }
+
+      await _setSelectedLocation(
+        LatLng(coords.latitude, coords.longitude),
+        showSuccessMessage: true,
+      );
+    } catch (_) {
+      if (!mounted) return;
+      _showError('Could not fetch current location right now.');
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingLocation = false);
+      }
+    }
+  }
+
+  Future<void> _setSelectedLocation(
+    LatLng latLng, {
+    bool showSuccessMessage = false,
+  }) async {
+    if (!mounted) return;
+    setState(() {
+      _selectedLocation = latLng;
+      _isReverseGeocoding = true;
+    });
+
+    await _focusMapOnSelectedLocation();
+
+    List<Placemark> places = const [];
+    Placemark? place;
+    try {
+      places = await placemarkFromCoordinates(latLng.latitude, latLng.longitude);
+      if (places.isNotEmpty) {
+        place = places.first;
+      }
+    } catch (_) {
+      // Keep manual fallback values if reverse geocoding fails.
+    }
+
+    final fallbackAddressData = await _reverseGeocodeWithNominatim(latLng);
+
+    if (!mounted) return;
+
+    final p = place;
+    final addressParts = <String>[
+      p?.name ?? '',
+      p?.street ?? '',
+      p?.subLocality ?? '',
+      p?.locality ?? '',
+      p?.subAdministrativeArea ?? '',
+      p?.administrativeArea ?? '',
+    ].where((e) => e.trim().isNotEmpty).toList();
+
+    final fallbackAddress =
+        'Lat: ${latLng.latitude.toStringAsFixed(6)}, Lng: ${latLng.longitude.toStringAsFixed(6)}';
+
+    String firstNonEmpty(List<String> values) {
+      for (final value in values) {
+        final v = value.trim();
+        if (v.isNotEmpty) return v;
+      }
+      return '';
+    }
+
+    String firstNonEmptyFromPlacemark(Iterable<String?> Function(Placemark p) selector) {
+      for (final candidate in places) {
+        for (final raw in selector(candidate)) {
+          final value = (raw ?? '').trim();
+          if (value.isNotEmpty) return value;
+        }
+      }
+      return '';
+    }
+
+    setState(() {
+      final resolvedAddress = firstNonEmpty([
+        addressParts.join(', '),
+        fallbackAddressData['address'] ?? '',
+      ]);
+      _addressController.text = resolvedAddress.isNotEmpty ? resolvedAddress : fallbackAddress;
+
+      final resolvedCity = firstNonEmptyFromPlacemark(
+        (x) => [x.locality, x.subAdministrativeArea, x.subLocality],
+      );
+      final cityFromFallback = fallbackAddressData['city'] ?? '';
+      final finalCity = firstNonEmpty([resolvedCity, cityFromFallback]);
+      if (finalCity.isNotEmpty) {
+        _cityController.text = finalCity;
+      }
+
+      final resolvedState = firstNonEmptyFromPlacemark(
+        (x) => [x.administrativeArea, x.subAdministrativeArea],
+      );
+      final stateFromFallback = fallbackAddressData['state'] ?? '';
+      final finalState = firstNonEmpty([resolvedState, stateFromFallback]);
+      if (finalState.isNotEmpty) {
+        _stateController.text = finalState;
+      }
+
+      final resolvedPincode = firstNonEmptyFromPlacemark(
+        (x) => [x.postalCode],
+      );
+      final pincodeFromFallback = fallbackAddressData['pincode'] ?? '';
+      final finalPincode = firstNonEmpty([resolvedPincode, pincodeFromFallback]);
+      if (finalPincode.isNotEmpty) {
+        _pincodeController.text = finalPincode;
+      }
+
+      final resolvedLandmark = firstNonEmpty([
+        (p?.name ?? p?.subLocality ?? '').trim(),
+        fallbackAddressData['landmark'] ?? '',
+      ]);
+      if (resolvedLandmark.isNotEmpty) {
+        _landmarkController.text = resolvedLandmark;
+      }
+
+      _isReverseGeocoding = false;
+    });
+
+    if (showSuccessMessage) {
+      _showSuccess(
+        p == null && fallbackAddressData.isEmpty
+            ? 'Location selected. Coordinates added. You can refine on map.'
+            : 'Address auto-filled from current location.',
+      );
+    }
+  }
+
+  Future<Map<String, String>> _reverseGeocodeWithNominatim(LatLng latLng) async {
+    try {
+      final uri = Uri.https('nominatim.openstreetmap.org', '/reverse', {
+        'lat': latLng.latitude.toString(),
+        'lon': latLng.longitude.toString(),
+        'format': 'jsonv2',
+        'addressdetails': '1',
+      });
+
+      final response = await http.get(
+        uri,
+        headers: const {
+          'Accept': 'application/json',
+          'User-Agent': 'GymWaleAdminApp/1.0',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        return <String, String>{};
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return <String, String>{};
+      }
+
+      final address = decoded['address'];
+      final addressMap = address is Map ? address.cast<String, dynamic>() : <String, dynamic>{};
+
+      String pick(List<String> keys) {
+        for (final key in keys) {
+          final value = (addressMap[key] ?? '').toString().trim();
+          if (value.isNotEmpty) return value;
+        }
+        return '';
+      }
+
+      final houseNumber = pick(['house_number']);
+      final road = pick(['road', 'pedestrian', 'footway', 'street']);
+      final suburb = pick(['suburb', 'neighbourhood', 'quarter', 'city_district']);
+      final city = pick(['city', 'town', 'village', 'municipality', 'county']);
+      final state = pick(['state', 'region']);
+      final pincode = pick(['postcode']);
+      final landmark = pick(['attraction', 'building', 'amenity', 'hamlet']);
+      final displayName = (decoded['display_name'] ?? '').toString().trim();
+
+      final stitchedAddress = [houseNumber, road, suburb, city].where((e) => e.trim().isNotEmpty).join(', ');
+
+      return <String, String>{
+        'address': stitchedAddress.isNotEmpty ? stitchedAddress : displayName,
+        'city': city,
+        'state': state,
+        'pincode': pincode,
+        'landmark': landmark,
+      };
+    } catch (_) {
+      return <String, String>{};
+    }
   }
   
   @override
@@ -478,10 +714,99 @@ class _GymProfileScreenState extends State<GymProfileScreen> {
   }
   
   Widget _buildLocationSection() {
+    final hasStoredCoordinates = _selectedLocation != null;
+
     return _buildSection(
       title: 'Location',
       icon: Icons.location_on,
       children: [
+        if (_isEditing)
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isFetchingLocation ? null : _useCurrentLocation,
+              icon: _isFetchingLocation
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.my_location),
+              label: const Text('Use Current Location'),
+            ),
+          ),
+        if (_isEditing) const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          height: 190,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              GoogleMap(
+                onMapCreated: (controller) {
+                  _mapController = controller;
+                  _focusMapOnSelectedLocation();
+                },
+                initialCameraPosition: CameraPosition(
+                  target: _selectedLocation ?? _fallbackMapCenter,
+                  zoom: _selectedLocation == null ? 4.5 : 16,
+                ),
+                myLocationEnabled: _isEditing,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                onTap: _isEditing ? (latLng) => _setSelectedLocation(latLng) : null,
+                markers: {
+                  if (_selectedLocation != null)
+                    Marker(
+                      markerId: const MarkerId('selected-gym-location-profile'),
+                      position: _selectedLocation!,
+                      draggable: _isEditing,
+                      onDragEnd: _isEditing ? (latLng) => _setSelectedLocation(latLng) : null,
+                    ),
+                },
+                gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                  Factory<OneSequenceGestureRecognizer>(() => EagerGestureRecognizer()),
+                },
+              ),
+              if (!hasStoredCoordinates)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    child: Center(
+                      child: Text(
+                        _isEditing
+                            ? 'Tap on map or use current location'
+                            : 'No saved map location. Tap Edit to update.',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_isReverseGeocoding)
+                const Positioned(
+                  top: 10,
+                  right: 10,
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _selectedLocation == null
+              ? 'No map location selected yet.'
+              : 'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 16),
         _buildTextField(
           controller: _addressController,
           label: 'Address',

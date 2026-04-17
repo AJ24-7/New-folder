@@ -187,6 +187,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     }
   }
 
+  /// Normalize an activity name for comparison: trim, lowercase, remove spaces.
+    /// Keep spacing intact to enforce exact admin activity name matching.
+  String _normalizeActivity(String s) =>
+      s.trim().toLowerCase();
+
   void _applyFilters() {
     print('[GYM_LIST] Applying filters...');
     print('[GYM_LIST] Total gyms: ${_gyms.length}');
@@ -199,10 +204,12 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             gym.name.toLowerCase().contains(_searchController.text.toLowerCase()) ||
             (gym.city?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false);
 
-        // Activities filter — gym must offer at least one of the selected activities
+        // Activities filter — gym must offer at least one of the selected activities.
+        // Match exact activity names (case-insensitive) from admin-configured list.
         final matchesActivities = _selectedActivities.isEmpty ||
             _selectedActivities.any((selected) =>
-                gym.activities.any((a) => a.toLowerCase() == selected.toLowerCase()));
+                gym.activities.any((a) =>
+                    _normalizeActivity(a) == _normalizeActivity(selected)));
 
         // Filter out active member gyms UNLESS user is manually searching
         final notActiveMember = !_activeGymIds.contains(gym.id) || _isManualSearch;
@@ -417,15 +424,18 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           if (_showFilters)
             Container(
               padding: const EdgeInsets.all(16),
-              color: Colors.white,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E1E1E)
+                  : Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Filters',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.titleLarge?.color,
                     ),
                   ),
                   const SizedBox(height: 16),
