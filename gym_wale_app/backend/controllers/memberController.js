@@ -1028,13 +1028,27 @@ async function sendRenewalEmail({ to, memberName, membershipId, plan, monthlyPla
 // Add a new member to a gym
 exports.addMember = async (req, res) => {
   try {
+    const pick = (...values) => values.find((v) => v !== undefined && v !== null && String(v).trim() != '');
+
     // Single duplicate check to prevent multiple validation runs
     const forceAdd = req.body.forceAdd === 'true' || req.body.forceAdd === true;
-    const email = req.body.memberEmail;
-    const phone = req.body.memberPhone;
+    const email = pick(req.body.email, req.body.memberEmail);
+    const phone = pick(req.body.phone, req.body.memberPhone);
+    const memberName = pick(req.body.memberName, req.body.name);
+    const memberAgeRaw = pick(req.body.age, req.body.memberAge);
+    const memberGenderRaw = pick(req.body.gender, req.body.memberGender);
+    const paymentModeRaw = pick(req.body.paymentMode, req.body.payment_method);
+    const paymentAmountRaw = pick(req.body.paymentAmount, req.body.amount, req.body.fees);
+    const planSelectedRaw = pick(req.body.planSelected, req.body.plan);
+    const monthlyPlanRaw = pick(req.body.monthlyPlan, req.body.duration, req.body.validity);
+    const activityPreferenceRaw = pick(req.body.activityPreference, req.body.activity, req.body.activities);
+    const memberAddress = pick(req.body.address, req.body.memberAddress);
     const gymId = (req.admin && (req.admin.gymId || req.admin.id)) || req.body.gymId;
     
     if (!gymId) return res.status(400).json({ message: 'Gym ID is required.' });
+    if (!memberName || !email || !phone) {
+      return res.status(400).json({ message: 'Missing required member fields: name, email, or phone.' });
+    }
     
     // Enhanced duplicate validation with single check
     if (!forceAdd && (email || phone) && !req._duplicateCheckDone) {
@@ -1099,7 +1113,7 @@ exports.addMember = async (req, res) => {
       const ym = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}`;
       const random = Math.random().toString(36).substring(2, 8).toUpperCase();
       const gymShort = (gym.gymName || 'GYM').replace(/[^A-Za-z0-9]/g, '').substring(0,6).toUpperCase();
-      const planShort = (req.body.planSelected || 'PLAN').replace(/[^A-Za-z0-9]/g, '').substring(0,6).toUpperCase();
+      const planShort = (planSelectedRaw || 'PLAN').replace(/[^A-Za-z0-9]/g, '').substring(0,6).toUpperCase();
       membershipId = `${gymShort}-${ym}-${planShort}-${random}`;
     }
     
@@ -1107,7 +1121,7 @@ exports.addMember = async (req, res) => {
     if (!membershipValidUntil) {
       const now = new Date();
       let months = 1;
-      const monthlyPlan = req.body.monthlyPlan || '';
+      const monthlyPlan = monthlyPlanRaw || '';
       if (/3\s*Months?/i.test(monthlyPlan)) months = 3;
       else if (/6\s*Months?/i.test(monthlyPlan)) months = 6;
       else if (/12\s*Months?/i.test(monthlyPlan)) months = 12;
@@ -1126,24 +1140,24 @@ exports.addMember = async (req, res) => {
       return map[key];
     };
 
-    const normalizedGender = normalizeByMap(req.body.memberGender, {
+    const normalizedGender = normalizeByMap(memberGenderRaw, {
       male: 'Male',
       female: 'Female',
       other: 'Other',
-    });
-    const normalizedPaymentMode = normalizeByMap(req.body.paymentMode, {
+    }) || normalizeGender(memberGenderRaw);
+    const normalizedPaymentMode = normalizeByMap(paymentModeRaw, {
       cash: 'Cash',
       card: 'Card',
       upi: 'UPI',
       online: 'Online',
       pending: 'pending',
-    });
-    const normalizedPlanSelected = normalizeByMap(req.body.planSelected, {
+    }) || normalizePaymentMode(paymentModeRaw);
+    const normalizedPlanSelected = normalizeByMap(planSelectedRaw, {
       basic: 'Basic',
       standard: 'Standard',
       premium: 'Premium',
-    });
-    const normalizedMonthlyPlan = normalizeByMap(req.body.monthlyPlan, {
+    }) || normalizePlan(planSelectedRaw);
+    const normalizedMonthlyPlan = normalizeByMap(monthlyPlanRaw, {
       '1 month': '1 Month',
       '1 months': '1 Month',
       '3 month': '3 Months',
@@ -1152,14 +1166,15 @@ exports.addMember = async (req, res) => {
       '6 months': '6 Months',
       '12 month': '12 Months',
       '12 months': '12 Months',
-    });
+    }) || normalizeDuration(monthlyPlanRaw);
 
-    const normalizedAge = parseInt(req.body.memberAge, 10);
-    const normalizedPaymentAmount = Number(req.body.paymentAmount);
+    const normalizedAge = parseInt(String(memberAgeRaw ?? ''), 10);
+    const normalizedPaymentAmount = Number(paymentAmountRaw);
+    const normalizedActivityPreference = String(activityPreferenceRaw ?? '').trim() || 'General Fitness';
 
-    if (!normalizedGender || !normalizedPaymentMode || !normalizedPlanSelected || !normalizedMonthlyPlan) {
+    if (!normalizedPaymentMode || !normalizedPlanSelected || !normalizedMonthlyPlan) {
       return res.status(400).json({
-        message: 'Invalid member data. Ensure gender, paymentMode, planSelected, and monthlyPlan are valid.'
+        message: 'Invalid member data. Ensure paymentMode, planSelected, and monthlyPlan are valid.'
       });
     }
     if (!Number.isFinite(normalizedAge) || normalizedAge <= 0) {
@@ -1171,17 +1186,17 @@ exports.addMember = async (req, res) => {
 
     const member = new Member({
       gym: gymId,
-      memberName: req.body.memberName,
+      memberName: memberName,
       age: normalizedAge,
       gender: normalizedGender,
-      phone: req.body.memberPhone,
-      email: req.body.memberEmail,
-      address: req.body.memberAddress,
+      phone: phone,
+      email: email,
+      address: memberAddress,
       paymentMode: normalizedPaymentMode,
       paymentAmount: normalizedPaymentAmount,
       planSelected: normalizedPlanSelected,
       monthlyPlan: normalizedMonthlyPlan,
-      activityPreference: req.body.activityPreference,
+      activityPreference: normalizedActivityPreference,
       profileImage: profileImagePath,
       membershipId: membershipId,
       membershipValidUntil: membershipValidUntil
@@ -1259,15 +1274,15 @@ exports.addMember = async (req, res) => {
         gymId: gymId,
         type: 'received',
         category: 'membership',
-        amount: req.body.paymentAmount || 0,
-        description: `Offline membership payment for ${req.body.memberName || 'Member'}`,
-        memberName: req.body.memberName || '',
+        amount: normalizedPaymentAmount || 0,
+        description: `Offline membership payment for ${memberName || 'Member'}`,
+        memberName: memberName || '',
         memberId: member._id,
-        paymentMethod: (req.body.paymentMode || 'cash').toLowerCase(),
+        paymentMethod: String(normalizedPaymentMode || 'Cash').toLowerCase(),
         status: 'completed',
         registrationSource: 'offline',
-        planSelected: req.body.planSelected || '',
-        monthlyPlan: req.body.monthlyPlan || '',
+        planSelected: normalizedPlanSelected || '',
+        monthlyPlan: normalizedMonthlyPlan || '',
         paidDate: new Date(),
         createdBy: (req.admin && req.admin.id) || gymId
       });
@@ -1281,19 +1296,19 @@ exports.addMember = async (req, res) => {
     // Create notification for new member
     try {
       const Notification = require('../models/Notification');
-      const memberName = req.body.memberName || 'New Member';
+      const notificationMemberName = memberName || 'New Member';
       
       const notification = new Notification({
         title: 'New Member Added',
-        message: `${memberName} has joined your gym with ${req.body.planSelected || 'Unknown'} plan`,
+        message: `${notificationMemberName} has joined your gym with ${normalizedPlanSelected || 'Unknown'} plan`,
         type: 'new-member',
         priority: 'normal',
         icon: 'fa-user-plus',
         color: '#4caf50',
         user: gymId,
         metadata: {
-          memberName: memberName,
-          planSelected: req.body.planSelected,
+          memberName: notificationMemberName,
+          planSelected: normalizedPlanSelected,
           membershipId: membershipId  // Use the extracted membershipId
         }
       });
@@ -1306,7 +1321,7 @@ exports.addMember = async (req, res) => {
     // Send membership email if all required fields are present
     try {
      
-      if (req.body.memberEmail && req.body.memberName && membershipId && req.body.planSelected && req.body.monthlyPlan && membershipValidUntil && gym.gymName) {
+      if (email && memberName && membershipId && normalizedPlanSelected && normalizedMonthlyPlan && membershipValidUntil && gym.gymName) {
         // Use gym logo from profile if available, otherwise fallback to default icon
         let gymLogoUrl = 'https://img.icons8.com/color/96/000000/gym.png';
         if (gym.logo && typeof gym.logo === 'string' && gym.logo.trim() !== '') {
@@ -1319,13 +1334,13 @@ exports.addMember = async (req, res) => {
           }
         }
         const bodyHtml = `
-          <p>Hi <strong style="color:#10b981;">${req.body.memberName}</strong>,</p>
+          <p>Hi <strong style="color:#10b981;">${memberName}</strong>,</p>
           <p>🎉 Welcome to <strong>${gym.gymName}</strong>! Your membership has been <strong style="color:#10b981;">created</strong> successfully!</p>
           
           <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
             <table style="width:100%;font-size:13px;">
               <tr><td style="padding:6px 0;color:#94a3b8;width:140px;"><strong>Membership ID:</strong></td><td style="padding:6px 0;background:#0d4d89;color:#ffffff;padding:4px 10px;border-radius:6px;font-weight:600;letter-spacing:1px;">${membershipId}</td></tr>
-              <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Plan:</strong></td><td style="padding:6px 0;">${req.body.planSelected} (${req.body.monthlyPlan})</td></tr>
+              <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Plan:</strong></td><td style="padding:6px 0;">${normalizedPlanSelected} (${normalizedMonthlyPlan})</td></tr>
               <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Valid Until:</strong></td><td style="padding:6px 0;">${membershipValidUntil}</td></tr>
             </table>
           </div>
@@ -1336,7 +1351,7 @@ exports.addMember = async (req, res) => {
         `;
         
         await sendEmail({
-          to: req.body.memberEmail,
+          to: email,
           subject: `Welcome to ${gym.gymName} - Membership Created`,
           title: `Welcome to ${gym.gymName}!`,
           preheader: 'Your membership has been created successfully',
