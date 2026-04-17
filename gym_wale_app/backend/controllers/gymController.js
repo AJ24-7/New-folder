@@ -1558,9 +1558,9 @@ exports.getGymById = async (req, res) => {
 };
 // Update Activities for the logged-in gym admin
 exports.updateActivities = async (req, res) => {
-  const adminId = req.admin && req.admin.id;
-  if (!adminId) {
-    return res.status(401).json({ message: 'Not authorized, no admin ID found' });
+  const authId = req.admin?.id || req.gym?.id;
+  if (!authId) {
+    return res.status(401).json({ message: 'Not authorized, no gym identity found in token' });
   }
   try {
     const { activities } = req.body;
@@ -1573,14 +1573,26 @@ exports.updateActivities = async (req, res) => {
         return res.status(400).json({ message: 'Each activity must have name, icon, and description.' });
       }
     }
-    const gym = await Gym.findOneAndUpdate(
-      { admin: adminId },
-      { $set: { activities } },
-      { new: true }
-    );
+
+    // Keep auth resolution consistent with profile endpoints while supporting older token/db layouts.
+    let gym = await Gym.findById(authId);
     if (!gym) {
-      return res.status(404).json({ message: 'Gym not found for this admin.' });
+      gym = await Gym.findOne({ admin: authId });
     }
+    if (!gym) {
+      const tokenEmail = req.admin?.email || req.gym?.email;
+      if (tokenEmail) {
+        gym = await Gym.findOne({ email: tokenEmail.toLowerCase() });
+      }
+    }
+
+    if (!gym) {
+      return res.status(404).json({ message: 'Gym not found for this authenticated user.' });
+    }
+
+    gym.activities = activities;
+    await gym.save();
+
     res.status(200).json({ message: 'Activities updated successfully.', activities: gym.activities });
   } catch (error) {
     console.error('Error updating activities:', error);

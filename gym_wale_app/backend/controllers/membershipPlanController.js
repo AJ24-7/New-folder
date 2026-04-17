@@ -1,5 +1,23 @@
 const Gym = require('../models/gym');
 
+async function resolveGymFromAuth(req) {
+  const authId = req.admin?.id || req.gym?.id;
+  if (authId) {
+    let gym = await Gym.findById(authId);
+    if (!gym) {
+      gym = await Gym.findOne({ admin: authId });
+    }
+    if (gym) return gym;
+  }
+
+  const tokenEmail = req.admin?.email || req.gym?.email;
+  if (tokenEmail) {
+    return Gym.findOne({ email: tokenEmail.toLowerCase() });
+  }
+
+  return null;
+}
+
 // Get all membership plans for the logged-in gym admin
 toPlanResponse = (plan) => ({
   name: plan.name,
@@ -14,7 +32,7 @@ toPlanResponse = (plan) => ({
 
 exports.getMembershipPlans = async (req, res) => {
   try {
-    const gym = await Gym.findOne({ admin: req.admin.id });
+    const gym = await resolveGymFromAuth(req);
     if (!gym) return res.status(404).json({ message: 'Gym not found' });
     
     let plan = gym.membershipPlan;
@@ -48,7 +66,7 @@ exports.getMembershipPlans = async (req, res) => {
 // Update membership plan for the logged-in gym admin
 exports.updateMembershipPlans = async (req, res) => {
   try {
-    const gym = await Gym.findOne({ admin: req.admin.id });
+    const gym = await resolveGymFromAuth(req);
     if (!gym) return res.status(404).json({ message: 'Gym not found' });
     
     const plan = req.body;
