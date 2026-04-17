@@ -207,6 +207,8 @@ class GymService {
     String? state,
     String? pincode,
     String? landmark,
+    double? latitude,
+    double? longitude,
     String? morningOpening,
     String? morningClosing,
     String? eveningOpening,
@@ -242,6 +244,8 @@ class GymService {
       if (state != null) data['state'] = state;
       if (pincode != null) data['pincode'] = pincode;
       if (landmark != null) data['landmark'] = landmark;
+      if (latitude != null) data['latitude'] = latitude;
+      if (longitude != null) data['longitude'] = longitude;
       
       // Operating hours - morning and evening slots
       if (morningOpening != null) data['morningOpening'] = morningOpening;

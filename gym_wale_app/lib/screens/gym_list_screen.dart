@@ -188,9 +188,9 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   }
 
   /// Normalize an activity name for comparison: trim, lowercase, remove spaces.
-  /// "Boot Camp" → "bootcamp", "Bootcamp" → "bootcamp"
+    /// Keep spacing intact to enforce exact admin activity name matching.
   String _normalizeActivity(String s) =>
-      s.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '');
+      s.trim().toLowerCase();
 
   void _applyFilters() {
     print('[GYM_LIST] Applying filters...');
@@ -205,7 +205,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             (gym.city?.toLowerCase().contains(_searchController.text.toLowerCase()) ?? false);
 
         // Activities filter — gym must offer at least one of the selected activities.
-        // Normalize both sides so "Boot Camp" == "Bootcamp" after stripping spaces.
+        // Match exact activity names (case-insensitive) from admin-configured list.
         final matchesActivities = _selectedActivities.isEmpty ||
             _selectedActivities.any((selected) =>
                 gym.activities.any((a) =>
@@ -424,15 +424,18 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           if (_showFilters)
             Container(
               padding: const EdgeInsets.all(16),
-              color: Colors.white,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? const Color(0xFF1E1E1E)
+                  : Colors.white,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Filters',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
+                      color: Theme.of(context).textTheme.titleLarge?.color,
                     ),
                   ),
                   const SizedBox(height: 16),

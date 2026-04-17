@@ -93,8 +93,9 @@ router.get('/', gymadminAuth, async (req, res) => {
   }
 });
 
-// ✅ Public Gym Search [GET] /search
-router.get('/search', async (req, res) => {
+// ✅ Legacy Public Gym Search [GET] /search-legacy
+// Kept for backward compatibility; main search is defined later with complete filters.
+router.get('/search-legacy', async (req, res) => {
   try {
     const { search, city, state, pincode } = req.query;
     const query = { status: 'approved' };
@@ -1069,18 +1070,57 @@ router.post('/by-cities', getGymsByCities);
 // Helper to normalize activities from query
 function normalizeActivities(activities) {
   if (Array.isArray(activities)) {
-    return activities.filter(a => typeof a === 'string' && a.trim() !== '');
+    return activities
+      .flatMap((a) => {
+        if (typeof a !== 'string') return [];
+        return a.split(',').map((v) => v.trim());
+      })
+      .filter((a) => a !== '');
   } else if (typeof activities === 'string' && activities.trim() !== '') {
-    return [activities.trim()];
+    try {
+      const parsed = JSON.parse(activities);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((a) => (typeof a === 'string' ? a.trim() : ''))
+          .filter((a) => a !== '');
+      }
+    } catch (_) {
+      // Not JSON, continue with comma/string parsing.
+    }
+    return activities
+      .split(',')
+      .map((a) => a.trim())
+      .filter((a) => a !== '');
   }
   return [];
 }
 
+function escapeRegex(input) {
+  return String(input).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Helper to build filter object
-function buildGymFilter({ city, pincode, activities }) {
+function buildGymFilter({ search, city, state, pincode, activities }) {
   const filter = { status: 'approved' };
+
+  if (search && typeof search === 'string' && search.trim() !== '') {
+    const searchRegex = new RegExp(escapeRegex(search.trim()), 'i');
+    filter.$or = [
+      { gymName: { $regex: searchRegex } },
+      { description: { $regex: searchRegex } },
+      { 'location.address': { $regex: searchRegex } },
+      { 'location.city': { $regex: searchRegex } },
+      { 'location.state': { $regex: searchRegex } },
+      { 'location.pincode': { $regex: searchRegex } },
+      { 'activities.name': { $regex: searchRegex } },
+    ];
+  }
+
   if (city && typeof city === 'string' && city.trim() !== '') {
     filter['location.city'] = { $regex: new RegExp(city.trim(), 'i') };
+  }
+  if (state && typeof state === 'string' && state.trim() !== '') {
+    filter['location.state'] = { $regex: new RegExp(state.trim(), 'i') };
   }
   if (pincode) {
     filter['location.pincode'] = pincode;
@@ -1088,7 +1128,8 @@ function buildGymFilter({ city, pincode, activities }) {
   if (activities.length > 0) {
     const cleanedActivities = activities
       .filter(a => typeof a === 'string' && a.trim() !== '')
-      .map(a => new RegExp(a.trim(), 'i'));
+      // Exact (case-insensitive) activity name match against admin-configured names.
+      .map(a => new RegExp(`^${escapeRegex(a.trim())}$`, 'i'));
     if (cleanedActivities.length > 0) {
       // Search in activities.name field since activities are stored as objects
       filter['activities.name'] = { $in: cleanedActivities };
@@ -1153,6 +1194,20 @@ async function aggregateGymsByPrice(filter, price) {
                     ]
                   }
                 }
+              },
+              // Legacy: prices from membershipPlans[] (older schema shape)
+              {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ['$membershipPlans', []] },
+                      as: 'plan',
+                      cond: { $ne: ['$$plan.price', null] }
+                    }
+                  },
+                  as: 'plan',
+                  in: { $toDouble: '$$plan.price' }
+                }
               }
             ]
           }
@@ -1165,13 +1220,13 @@ async function aggregateGymsByPrice(filter, price) {
 
 router.get('/search', async (req, res) => {
   try {
-    const { city, pincode, maxPrice, limit } = req.query;
+    const { search, city, state, pincode, maxPrice, limit } = req.query;
     const activities = normalizeActivities(req.query.activities);
 
     console.log('Received activities from query:', req.query.activities);
     console.log('Normalized activityArray:', activities);
 
-    const filter = buildGymFilter({ city, pincode, activities });
+    const filter = buildGymFilter({ search, city, state, pincode, activities });
 
     let gyms;
     if (maxPrice && !isNaN(Number(maxPrice))) {
