@@ -1120,18 +1120,67 @@ exports.addMember = async (req, res) => {
     
    
 
+    const normalizeByMap = (value, map) => {
+      if (value === undefined || value === null) return undefined;
+      const key = String(value).trim().toLowerCase();
+      return map[key];
+    };
+
+    const normalizedGender = normalizeByMap(req.body.memberGender, {
+      male: 'Male',
+      female: 'Female',
+      other: 'Other',
+    });
+    const normalizedPaymentMode = normalizeByMap(req.body.paymentMode, {
+      cash: 'Cash',
+      card: 'Card',
+      upi: 'UPI',
+      online: 'Online',
+      pending: 'pending',
+    });
+    const normalizedPlanSelected = normalizeByMap(req.body.planSelected, {
+      basic: 'Basic',
+      standard: 'Standard',
+      premium: 'Premium',
+    });
+    const normalizedMonthlyPlan = normalizeByMap(req.body.monthlyPlan, {
+      '1 month': '1 Month',
+      '1 months': '1 Month',
+      '3 month': '3 Months',
+      '3 months': '3 Months',
+      '6 month': '6 Months',
+      '6 months': '6 Months',
+      '12 month': '12 Months',
+      '12 months': '12 Months',
+    });
+
+    const normalizedAge = parseInt(req.body.memberAge, 10);
+    const normalizedPaymentAmount = Number(req.body.paymentAmount);
+
+    if (!normalizedGender || !normalizedPaymentMode || !normalizedPlanSelected || !normalizedMonthlyPlan) {
+      return res.status(400).json({
+        message: 'Invalid member data. Ensure gender, paymentMode, planSelected, and monthlyPlan are valid.'
+      });
+    }
+    if (!Number.isFinite(normalizedAge) || normalizedAge <= 0) {
+      return res.status(400).json({ message: 'Invalid member age.' });
+    }
+    if (!Number.isFinite(normalizedPaymentAmount) || normalizedPaymentAmount < 0) {
+      return res.status(400).json({ message: 'Invalid payment amount.' });
+    }
+
     const member = new Member({
       gym: gymId,
       memberName: req.body.memberName,
-      age: req.body.memberAge,
-      gender: req.body.memberGender,
+      age: normalizedAge,
+      gender: normalizedGender,
       phone: req.body.memberPhone,
       email: req.body.memberEmail,
       address: req.body.memberAddress,
-      paymentMode: req.body.paymentMode,
-      paymentAmount: req.body.paymentAmount,
-      planSelected: req.body.planSelected,
-      monthlyPlan: req.body.monthlyPlan,
+      paymentMode: normalizedPaymentMode,
+      paymentAmount: normalizedPaymentAmount,
+      planSelected: normalizedPlanSelected,
+      monthlyPlan: normalizedMonthlyPlan,
       activityPreference: req.body.activityPreference,
       profileImage: profileImagePath,
       membershipId: membershipId,
@@ -1308,6 +1357,9 @@ exports.addMember = async (req, res) => {
     res.status(201).json({ message: 'Member added successfully', member });
   } catch (err) {
     console.error('Error adding member:', err);
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation failed while adding member', errors: err.errors });
+    }
     res.status(500).json({ message: 'Server error while adding member' });
   }
 };

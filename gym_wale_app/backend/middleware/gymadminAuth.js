@@ -57,7 +57,14 @@ module.exports = async function (req, res, next) {
         
         // Support multiple JWT structures and normalize to a usable gym identity.
         const fallbackId = decoded?.gym?.id || decoded?.admin?.id || decoded?.id || decoded?._id;
-        const normalizedGymId = resolvedGymId || fallbackId;
+        const normalizedGymId = resolvedGymId;
+
+        if (!normalizedGymId) {
+            return res.status(404).json({
+                message: 'Gym not found for this authenticated user',
+                error: 'gym_not_found'
+            });
+        }
 
         if (decoded.admin) {
             req.admin = decoded.admin;
@@ -86,13 +93,6 @@ module.exports = async function (req, res, next) {
         }
 
         req.gymId = normalizedGymId;
-
-        if (!normalizedGymId) {
-            return res.status(404).json({
-                message: 'Gym not found for this authenticated user',
-                error: 'gym_not_found'
-            });
-        }
         
         next();
     } catch (err) {

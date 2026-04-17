@@ -1501,9 +1501,9 @@ exports.getGymsByCities = async (req, res) => {
 
 exports.uploadGymPhoto = async (req, res) => {
   try {
-    const adminId = req.admin && req.admin.id;
-    if (!adminId) {
-      return res.status(401).json({ success: false, message: 'Not authorized, no admin ID found' });
+    const gymId = req.gymId || req.admin?.gymId || req.admin?.id || req.gym?.id;
+    if (!gymId) {
+      return res.status(401).json({ success: false, message: 'Not authorized, no gym identity found' });
     }
    
     const { title, description, category, imageUrl } = req.body;
@@ -1530,15 +1530,14 @@ exports.uploadGymPhoto = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Title, description, and category are required.' });
     }
     
-    const imageObj = { title, description, category, imageUrl: finalImageUrl, uploadedAt: new Date() };
-    const gym = await Gym.findOneAndUpdate(
-      { admin: adminId },
-      { $push: { gymPhotos: imageObj } },
-      { new: true }
-    );
+    const gym = await Gym.findById(gymId);
     if (!gym) {
-      return res.status(404).json({ success: false, message: 'Gym not found for this admin.' });
+      return res.status(404).json({ success: false, message: 'Gym not found for this authenticated user.' });
     }
+
+    const imageObj = { title, description, category, imageUrl: finalImageUrl, uploadedAt: new Date() };
+    gym.gymPhotos.push(imageObj);
+    await gym.save();
     
     console.log('[uploadGymPhoto] SUCCESS: Photo uploaded');
     res.json({ success: true, gymImage: imageObj, gym });
@@ -1552,9 +1551,9 @@ exports.uploadGymPhoto = async (req, res) => {
 exports.updateGymPhoto = async (req, res) => {
   try {
 
-    const adminId = req.admin && req.admin.id;
-    if (!adminId) {
-      return res.status(401).json({ success: false, message: 'Not authorized, no admin ID found' });
+    const gymId = req.gymId || req.admin?.gymId || req.admin?.id || req.gym?.id;
+    if (!gymId) {
+      return res.status(401).json({ success: false, message: 'Not authorized, no gym identity found' });
     }
     const { photoId } = req.params;
     const { title, description, imageUrl } = req.body;
@@ -1571,14 +1570,23 @@ exports.updateGymPhoto = async (req, res) => {
     }
     
     // Find and update the photo in gymPhotos array
-    const gym = await Gym.findOneAndUpdate(
-      { admin: adminId, 'gymPhotos._id': photoId },
-      { $set: updateFields },
-      { new: true }
-    );
+    const gym = await Gym.findById(gymId);
     if (!gym) {
       return res.status(404).json({ success: false, message: 'Gym not found or not authorized.' });
     }
+
+    const targetPhoto = gym.gymPhotos.id(photoId);
+    if (!targetPhoto) {
+      return res.status(404).json({ success: false, message: 'Photo not found in this gym.' });
+    }
+
+    if (title) targetPhoto.title = title;
+    if (description) targetPhoto.description = description;
+    if (updateFields['gymPhotos.$.imageUrl']) {
+      targetPhoto.imageUrl = updateFields['gymPhotos.$.imageUrl'];
+    }
+
+    await gym.save();
     const updatedPhoto = gym.gymPhotos.id(photoId);
     if (!updatedPhoto) {
       return res.status(404).json({ success: false, message: 'Photo not found in this gym.' });
@@ -1592,20 +1600,25 @@ exports.updateGymPhoto = async (req, res) => {
 // Delete a gym photo by ID for the logged-in admin
 exports.deleteGymPhoto = async (req, res) => {
   try {
-    const adminId = req.admin && req.admin.id;
-    if (!adminId) {
-      return res.status(401).json({ success: false, message: 'Not authorized, no admin ID found' });
+    const gymId = req.gymId || req.admin?.gymId || req.admin?.id || req.gym?.id;
+    if (!gymId) {
+      return res.status(401).json({ success: false, message: 'Not authorized, no gym identity found' });
     }
     const { photoId } = req.params;
-    // Remove the photo from the gymPhotos array
-    const gym = await Gym.findOneAndUpdate(
-      { admin: adminId },
-      { $pull: { gymPhotos: { _id: photoId } } },
-      { new: true }
-    );
+
+    const gym = await Gym.findById(gymId);
     if (!gym) {
       return res.status(404).json({ success: false, message: 'Gym not found or not authorized.' });
     }
+
+    const existingPhoto = gym.gymPhotos.id(photoId);
+    if (!existingPhoto) {
+      return res.status(404).json({ success: false, message: 'Photo not found in this gym.' });
+    }
+
+    gym.gymPhotos.pull({ _id: photoId });
+    await gym.save();
+
     res.json({ success: true, message: 'Photo removed successfully.' });
   } catch (err) {
     console.error('Delete Gym Photo Error:', err);
@@ -1616,15 +1629,14 @@ exports.deleteGymPhoto = async (req, res) => {
 exports.getAllGymPhotos = async (req, res) => {
   try {
    
-    const adminId = req.admin && req.admin.id;
-    if (!adminId) {
-      return res.status(401).json({ success: false, message: 'Not authorized, no admin ID found' });
+    const gymId = req.gymId || req.admin?.gymId || req.admin?.id || req.gym?.id;
+    if (!gymId) {
+      return res.status(401).json({ success: false, message: 'Not authorized, no gym identity found' });
     }
     
-    // Look for gym by its own ID (adminId is actually the gym's ID from JWT token)
-    const gym = await Gym.findById(adminId);
+    const gym = await Gym.findById(gymId);
     if (!gym) {
-      return res.status(404).json({ success: false, message: 'Gym not found for this admin.' });
+      return res.status(404).json({ success: false, message: 'Gym not found for this authenticated user.' });
     }
     
     res.json({ success: true, photos: gym.gymPhotos || [] });
