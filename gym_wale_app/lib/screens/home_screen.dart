@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../providers/notification_provider.dart';
 import '../providers/attendance_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../services/geofencing_service.dart';
@@ -56,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _activeMembershipsData = []; // Full data for membership card
   List<Map<String, dynamic>> _nearbyOffers = []; // Nearby gym offers for top offers section
   int _registeredGymCount = 0;
+  bool _webUseNearMeSearch = false;
 
   // ── Location permission warning for geofence-enabled gyms ───────────────────
   bool _showLocationWarning = false;
@@ -1976,21 +1978,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildWebHeroSection() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final localeProvider = Provider.of<LocaleProvider>(context);
+
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF0F172A), Color(0xFF1E293B), Color(0xFF14532D)],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF111827), Color(0xFF374151), Color(0xFF1F2937)],
         ),
       ),
       child: SafeArea(
         bottom: false,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _buildWebBrandNav(authProvider, localeProvider),
+              const SizedBox(height: 26),
               Row(
                 children: [
                   Container(
@@ -2016,53 +2023,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 18),
               const Text(
-                'Find Your Perfect Gym\nTransform Your Fitness Journey',
+                'Find 174,000+ workout spots\nand gyms across 35+ cities',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 34,
+                  fontSize: 42,
                   fontWeight: FontWeight.w800,
                   height: 1.2,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                'Discover gyms near you with flexible plans, expert trainers, and modern equipment.',
+                'Discover nearby gyms, pick your activity, and filter by budget in one compact search.',
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.85),
-                  fontSize: 15,
+                  fontSize: 16,
                   height: 1.45,
                 ),
               ),
-              const SizedBox(height: 22),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => setState(() => _selectedIndex = 1),
-                    icon: const Icon(Icons.search),
-                    label: const Text('Explore Now'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.accentColor,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => setState(() => _selectedIndex = 1),
-                    icon: const Icon(Icons.play_arrow),
-                    label: const Text('Watch Demo'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.white.withOpacity(0.35)),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 22),
+              const SizedBox(height: 26),
+              _buildWebCompactSearchContainer(),
+              const SizedBox(height: 18),
               Wrap(
                 spacing: 12,
                 runSpacing: 12,
@@ -2075,6 +2055,485 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWebBrandNav(AuthProvider authProvider, LocaleProvider localeProvider) {
+    final languageCode = localeProvider.locale.languageCode;
+    final isHindi = languageCode == 'hi';
+    final isCompact = MediaQuery.of(context).size.width < 980;
+
+    final actions = Wrap(
+      spacing: 12,
+      runSpacing: 12,
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        PopupMenuButton<String>(
+          tooltip: 'Language',
+          onSelected: (value) async {
+            if (value == 'en') {
+              await localeProvider.setLanguage(AppLanguage.english);
+            } else if (value == 'hi') {
+              await localeProvider.setLanguage(AppLanguage.hindi);
+            }
+          },
+          color: const Color(0xFF1F2937),
+          itemBuilder: (_) => [
+            PopupMenuItem<String>(
+              value: 'en',
+              child: Text(
+                AppLocalizations.of(context)!.languageEnglish,
+                style: TextStyle(
+                  color: isHindi ? Colors.white70 : Colors.white,
+                  fontWeight: isHindi ? FontWeight.w400 : FontWeight.w700,
+                ),
+              ),
+            ),
+            PopupMenuItem<String>(
+              value: 'hi',
+              child: Text(
+                AppLocalizations.of(context)!.languageHindi,
+                style: TextStyle(
+                  color: isHindi ? Colors.white : Colors.white70,
+                  fontWeight: isHindi ? FontWeight.w700 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+          child: _buildWebNavChip(
+            icon: Icons.language,
+            label: isHindi ? 'हिंदी' : 'English',
+          ),
+        ),
+        TextButton.icon(
+          onPressed: _showWebInstallDialog,
+          icon: const Icon(Icons.download_for_offline_outlined, color: Colors.white),
+          label: const Text(
+            'Install App',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+          style: TextButton.styleFrom(
+            backgroundColor: Colors.white.withOpacity(0.12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: BorderSide(color: Colors.white.withOpacity(0.2)),
+            ),
+          ),
+        ),
+        ElevatedButton.icon(
+          onPressed: () {
+            if (authProvider.isAuthenticated) {
+              _handleLogout();
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              );
+            }
+          },
+          icon: Icon(authProvider.isAuthenticated ? Icons.logout : Icons.login),
+          label: Text(authProvider.isAuthenticated ? 'Logout' : 'Login'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.primaryColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        ),
+      ],
+    );
+
+    if (isCompact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildWebBrandTitle(),
+          const SizedBox(height: 12),
+          actions,
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        _buildWebBrandTitle(),
+        const Spacer(),
+        actions,
+      ],
+    );
+  }
+
+  Widget _buildWebBrandTitle() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.fitness_center,
+                color: AppTheme.primaryColor,
+                size: 20,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        const Text(
+          'Gym-wale',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 24,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebNavChip({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebCompactSearchContainer() {
+    final isCompact = MediaQuery.of(context).size.width < 1080;
+    final selectedActivitiesLabel = _selectedActivities.isEmpty
+        ? 'Activities'
+        : '${_selectedActivities.length} activities';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      child: isCompact
+          ? Column(
+              children: [
+                _buildWebSearchCell(
+                  icon: Icons.location_on_outlined,
+                  title: _currentCity ?? 'Around Me',
+                  subtitle: _currentAddress ?? 'Use your location to discover gyms nearby',
+                  trailing: OutlinedButton.icon(
+                    onPressed: () {
+                      setState(() => _webUseNearMeSearch = true);
+                      _getUserLocation();
+                    },
+                    icon: const Icon(Icons.my_location, size: 16),
+                    label: Text(AppLocalizations.of(context)!.nearMe),
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFFE5E7EB)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Activities',
+                        offset: const Offset(0, 52),
+                        itemBuilder: (context) {
+                          return _getDefaultActivities().map((activity) {
+                            final selected = _selectedActivities.contains(activity.name);
+                            return PopupMenuItem<String>(
+                              value: activity.name,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    selected ? Icons.check_box : Icons.check_box_outline_blank,
+                                    size: 18,
+                                    color: selected ? AppTheme.primaryColor : AppTheme.textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(child: Text(activity.name)),
+                                ],
+                              ),
+                            );
+                          }).toList();
+                        },
+                        onSelected: (activityName) {
+                          setState(() {
+                            if (_selectedActivities.contains(activityName)) {
+                              _selectedActivities.remove(activityName);
+                            } else {
+                              _selectedActivities.add(activityName);
+                            }
+                          });
+                        },
+                        child: _buildWebSearchCell(
+                          icon: Icons.fitness_center_outlined,
+                          title: selectedActivitiesLabel,
+                          subtitle: _selectedActivities.isEmpty
+                              ? 'Select preferred workouts'
+                              : _selectedActivities.join(', '),
+                        ),
+                      ),
+                    ),
+                    _buildWebDivider(),
+                    Expanded(
+                      child: PopupMenuButton<double>(
+                        tooltip: 'Budget',
+                        onSelected: (value) => setState(() => _priceRange = value),
+                        itemBuilder: (_) => const [
+                          PopupMenuItem<double>(value: 1500, child: Text('Up to INR 1,500')),
+                          PopupMenuItem<double>(value: 2500, child: Text('Up to INR 2,500')),
+                          PopupMenuItem<double>(value: 4000, child: Text('Up to INR 4,000')),
+                          PopupMenuItem<double>(value: 6000, child: Text('Up to INR 6,000')),
+                          PopupMenuItem<double>(value: 10000, child: Text('Any budget')),
+                        ],
+                        child: _buildWebSearchCell(
+                          icon: Icons.currency_rupee,
+                          title: _priceRange >= 10000 ? 'Any Budget' : 'Up to INR ${_priceRange.toInt()}',
+                          subtitle: 'Monthly membership budget',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => GymListScreen(
+                            showSearch: true,
+                            initialActivities: _selectedActivities,
+                            maxPrice: _priceRange,
+                            autoUseNearMe: _webUseNearMeSearch,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text(
+                      'Search',
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: _buildWebSearchCell(
+                    icon: Icons.location_on_outlined,
+                    title: _currentCity ?? 'Around Me',
+                    subtitle: _currentAddress ?? 'Use your location to discover gyms nearby',
+                    trailing: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() => _webUseNearMeSearch = true);
+                        _getUserLocation();
+                      },
+                      icon: const Icon(Icons.my_location, size: 16),
+                      label: Text(AppLocalizations.of(context)!.nearMe),
+                    ),
+                  ),
+                ),
+                _buildWebDivider(),
+                Expanded(
+                  flex: 2,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Activities',
+                    offset: const Offset(0, 52),
+                    itemBuilder: (context) {
+                      return _getDefaultActivities().map((activity) {
+                        final selected = _selectedActivities.contains(activity.name);
+                        return PopupMenuItem<String>(
+                          value: activity.name,
+                          child: Row(
+                            children: [
+                              Icon(
+                                selected ? Icons.check_box : Icons.check_box_outline_blank,
+                                size: 18,
+                                color: selected ? AppTheme.primaryColor : AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(activity.name)),
+                            ],
+                          ),
+                        );
+                      }).toList();
+                    },
+                    onSelected: (activityName) {
+                      setState(() {
+                        if (_selectedActivities.contains(activityName)) {
+                          _selectedActivities.remove(activityName);
+                        } else {
+                          _selectedActivities.add(activityName);
+                        }
+                      });
+                    },
+                    child: _buildWebSearchCell(
+                      icon: Icons.fitness_center_outlined,
+                      title: selectedActivitiesLabel,
+                      subtitle: _selectedActivities.isEmpty
+                          ? 'Select preferred workouts'
+                          : _selectedActivities.join(', '),
+                    ),
+                  ),
+                ),
+                _buildWebDivider(),
+                Expanded(
+                  flex: 2,
+                  child: PopupMenuButton<double>(
+                    tooltip: 'Budget',
+                    onSelected: (value) => setState(() => _priceRange = value),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem<double>(value: 1500, child: Text('Up to INR 1,500')),
+                      PopupMenuItem<double>(value: 2500, child: Text('Up to INR 2,500')),
+                      PopupMenuItem<double>(value: 4000, child: Text('Up to INR 4,000')),
+                      PopupMenuItem<double>(value: 6000, child: Text('Up to INR 6,000')),
+                      PopupMenuItem<double>(value: 10000, child: Text('Any budget')),
+                    ],
+                    child: _buildWebSearchCell(
+                      icon: Icons.currency_rupee,
+                      title: _priceRange >= 10000 ? 'Any Budget' : 'Up to INR ${_priceRange.toInt()}',
+                      subtitle: 'Monthly membership budget',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  height: 74,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => GymListScreen(
+                            showSearch: true,
+                            initialActivities: _selectedActivities,
+                            maxPrice: _priceRange,
+                            autoUseNearMe: _webUseNearMeSearch,
+                          ),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 30),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text(
+                      'Search',
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildWebSearchCell({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    Widget? trailing,
+  }) {
+    return Container(
+      height: 74,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.textSecondary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF111827),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: 8),
+            trailing,
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebDivider() {
+    return Container(
+      width: 1,
+      height: 50,
+      color: const Color(0xFFE5E7EB),
+    );
+  }
+
+  void _showWebInstallDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Install Gym-wale App'),
+        content: const Text(
+          'Use your browser menu and choose "Install app" to add Gym-wale to your desktop or home screen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
       ),
     );
   }

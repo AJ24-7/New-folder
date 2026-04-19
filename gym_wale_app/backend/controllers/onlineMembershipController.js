@@ -1,5 +1,6 @@
 const Member = require('../models/Member');
 const Gym = require('../models/gym');
+const User = require('../models/User');
 const Payment = require('../models/Payment');
 const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
@@ -79,6 +80,15 @@ exports.registerOnlineMember = async (req, res) => {
     validUntil.setMonth(validUntil.getMonth() + months);
     const membershipValidUntil = validUntil.toISOString().split('T')[0];
 
+    // Reuse existing user profile image (e.g., Google account picture) if available.
+    let memberProfileImage = null;
+    if (memberEmail) {
+      const existingUser = await User.findOne({ email: memberEmail.toLowerCase().trim() }).select('profileImage');
+      if (existingUser?.profileImage) {
+        memberProfileImage = existingUser.profileImage;
+      }
+    }
+
     // Create member record
     const member = new Member({
       gym: gymId,
@@ -93,6 +103,7 @@ exports.registerOnlineMember = async (req, res) => {
       planSelected,
       monthlyPlan,
       activityPreference: activityPreference || 'General Fitness',
+      profileImage: memberProfileImage,
       membershipId,
       membershipValidUntil,
       joinDate,
@@ -133,7 +144,7 @@ exports.registerOnlineMember = async (req, res) => {
               city: gym.city,
               state: gym.state
             },
-            profileImage: null // Online members don't have profile image initially
+            profileImage: member.profileImage || null
           };
 
           const qrCodeDataUrl = await IDPassGenerator.generateQRCode(memberData);

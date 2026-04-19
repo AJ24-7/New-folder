@@ -16,6 +16,8 @@ class GymListScreen extends StatefulWidget {
   final bool showSearch;
   final List<String>? initialActivities;
   final double? maxPrice;
+  final String? initialSearchQuery;
+  final bool autoUseNearMe;
   final int initialTabIndex;
   
   const GymListScreen({
@@ -23,6 +25,8 @@ class GymListScreen extends StatefulWidget {
     this.showSearch = false,
     this.initialActivities,
     this.maxPrice,
+    this.initialSearchQuery,
+    this.autoUseNearMe = false,
     this.initialTabIndex = 0,
   }) : super(key: key);
 
@@ -55,6 +59,13 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     );
     _selectedActivities = widget.initialActivities ?? [];
     _priceRange = widget.maxPrice ?? 5000;
+
+    if (widget.initialSearchQuery != null &&
+        widget.initialSearchQuery!.trim().isNotEmpty) {
+      _searchController.text = widget.initialSearchQuery!.trim();
+      _isManualSearch = true;
+    }
+
     _initializeData();
     
     // Listen to search changes to detect manual search
@@ -70,6 +81,9 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   Future<void> _initializeData() async {
     await _loadActiveMemberships();
     await _loadGyms();
+    if (widget.autoUseNearMe) {
+      await _getUserLocation();
+    }
   }
 
   @override

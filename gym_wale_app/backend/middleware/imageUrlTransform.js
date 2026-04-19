@@ -5,24 +5,29 @@
 
 const transformImageUrl = (imageUrl, baseUrl) => {
   // Return null for any falsy values (null, undefined, empty string)
-  if (!imageUrl || imageUrl.trim() === '') {
+  if (!imageUrl || String(imageUrl).trim() === '') {
     return null;
   }
+
+  const rawUrl = String(imageUrl).trim();
   
   // If already a full URL (Cloudinary or external like Pexels), return as is
-  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
-    return imageUrl;
+  if (rawUrl.startsWith('http://') || rawUrl.startsWith('https://')) {
+    return rawUrl;
   }
   
-  // IMPORTANT: Local paths should not exist anymore - all images should be on Cloudinary
-  // If we encounter a local path, return null to use default placeholder
-  if (imageUrl.startsWith('/uploads/') || imageUrl.startsWith('uploads/')) {
-    console.warn(`⚠️ Found local image path (should be migrated to Cloudinary): ${imageUrl}`);
-    return null; // Return null to trigger default avatar/placeholder
+  // Keep legacy local uploads renderable by converting to absolute URL.
+  if (rawUrl.startsWith('/uploads/') || rawUrl.startsWith('uploads/')) {
+    return rawUrl.startsWith('/') ? `${baseUrl}${rawUrl}` : `${baseUrl}/${rawUrl}`;
+  }
+
+  // Root-relative path fallback.
+  if (rawUrl.startsWith('/')) {
+    return `${baseUrl}${rawUrl}`;
   }
   
-  // Default case - return null for unrecognized formats
-  return null;
+  // Best-effort relative path fallback.
+  return `${baseUrl}/${rawUrl}`;
 };
 
 const transformUserImages = (user, baseUrl) => {

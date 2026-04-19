@@ -1094,6 +1094,8 @@ exports.addMember = async (req, res) => {
     if (req.file) {
       // Use Cloudinary secure URL
       profileImagePath = req.file.path;
+    } else if (req.body.profileImage && String(req.body.profileImage).trim().length > 0) {
+      profileImagePath = String(req.body.profileImage).trim();
     }
 
     // Helper function to extract string value from potential array
@@ -1393,6 +1395,8 @@ exports.updateMember = async (req, res) => {
 
     if (req.file) {
       updateFields.profileImage = req.file.path; // Cloudinary secure_url
+    } else if (req.body.profileImage && String(req.body.profileImage).trim().length > 0) {
+      updateFields.profileImage = String(req.body.profileImage).trim();
     }
 
     const updatedMember = await Member.findByIdAndUpdate(
