@@ -66,6 +66,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _geofencedGymName = '';
   bool _geofenceIsActive = false;
 
+  bool get _isHindiWeb =>
+      kIsWeb && Localizations.localeOf(context).languageCode == 'hi';
+
+  String _webText(String english, String hindi) => _isHindiWeb ? hindi : english;
+
   @override
   void initState() {
     super.initState();
@@ -1476,6 +1481,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               padding: const EdgeInsets.all(20.0),
               child: Column(
                 children: [
+                  if (kIsWeb) ...[
+                    _buildWebRecommendedGymsSection(),
+                    const SizedBox(height: 24),
+                  ],
+
                   // ── Location permission warning banner ─────────────────────────
                   // Shown when the user has at least one geofence-enabled gym
                   // membership but background location permission is missing.
@@ -1538,26 +1548,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     childAspectRatio: 1.0,
                     children: [
                       _buildQuickActionCard(
-                        title: 'Find Gyms',
+                        title: _webText('Find Gyms', 'जिम खोजें'),
                         icon: Icons.fitness_center_outlined,
                         onTap: () {
                           setState(() => _selectedIndex = 1);
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Find Trainers',
+                        title: _webText('Find Trainers', 'ट्रेनर खोजें'),
                         icon: Icons.person_search_outlined,
                         onTap: () {
                           // Navigate to trainer exploration screen
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Trainer exploration coming soon!'),
+                            SnackBar(
+                              content: Text(_webText('Trainer exploration coming soon!', 'ट्रेनर एक्सप्लोर जल्द आ रहा है!')),
                             ),
                           );
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Diet Plans',
+                        title: _webText('Diet Plans', 'डाइट प्लान'),
                         icon: Icons.restaurant_menu_outlined,
                         onTap: () {
                           Navigator.push(
@@ -1567,7 +1577,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Workout Plans',
+                        title: _webText('Workout Plans', 'वर्कआउट प्लान'),
                         icon: Icons.fitness_center_outlined,
                         onTap: () {
                           Navigator.push(
@@ -1577,21 +1587,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Bookings',
+                        title: _webText('Bookings', 'बुकिंग्स'),
                         icon: Icons.event_available_outlined,
                         onTap: () {
                           setState(() => _selectedIndex = 2);
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Favorites',
+                        title: _webText('Favorites', 'पसंदीदा'),
                         icon: Icons.favorite_outline,
                         onTap: () {
                           setState(() => _selectedIndex = 3);
                         },
                       ),
                       _buildQuickActionCard(
-                        title: 'Profile',
+                        title: _webText('Profile', 'प्रोफाइल'),
                         icon: Icons.person_outline,
                         onTap: () {
                           Navigator.push(
@@ -1608,130 +1618,131 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   // ── Active Membership Card (shown when user has an active membership) ──
                   _buildActiveMembershipCard(),
 
-                  // Search Card
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.08),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.location_on,
-                              color: AppTheme.primaryColor,
-                              size: 28,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                AppLocalizations.of(context)!.findYourPerfectGym,
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context).textTheme.titleLarge?.color,
+                  // Keep the legacy in-page search card on mobile only.
+                  if (!kIsWeb) ...[
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.surface,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 20,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on,
+                                color: AppTheme.primaryColor,
+                                size: 28,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  AppLocalizations.of(context)!.findYourPerfectGym,
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).textTheme.titleLarge?.color,
+                                  ),
                                 ),
                               ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: _getUserLocation,
-                              icon: const Icon(Icons.my_location, size: 18),
-                              label: Text(AppLocalizations.of(context)!.nearMe),
+                              ElevatedButton.icon(
+                                onPressed: _getUserLocation,
+                                icon: const Icon(Icons.my_location, size: 18),
+                                label: Text(AppLocalizations.of(context)!.nearMe),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          
+                          // Price Range Slider
+                          PriceRangeSlider(
+                            currentPrice: _priceRange,
+                            minPrice: 500,
+                            maxPrice: 10000,
+                            onPriceChanged: (price) {
+                              setState(() => _priceRange = price);
+                            },
+                          ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Activities Selection
+                          ActivitySelectionGrid(
+                            availableActivities: _getDefaultActivities(),
+                            selectedActivities: _selectedActivities,
+                            onSelectionChanged: (activities) {
+                              setState(() => _selectedActivities = activities);
+                            },
+                          ),
+                          
+                          const SizedBox(height: 24),
+                          
+                          // Search Button
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => GymListScreen(
+                                      showSearch: true,
+                                      initialActivities: _selectedActivities,
+                                      maxPrice: _priceRange,
+                                    ),
+                                  ),
+                                );
+                              },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.primaryColor,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 10,
-                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 16),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
+                                elevation: 0,
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        
-                        // Price Range Slider
-                        PriceRangeSlider(
-                          currentPrice: _priceRange,
-                          minPrice: 500,
-                          maxPrice: 10000,
-                          onPriceChanged: (price) {
-                            setState(() => _priceRange = price);
-                          },
-                        ),
-                        
-                        const SizedBox(height: 24),
-                        
-                        // Activities Selection
-                        ActivitySelectionGrid(
-                          availableActivities: _getDefaultActivities(),
-                          selectedActivities: _selectedActivities,
-                          onSelectionChanged: (activities) {
-                            setState(() => _selectedActivities = activities);
-                          },
-                        ),
-                        
-                        const SizedBox(height: 24),
-                        
-                        // Search Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => GymListScreen(
-                                    showSearch: true,
-                                    initialActivities: _selectedActivities,
-                                    maxPrice: _priceRange,
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.search, size: 24),
+                                  SizedBox(width: 12),
+                                  Text(
+                                    'Search Gyms',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.primaryColor,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                                ],
                               ),
-                              elevation: 0,
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.search, size: 24),
-                                SizedBox(width: 12),
-                                Text(
-                                  'Search Gyms',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  
-                  const SizedBox(height: 32),
+                    const SizedBox(height: 32),
+                  ],
                   
                   // Popular Gyms
                   if (_popularGyms.isNotEmpty) ...[
@@ -1821,7 +1832,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Top Offers Near You',
+                                  _webText('Top Offers Near You', 'आपके पास के टॉप ऑफर'),
                                   style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -1829,7 +1840,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                                 Text(
-                                  'Deals from gyms within 4 km',
+                                  _webText('Deals from gyms within 4 km', '4 किमी के भीतर जिम ऑफर'),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -1874,7 +1885,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Top Trainers',
+                                  _webText('Top Trainers', 'टॉप ट्रेनर्स'),
                                   style: TextStyle(
                                     fontSize: 20,
                                     fontWeight: FontWeight.bold,
@@ -1882,7 +1893,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   ),
                                 ),
                                 Text(
-                                  'Certified professionals near you',
+                                  _webText('Certified professionals near you', 'आपके पास प्रमाणित प्रोफेशनल्स'),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -1900,7 +1911,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ),
                             );
                           },
-                          child: const Text('See All'),
+                          child: Text(_webText('See All', 'सभी देखें')),
                         ),
                       ],
                     ),
@@ -1911,7 +1922,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         // Handle trainer tap - navigate to trainer detail screen
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('View ${trainer.fullName} profile'),
+                            content: Text(_webText('View ${trainer.fullName} profile', '${trainer.fullName} की प्रोफाइल देखें')),
                           ),
                         );
                       },
@@ -1929,7 +1940,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        'Why Choose Gym-wale?',
+                        _webText('Why Choose Gym-wale?', 'Gym-wale क्यों चुनें?'),
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -1943,26 +1954,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                       _buildFeatureBenefit(
                         icon: Icons.fitness_center_outlined,
-                        title: 'State-of-the-art Equipment',
-                        description: 'Access to modern gym equipment and facilities',
+                        title: _webText('State-of-the-art Equipment', 'आधुनिक उपकरण'),
+                        description: _webText('Access to modern gym equipment and facilities', 'आधुनिक जिम उपकरण और सुविधाओं का लाभ लें'),
                       ),
                       const SizedBox(height: 16),
                       _buildFeatureBenefit(
                         icon: Icons.person_outline,
-                        title: 'Expert Personal Training',
-                        description: 'Certified trainers to guide your fitness journey',
+                        title: _webText('Expert Personal Training', 'एक्सपर्ट पर्सनल ट्रेनिंग'),
+                        description: _webText('Certified trainers to guide your fitness journey', 'आपकी फिटनेस यात्रा के लिए प्रमाणित ट्रेनर्स'),
                       ),
                       const SizedBox(height: 16),
                       _buildFeatureBenefit(
                         icon: Icons.card_membership_outlined,
-                        title: 'Flexible Membership Plans',
-                        description: 'Monthly, quarterly, and yearly plans available',
+                        title: _webText('Flexible Membership Plans', 'लचीले मेंबरशिप प्लान'),
+                        description: _webText('Monthly, quarterly, and yearly plans available', 'मासिक, तिमाही और वार्षिक प्लान उपलब्ध'),
                       ),
                       const SizedBox(height: 16),
                       _buildFeatureBenefit(
                         icon: Icons.restaurant_menu_outlined,
-                        title: 'Personalized Diet Plans',
-                        description: 'Nutrition plans tailored to your fitness goals',
+                        title: _webText('Personalized Diet Plans', 'पर्सनलाइज्ड डाइट प्लान'),
+                        description: _webText('Nutrition plans tailored to your fitness goals', 'आपके फिटनेस लक्ष्यों के अनुसार न्यूट्रिशन प्लान'),
                       ),
                     ],
                   ),
@@ -2007,14 +2018,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       borderRadius: BorderRadius.circular(30),
                       border: Border.all(color: Colors.white.withOpacity(0.2)),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.verified, color: Colors.amber, size: 16),
-                        SizedBox(width: 8),
+                        const Icon(Icons.verified, color: Colors.amber, size: 16),
+                        const SizedBox(width: 8),
                         Text(
-                          "India's #1 Gym Finder Platform",
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                          _webText("India's #1 Gym Finder Platform", 'भारत का #1 जिम फाइंडर प्लेटफॉर्म'),
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -2022,24 +2033,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ],
               ),
               const SizedBox(height: 18),
-              const Text(
-                'Find 174,000+ workout spots\nand gyms across 35+ cities',
-                style: TextStyle(
+              Text(
+                _webText(
+                  'Find Your Perfect Gym, Anytime, Anywhere',
+                  'अपना परफेक्ट जिम खोजें, कभी भी, कहीं भी',
+                ),
+                style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 42,
+                  fontSize: 30,
                   fontWeight: FontWeight.w800,
                   height: 1.2,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
-                'Discover nearby gyms, pick your activity, and filter by budget in one compact search.',
+                _webText(
+                  'Discover nearby gyms, pick your activity, and filter by budget in one compact search.',
+                  'पास के जिम खोजें, गतिविधि चुनें और बजट फ़िल्टर करें - सब एक कॉम्पैक्ट सर्च में।',
+                ),
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.85),
                   fontSize: 16,
                   height: 1.45,
                 ),
               ),
+             
               const SizedBox(height: 26),
               _buildWebCompactSearchContainer(),
               const SizedBox(height: 18),
@@ -2047,9 +2065,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _buildHeroStat('${_registeredGymCount > 0 ? _registeredGymCount : '--'}+', 'Partner Gyms'),
-                  _buildHeroStat('10K+', 'Happy Members'),
-                  _buildHeroStat('50+', 'Cities'),
+                  _buildHeroStat('${_registeredGymCount > 0 ? _registeredGymCount : '--'}+', _webText('Partner Gyms', 'पार्टनर जिम')),
+                  _buildHeroStat('10K+', _webText('Happy Members', 'खुश सदस्य')),
+                  _buildHeroStat('50+', _webText('Cities', 'शहर')),
                 ],
               ),
             ],
@@ -2110,9 +2128,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         TextButton.icon(
           onPressed: _showWebInstallDialog,
           icon: const Icon(Icons.download_for_offline_outlined, color: Colors.white),
-          label: const Text(
-            'Install App',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          label: Text(
+            _webText('Install App', 'ऐप इंस्टॉल करें'),
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
           ),
           style: TextButton.styleFrom(
             backgroundColor: Colors.white.withOpacity(0.12),
@@ -2135,7 +2153,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             }
           },
           icon: Icon(authProvider.isAuthenticated ? Icons.logout : Icons.login),
-          label: Text(authProvider.isAuthenticated ? 'Logout' : 'Login'),
+            label: Text(authProvider.isAuthenticated
+              ? _webText('Logout', 'लॉगआउट')
+              : _webText('Login', 'लॉगिन')),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppTheme.primaryColor,
             foregroundColor: Colors.white,
@@ -2229,19 +2249,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildWebCompactSearchContainer() {
     final isCompact = MediaQuery.of(context).size.width < 1080;
     final selectedActivitiesLabel = _selectedActivities.isEmpty
-        ? 'Activities'
-        : '${_selectedActivities.length} activities';
+      ? _webText('Activities', 'गतिविधियां')
+      : '${_selectedActivities.length} ${_webText('activities', 'गतिविधियां')}';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.18)),
+      ),
       child: isCompact
           ? Column(
               children: [
                 _buildWebSearchCell(
                   icon: Icons.location_on_outlined,
-                  title: _currentCity ?? 'Around Me',
-                  subtitle: _currentAddress ?? 'Use your location to discover gyms nearby',
+                  title: _currentCity ?? _webText('Around Me', 'मेरे आसपास'),
+                  subtitle: _currentAddress ?? _webText('Use your location to discover gyms nearby', 'पास के जिम देखने के लिए लोकेशन का उपयोग करें'),
                   trailing: OutlinedButton.icon(
                     onPressed: () {
                       setState(() => _webUseNearMeSearch = true);
@@ -2251,12 +2276,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     label: Text(AppLocalizations.of(context)!.nearMe),
                   ),
                 ),
-                const Divider(height: 1, color: Color(0xFFE5E7EB)),
+                const Divider(height: 1, color: Color(0x33FFFFFF)),
                 Row(
                   children: [
                     Expanded(
                       child: PopupMenuButton<String>(
-                        tooltip: 'Activities',
+                        tooltip: _webText('Activities', 'गतिविधियां'),
                         offset: const Offset(0, 52),
                         itemBuilder: (context) {
                           return _getDefaultActivities().map((activity) {
@@ -2290,7 +2315,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           icon: Icons.fitness_center_outlined,
                           title: selectedActivitiesLabel,
                           subtitle: _selectedActivities.isEmpty
-                              ? 'Select preferred workouts'
+                              ? _webText('Select preferred workouts', 'पसंदीदा वर्कआउट चुनें')
                               : _selectedActivities.join(', '),
                         ),
                       ),
@@ -2298,19 +2323,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     _buildWebDivider(),
                     Expanded(
                       child: PopupMenuButton<double>(
-                        tooltip: 'Budget',
+                        tooltip: _webText('Budget', 'बजट'),
                         onSelected: (value) => setState(() => _priceRange = value),
-                        itemBuilder: (_) => const [
-                          PopupMenuItem<double>(value: 1500, child: Text('Up to INR 1,500')),
-                          PopupMenuItem<double>(value: 2500, child: Text('Up to INR 2,500')),
-                          PopupMenuItem<double>(value: 4000, child: Text('Up to INR 4,000')),
-                          PopupMenuItem<double>(value: 6000, child: Text('Up to INR 6,000')),
-                          PopupMenuItem<double>(value: 10000, child: Text('Any budget')),
+                        itemBuilder: (_) => [
+                          PopupMenuItem<double>(value: 1500, child: Text(_webText('Up to INR 1,500', 'INR 1,500 तक'))),
+                          PopupMenuItem<double>(value: 2500, child: Text(_webText('Up to INR 2,500', 'INR 2,500 तक'))),
+                          PopupMenuItem<double>(value: 4000, child: Text(_webText('Up to INR 4,000', 'INR 4,000 तक'))),
+                          PopupMenuItem<double>(value: 6000, child: Text(_webText('Up to INR 6,000', 'INR 6,000 तक'))),
+                          PopupMenuItem<double>(value: 10000, child: Text(_webText('Any budget', 'कोई भी बजट'))),
                         ],
                         child: _buildWebSearchCell(
                           icon: Icons.currency_rupee,
-                          title: _priceRange >= 10000 ? 'Any Budget' : 'Up to INR ${_priceRange.toInt()}',
-                          subtitle: 'Monthly membership budget',
+                          title: _priceRange >= 10000
+                              ? _webText('Any Budget', 'कोई भी बजट')
+                              : '${_webText('Up to INR', 'INR')} ${_priceRange.toInt()} ${_webText('max', 'तक')}',
+                          subtitle: _webText('Monthly membership budget', 'मासिक सदस्यता बजट'),
                         ),
                       ),
                     ),
@@ -2339,9 +2366,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text(
-                      'Search',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+                    child: Text(
+                      _webText('Search', 'खोजें'),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -2353,8 +2380,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   flex: 3,
                   child: _buildWebSearchCell(
                     icon: Icons.location_on_outlined,
-                    title: _currentCity ?? 'Around Me',
-                    subtitle: _currentAddress ?? 'Use your location to discover gyms nearby',
+                    title: _currentCity ?? _webText('Around Me', 'मेरे आसपास'),
+                    subtitle: _currentAddress ?? _webText('Use your location to discover gyms nearby', 'पास के जिम देखने के लिए लोकेशन का उपयोग करें'),
                     trailing: OutlinedButton.icon(
                       onPressed: () {
                         setState(() => _webUseNearMeSearch = true);
@@ -2365,11 +2392,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                _buildWebDivider(),
+                    _buildWebDivider(),
                 Expanded(
                   flex: 2,
                   child: PopupMenuButton<String>(
-                    tooltip: 'Activities',
+                    tooltip: _webText('Activities', 'गतिविधियां'),
                     offset: const Offset(0, 52),
                     itemBuilder: (context) {
                       return _getDefaultActivities().map((activity) {
@@ -2403,7 +2430,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       icon: Icons.fitness_center_outlined,
                       title: selectedActivitiesLabel,
                       subtitle: _selectedActivities.isEmpty
-                          ? 'Select preferred workouts'
+                          ? _webText('Select preferred workouts', 'पसंदीदा वर्कआउट चुनें')
                           : _selectedActivities.join(', '),
                     ),
                   ),
@@ -2412,19 +2439,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 Expanded(
                   flex: 2,
                   child: PopupMenuButton<double>(
-                    tooltip: 'Budget',
+                    tooltip: _webText('Budget', 'बजट'),
                     onSelected: (value) => setState(() => _priceRange = value),
-                    itemBuilder: (_) => const [
-                      PopupMenuItem<double>(value: 1500, child: Text('Up to INR 1,500')),
-                      PopupMenuItem<double>(value: 2500, child: Text('Up to INR 2,500')),
-                      PopupMenuItem<double>(value: 4000, child: Text('Up to INR 4,000')),
-                      PopupMenuItem<double>(value: 6000, child: Text('Up to INR 6,000')),
-                      PopupMenuItem<double>(value: 10000, child: Text('Any budget')),
+                    itemBuilder: (_) => [
+                      PopupMenuItem<double>(value: 1500, child: Text(_webText('Up to INR 1,500', 'INR 1,500 तक'))),
+                      PopupMenuItem<double>(value: 2500, child: Text(_webText('Up to INR 2,500', 'INR 2,500 तक'))),
+                      PopupMenuItem<double>(value: 4000, child: Text(_webText('Up to INR 4,000', 'INR 4,000 तक'))),
+                      PopupMenuItem<double>(value: 6000, child: Text(_webText('Up to INR 6,000', 'INR 6,000 तक'))),
+                      PopupMenuItem<double>(value: 10000, child: Text(_webText('Any budget', 'कोई भी बजट'))),
                     ],
                     child: _buildWebSearchCell(
                       icon: Icons.currency_rupee,
-                      title: _priceRange >= 10000 ? 'Any Budget' : 'Up to INR ${_priceRange.toInt()}',
-                      subtitle: 'Monthly membership budget',
+                      title: _priceRange >= 10000
+                          ? _webText('Any Budget', 'कोई भी बजट')
+                          : '${_webText('Up to INR', 'INR')} ${_priceRange.toInt()} ${_webText('max', 'तक')}',
+                      subtitle: _webText('Monthly membership budget', 'मासिक सदस्यता बजट'),
                     ),
                   ),
                 ),
@@ -2451,14 +2480,211 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       padding: const EdgeInsets.symmetric(horizontal: 30),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: const Text(
-                      'Search',
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+                    child: Text(
+                      _webText('Search', 'खोजें'),
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
               ],
             ),
+    );
+  }
+
+  List<Gym> _getWebRecommendedGyms() {
+    final gyms = List<Gym>.from(_popularGyms);
+    if (gyms.isEmpty) return const [];
+
+    // Filter by current city when available.
+    if (_currentCity != null && _currentCity!.trim().isNotEmpty) {
+      final cityNorm = _currentCity!.trim().toLowerCase();
+      final cityMatches = gyms.where((gym) {
+        final gymCity = (gym.city ?? '').trim().toLowerCase();
+        if (gymCity.isEmpty) return false;
+        return gymCity == cityNorm || gymCity.contains(cityNorm) || cityNorm.contains(gymCity);
+      }).toList();
+
+      if (cityMatches.isNotEmpty) {
+        cityMatches.sort((a, b) =>
+            _resolveGymDistanceKm(a).compareTo(_resolveGymDistanceKm(b)));
+        return cityMatches;
+      }
+    }
+
+    gyms.sort((a, b) => _resolveGymDistanceKm(a).compareTo(_resolveGymDistanceKm(b)));
+    return gyms;
+  }
+
+  double _resolveGymDistanceKm(Gym gym) {
+    if (gym.distance != null && gym.distance! >= 0) return gym.distance!;
+    if (_currentPosition == null) return double.infinity;
+    if (gym.latitude == 0 && gym.longitude == 0) return double.infinity;
+
+    final meters = Geolocator.distanceBetween(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      gym.latitude,
+      gym.longitude,
+    );
+    return meters / 1000;
+  }
+
+  Widget _buildWebRecommendedGymsSection() {
+    final recommendedGyms = _getWebRecommendedGyms();
+
+    if (recommendedGyms.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.recommend_outlined, color: AppTheme.primaryColor, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              _webText('Recommended Gyms For You', 'आपके लिए सुझाए गए जिम'),
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: Theme.of(context).textTheme.titleLarge?.color,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _currentCity != null && _currentCity!.trim().isNotEmpty
+              ? _webText('Based on your city: ${_currentCity!}', 'आपके शहर पर आधारित: ${_currentCity!}')
+              : _webText('Best picks near your location', 'आपकी लोकेशन के पास बेहतरीन विकल्प'),
+          style: TextStyle(
+            color: Theme.of(context).textTheme.bodyMedium?.color,
+            fontSize: 13,
+          ),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          height: 220,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: recommendedGyms.length > 8 ? 8 : recommendedGyms.length,
+            itemBuilder: (context, index) {
+              final gym = recommendedGyms[index];
+              return _buildWebRecommendedGymCard(gym);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebRecommendedGymCard(Gym gym) {
+    final distanceKm = _resolveGymDistanceKm(gym);
+    final hasDistance = distanceKm.isFinite && distanceKm >= 0;
+
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => GymDetailScreen(gymId: gym.id)),
+        );
+      },
+      child: Container(
+        width: 300,
+        margin: const EdgeInsets.only(right: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: Theme.of(context).colorScheme.surface,
+          border: Border.all(color: Theme.of(context).dividerColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: gym.images.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: gym.images.first,
+                      height: 130,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => Container(
+                        height: 130,
+                        color: AppTheme.backgroundColor,
+                        child: const Icon(Icons.fitness_center, color: AppTheme.textSecondary),
+                      ),
+                    )
+                  : Container(
+                      height: 130,
+                      color: AppTheme.backgroundColor,
+                      child: const Center(
+                        child: Icon(Icons.fitness_center, color: AppTheme.textSecondary),
+                      ),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    gym.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).textTheme.titleMedium?.color,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on_outlined, size: 14, color: AppTheme.textSecondary),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          gym.city?.isNotEmpty == true ? gym.city! : gym.address,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).textTheme.bodySmall?.color,
+                          ),
+                        ),
+                      ),
+                      if (hasDistance)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryColor.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            '${distanceKm.toStringAsFixed(1)} ${_webText('km', 'किमी')}',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -2471,9 +2697,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Container(
       height: 74,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.textSecondary, size: 20),
+          Icon(icon, color: Colors.white70, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -2487,7 +2718,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
+                    color: Colors.white,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -2497,7 +2728,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6B7280),
+                    color: Colors.white70,
                   ),
                 ),
               ],
@@ -2516,7 +2747,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return Container(
       width: 1,
       height: 50,
-      color: const Color(0xFFE5E7EB),
+      color: const Color(0x33FFFFFF),
     );
   }
 
@@ -2525,13 +2756,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Install Gym-wale App'),
-        content: const Text(
-          'Use your browser menu and choose "Install app" to add Gym-wale to your desktop or home screen.',
+        content: Text(
+          _webText(
+            'Use your browser menu and choose "Install app" to add Gym-wale to your desktop or home screen.',
+            'अपने ब्राउज़र मेनू में "Install app" चुनें और Gym-wale को डेस्कटॉप या होम स्क्रीन पर जोड़ें।',
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+            child: Text(_webText('Close', 'बंद करें')),
           ),
         ],
       ),
@@ -2572,8 +2806,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildNearbyOfferCard(Map<String, dynamic> offer) {
-    final title = offer['title'] ?? 'Special Offer';
-    final gymName = offer['gymName'] ?? 'Gym';
+    final title = offer['title'] ?? _webText('Special Offer', 'स्पेशल ऑफर');
+    final gymName = offer['gymName'] ?? _webText('Gym', 'जिम');
     final type = offer['type'] ?? 'percentage';
     final value = (offer['value'] ?? 0).toDouble();
     final distance = offer['distance']?.toString() ?? '';
@@ -2583,8 +2817,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     // Format discount label
     final discountLabel = type == 'percentage'
-        ? '${value.toInt()}% OFF'
-        : '\u20B9${value.toInt()} OFF';
+      ? '${value.toInt()}% ${_webText('OFF', 'छूट')}'
+      : '\u20B9${value.toInt()} ${_webText('OFF', 'छूट')}';
 
     // Days remaining
     String daysLeft = '';
@@ -2592,7 +2826,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       try {
         final end = DateTime.parse(endDateStr);
         final remaining = end.difference(DateTime.now()).inDays;
-        daysLeft = remaining <= 1 ? 'Ends today' : '$remaining days left';
+        daysLeft = remaining <= 1
+          ? _webText('Ends today', 'आज समाप्त')
+          : '$remaining ${_webText('days left', 'दिन बाकी')}';
       } catch (_) {}
     }
 
@@ -2672,7 +2908,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         const Icon(Icons.location_on, color: Colors.white70, size: 14),
                         const SizedBox(width: 2),
                         Text(
-                          '$distance km',
+                          '$distance ${_webText('km', 'किमी')}',
                           style: const TextStyle(color: Colors.white70, fontSize: 12),
                         ),
                       ],
@@ -2913,7 +3149,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     children: [
                 _buildQuickMenuItem(
                   icon: Icons.search,
-                  label: 'Search Gyms',
+                  label: _webText('Search Gyms', 'जिम खोजें'),
                   onTap: () {
                     Navigator.pop(context);
                     setState(() => _selectedIndex = 1);
@@ -2921,7 +3157,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 _buildQuickMenuItem(
                   icon: Icons.fitness_center,
-                  label: 'Book Trial',
+                  label: _webText('Book Trial', 'ट्रायल बुक करें'),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
@@ -2934,19 +3170,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 _buildQuickMenuItem(
                   icon: Icons.person_search,
-                  label: 'Find Trainer',
+                  label: _webText('Find Trainer', 'ट्रेनर खोजें'),
                   onTap: () {
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Trainer search coming soon!'),
+                      SnackBar(
+                        content: Text(_webText('Trainer search coming soon!', 'ट्रेनर खोज जल्द आएगी!')),
                       ),
                     );
                   },
                 ),
                 _buildQuickMenuItem(
                   icon: Icons.restaurant_menu,
-                  label: 'Diet Plans',
+                  label: _webText('Diet Plans', 'डाइट प्लान'),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
@@ -2957,7 +3193,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 _buildQuickMenuItem(
                   icon: Icons.favorite,
-                  label: 'Favorites',
+                  label: _webText('Favorites', 'पसंदीदा'),
                   onTap: () {
                     Navigator.pop(context);
                     setState(() => _selectedIndex = 3);
@@ -2965,7 +3201,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 _buildQuickMenuItem(
                   icon: Icons.person,
-                  label: 'Profile',
+                  label: _webText('Profile', 'प्रोफाइल'),
                   onTap: () {
                     Navigator.pop(context);
                     Navigator.push(
@@ -3079,7 +3315,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             BottomNavigationBarItem(
               icon: const Icon(Icons.card_membership_outlined),
               activeIcon: const Icon(Icons.card_membership),
-              label: 'Subscriptions',
+              label: _webText('Subscriptions', 'सब्सक्रिप्शन्स'),
             ),
             BottomNavigationBarItem(
               icon: const Icon(Icons.favorite_outline),

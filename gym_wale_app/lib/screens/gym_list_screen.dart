@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
 import '../services/api_service.dart';
 import '../services/location_service.dart';
 import '../models/gym.dart';
@@ -48,6 +50,15 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   String _selectedFilter = 'All';
   Set<String> _activeGymIds = {}; // Track gyms user is an active member of
   bool _isManualSearch = false; // Track if user is manually searching
+  Position? _currentPosition;
+  bool _useNearMe = false;
+  final double _nearMeRadiusKm = 10.0;
+  List<Activity> _availableActivities = [];
+
+  bool get _isHindiWeb =>
+      kIsWeb && Localizations.localeOf(context).languageCode == 'hi';
+
+  String _webText(String english, String hindi) => _isHindiWeb ? hindi : english;
 
   @override
   void initState() {
@@ -59,6 +70,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     );
     _selectedActivities = widget.initialActivities ?? [];
     _priceRange = widget.maxPrice ?? 5000;
+    _useNearMe = widget.autoUseNearMe;
 
     if (widget.initialSearchQuery != null &&
         widget.initialSearchQuery!.trim().isNotEmpty) {
@@ -80,10 +92,30 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   /// Initialize data in proper sequence
   Future<void> _initializeData() async {
     await _loadActiveMemberships();
-    await _loadGyms();
-    if (widget.autoUseNearMe) {
-      await _getUserLocation();
+
+    if (_useNearMe) {
+      await _captureUserLocation(showError: false);
     }
+
+    await _loadGyms();
+  }
+
+  Future<bool> _captureUserLocation({bool showError = true}) async {
+    final position = await LocationService.getCurrentPosition();
+    if (position == null) {
+      if (showError && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Unable to get location. Please enable location services.'),
+            backgroundColor: AppTheme.errorColor,
+          ),
+        );
+      }
+      return false;
+    }
+
+    _currentPosition = position;
+    return true;
   }
 
   @override
@@ -133,11 +165,17 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
         search: _searchController.text.isNotEmpty ? _searchController.text : null,
         activities: _selectedActivities.isNotEmpty ? _selectedActivities : null,
         maxPrice: _priceRange < 10000 ? _priceRange : null,
+        lat: _currentPosition?.latitude,
+        lng: _currentPosition?.longitude,
+        radius: _useNearMe ? _nearMeRadiusKm : null,
       );
+
+      final gymsWithDistance = _attachComputedDistances(gyms);
       
       if (mounted) {
         setState(() {
-          _gyms = gyms;
+          _gyms = gymsWithDistance;
+          _availableActivities = _deriveAvailableActivities(gymsWithDistance);
           _isLoading = false;
         });
         _applyFilters();
@@ -158,36 +196,18 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
 
   Future<void> _getUserLocation() async {
     try {
-      final position = await LocationService.getCurrentPosition();
-      
-      if (position == null) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Unable to get location. Please enable location services.'),
-              backgroundColor: AppTheme.errorColor,
-            ),
-          );
-        }
+      final found = await _captureUserLocation();
+      if (!found) {
         return;
       }
 
-      // Load nearby gyms based on location
-      final nearbyGyms = await ApiService.getNearbyGyms(
-        position.latitude,
-        position.longitude,
-        radius: 10.0, // 10 km radius
-      );
+      setState(() => _useNearMe = true);
+      await _loadGyms();
       
       if (mounted) {
-        setState(() {
-          _gyms = nearbyGyms;
-        });
-        _applyFilters();
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Found ${nearbyGyms.length} gyms nearby'),
+            content: Text('Found ${_gyms.length} gyms within ${_nearMeRadiusKm.toInt()} km'),
             backgroundColor: AppTheme.successColor,
           ),
         );
@@ -205,6 +225,87 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     /// Keep spacing intact to enforce exact admin activity name matching.
   String _normalizeActivity(String s) =>
       s.trim().toLowerCase();
+
+  List<Gym> _attachComputedDistances(List<Gym> gyms) {
+    if (_currentPosition == null) return gyms;
+
+    return gyms.map((gym) {
+      if (gym.distance != null && gym.distance!.isFinite) {
+        return gym;
+      }
+
+      if (gym.latitude == 0.0 && gym.longitude == 0.0) {
+        return gym;
+      }
+
+      final distanceKm = LocationService.calculateDistance(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+        gym.latitude,
+        gym.longitude,
+      );
+
+      return gym.copyWith(distance: distanceKm);
+    }).toList();
+  }
+
+  double _resolveGymDistanceKm(Gym gym) {
+    if (gym.distance != null && gym.distance!.isFinite) {
+      return gym.distance!;
+    }
+
+    if (_currentPosition == null || (gym.latitude == 0.0 && gym.longitude == 0.0)) {
+      return double.infinity;
+    }
+
+    return LocationService.calculateDistance(
+      _currentPosition!.latitude,
+      _currentPosition!.longitude,
+      gym.latitude,
+      gym.longitude,
+    );
+  }
+
+  List<Activity> _deriveAvailableActivities(List<Gym> gyms) {
+    final defaults = _getDefaultActivities();
+    final byName = <String, Activity>{
+      for (final activity in defaults) _normalizeActivity(activity.name): activity,
+    };
+
+    for (final gym in gyms) {
+      for (final activityName in gym.activities) {
+        final trimmed = activityName.trim();
+        if (trimmed.isEmpty) continue;
+
+        final key = _normalizeActivity(trimmed);
+        byName.putIfAbsent(
+          key,
+          () => Activity(
+            name: trimmed,
+            icon: 'fa-dumbbell',
+            description: '',
+          ),
+        );
+      }
+    }
+
+    final ordered = <Activity>[];
+    final remaining = Map<String, Activity>.from(byName);
+
+    for (final activity in defaults) {
+      final key = _normalizeActivity(activity.name);
+      final found = remaining.remove(key);
+      if (found != null) {
+        ordered.add(found);
+      }
+    }
+
+    final extras = remaining.values.toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    ordered.addAll(extras);
+
+    return ordered;
+  }
 
   void _applyFilters() {
     print('[GYM_LIST] Applying filters...');
@@ -240,8 +341,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           _filteredGyms.sort((a, b) => b.rating.compareTo(a.rating));
           break;
         case 'Distance':
-          _filteredGyms.sort((a, b) =>
-              (a.distance ?? double.infinity).compareTo(b.distance ?? double.infinity));
+          _filteredGyms.sort((a, b) => _resolveGymDistanceKm(a).compareTo(_resolveGymDistanceKm(b)));
           break;
         case 'Name':
           _filteredGyms.sort((a, b) => a.name.compareTo(b.name));
@@ -282,7 +382,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Explore'),
+        title: Text(_webText('Explore', 'एक्सप्लोर')),
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
@@ -298,11 +398,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             fontWeight: FontWeight.normal,
             fontSize: 14,
           ),
-          tabs: const [
-            Tab(text: 'Find Gyms', icon: Icon(Icons.fitness_center, size: 20)),
-            Tab(text: 'Trainers', icon: Icon(Icons.person_outline, size: 20)),
-            Tab(text: 'Diet', icon: Icon(Icons.restaurant_menu, size: 20)),
-            Tab(text: 'Workout', icon: Icon(Icons.sports_gymnastics, size: 20)),
+          tabs: [
+            Tab(text: _webText('Find Gyms', 'जिम खोजें'), icon: const Icon(Icons.fitness_center, size: 20)),
+            Tab(text: _webText('Trainers', 'ट्रेनर्स'), icon: const Icon(Icons.person_outline, size: 20)),
+            Tab(text: _webText('Diet', 'डाइट'), icon: const Icon(Icons.restaurant_menu, size: 20)),
+            Tab(text: _webText('Workout', 'वर्कआउट'), icon: const Icon(Icons.sports_gymnastics, size: 20)),
           ],
         ),
       ),
@@ -340,7 +440,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
             children: [
               Expanded(
                 child: Text(
-                  'Find Gyms',
+                  _webText('Find Gyms', 'जिम खोजें'),
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -356,10 +456,10 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                 icon: const Icon(Icons.sort),
                 onSelected: _sortGyms,
                 itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'All', child: Text('All')),
-                  const PopupMenuItem(value: 'Rating', child: Text('Highest Rated')),
-                  const PopupMenuItem(value: 'Distance', child: Text('Nearest')),
-                  const PopupMenuItem(value: 'Name', child: Text('Name (A-Z)')),
+                  PopupMenuItem(value: 'All', child: Text(_webText('All', 'सभी'))),
+                  PopupMenuItem(value: 'Rating', child: Text(_webText('Highest Rated', 'उच्च रेटिंग'))),
+                  PopupMenuItem(value: 'Distance', child: Text(_webText('Nearest', 'नजदीकी'))),
+                  PopupMenuItem(value: 'Name', child: Text(_webText('Name (A-Z)', 'नाम (A-Z)'))),
                 ],
               ),
             ],
@@ -445,7 +545,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Filters',
+                    _webText('Filters', 'फ़िल्टर'),
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -469,7 +569,9 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                   
                   // Activities
                   ActivitySelectionGrid(
-                    availableActivities: _getDefaultActivities(),
+                    availableActivities: _availableActivities.isNotEmpty
+                        ? _availableActivities
+                        : _getDefaultActivities(),
                     selectedActivities: _selectedActivities,
                     onSelectionChanged: (activities) {
                       setState(() => _selectedActivities = activities);
@@ -488,11 +590,12 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                             setState(() {
                               _selectedActivities.clear();
                               _priceRange = 5000;
+                              _useNearMe = false;
                               _showFilters = false;
                             });
                             _loadGyms(); // Reload without filters
                           },
-                          child: const Text('Clear Filters'),
+                          child: Text(_webText('Clear Filters', 'फ़िल्टर साफ़ करें')),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -505,7 +608,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryColor,
                           ),
-                          child: const Text('Apply'),
+                          child: Text(_webText('Apply', 'लागू करें')),
                         ),
                       ),
                     ],
@@ -522,10 +625,10 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
-                  _buildFilterChip('All'),
-                  _buildFilterChip('Rating'),
-                  _buildFilterChip('Distance'),
-                  _buildFilterChip('Name'),
+                  _buildFilterChip('All', _webText('All', 'सभी')),
+                  _buildFilterChip('Rating', _webText('Rating', 'रेटिंग')),
+                  _buildFilterChip('Distance', _webText('Distance', 'दूरी')),
+                  _buildFilterChip('Name', _webText('Name', 'नाम')),
                 ],
               ),
             ),
@@ -588,14 +691,14 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
       );
   }
 
-  Widget _buildFilterChip(String label) {
-    final isSelected = _selectedFilter == label;
+  Widget _buildFilterChip(String value, String label) {
+    final isSelected = _selectedFilter == value;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: FilterChip(
         label: Text(label),
         selected: isSelected,
-        onSelected: (_) => _sortGyms(label),
+        onSelected: (_) => _sortGyms(value),
         backgroundColor: AppTheme.backgroundColor,
         selectedColor: AppTheme.primaryColor.withOpacity(0.2),
         checkmarkColor: AppTheme.primaryColor,

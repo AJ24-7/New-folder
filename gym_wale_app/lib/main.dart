@@ -176,11 +176,19 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _initializeApp() async {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final localeProvider = Provider.of<LocaleProvider>(context, listen: false);
     final geofencingService = Provider.of<GeofencingService>(context, listen: false);
     final attendanceProvider = Provider.of<AttendanceProvider>(context, listen: false);
     bool restoredGeofence = false;
 
     await authProvider.init();
+
+    // Keep locale in sync with backend user settings on app start.
+    if (authProvider.isAuthenticated) {
+      try {
+        await localeProvider.loadLocaleFromBackend();
+      } catch (_) {}
+    }
 
     // Register FCM token with backend now that auth token is available.
     if (!kIsWeb) {

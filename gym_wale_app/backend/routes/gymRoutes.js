@@ -371,8 +371,12 @@ router.get('/photos', gymadminAuth, require('../controllers/gymController').getA
 router.patch('/photos/:photoId', gymadminAuth, optionalSingleUpload('photo'), require('../controllers/gymController').updateGymPhoto);
 router.delete('/photos/:photoId', gymadminAuth, require('../controllers/gymController').deleteGymPhoto);
 
+// Keep search route above any dynamic /:id routes to avoid path conflicts.
+router.get('/search', handleGymSearch);
+
 // ✅ Get Gym by ID [GET] /:id (Public)
-router.get('/:id', async (req, res) => {
+// Restrict :id to ObjectId format so static routes like /search are not captured.
+router.get('/:id([0-9a-fA-F]{24})', async (req, res) => {
   try {
     const gym = await Gym.findById(req.params.id)
       .select('gymName email phone location description gymPhotos logoUrl openingTime closingTime operatingHours membersCount equipment activities membershipPlans createdAt')
@@ -1099,6 +1103,24 @@ function escapeRegex(input) {
   return String(input).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function toFiniteNumber(value) {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function haversineDistanceKm(lat1, lng1, lat2, lng2) {
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
 // Helper to build filter object
 function buildGymFilter({ search, city, state, pincode, activities }) {
   const filter = { status: 'approved' };
@@ -1218,9 +1240,9 @@ async function aggregateGymsByPrice(filter, price) {
   ]);
 }
 
-router.get('/search', async (req, res) => {
+async function handleGymSearch(req, res) {
   try {
-    const { search, city, state, pincode, maxPrice, limit } = req.query;
+    const { search, city, state, pincode, maxPrice, limit, lat, lng, radius } = req.query;
     const activities = normalizeActivities(req.query.activities);
 
     console.log('Received activities from query:', req.query.activities);
@@ -1253,6 +1275,52 @@ router.get('/search', async (req, res) => {
       gyms = await Gym.aggregate(aggregationPipeline);
     }
 
+    // Optional geo support for web/mobile search.
+    // - lat/lng: attach distance for sorting/display.
+    // - radius: apply near-me filtering only when explicitly provided.
+    const latNum = toFiniteNumber(lat);
+    const lngNum = toFiniteNumber(lng);
+    const radiusNum = toFiniteNumber(radius);
+    const shouldApplyRadiusFilter = radiusNum !== null && radiusNum > 0;
+
+    if (latNum !== null && lngNum !== null) {
+      gyms = gyms
+        .map((gym) => {
+          const gymLat = toFiniteNumber(gym?.location?.lat);
+          const gymLng = toFiniteNumber(gym?.location?.lng);
+          if (gymLat === null || gymLng === null) {
+            if (shouldApplyRadiusFilter) {
+              return null;
+            }
+            return {
+              ...gym,
+              distance: null,
+            };
+          }
+
+          const distance = haversineDistanceKm(latNum, lngNum, gymLat, gymLng);
+          if (!Number.isFinite(distance)) {
+            if (shouldApplyRadiusFilter) {
+              return null;
+            }
+            return {
+              ...gym,
+              distance: null,
+            };
+          }
+
+          if (shouldApplyRadiusFilter && distance > radiusNum) {
+            return null;
+          }
+
+          return {
+            ...gym,
+            distance: Number(distance.toFixed(2)),
+          };
+        })
+        .filter(Boolean);
+    }
+
     console.log(`✅ Found gyms: ${gyms.length}`);
     res.status(200).json(gyms);
 
@@ -1273,10 +1341,13 @@ router.get('/search', async (req, res) => {
       });
     }
   }
-});
+}
+
+// Search route is registered earlier (before dynamic /:id routes).
 
 // ✅ Get Single Gym by ID [GET] /:id
-router.get('/:id', async (req, res) => {
+// Restrict :id to ObjectId format so static routes like /search are not captured.
+router.get('/:id([0-9a-fA-F]{24})', async (req, res) => {
   try {
     // Return gym regardless of status (for admin panel detail view)
     const gym = await Gym.findOne({ _id: req.params.id });
