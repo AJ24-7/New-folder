@@ -94,7 +94,10 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     await _loadActiveMemberships();
 
     if (_useNearMe) {
-      await _captureUserLocation(showError: false);
+      final hasLocation = await _captureUserLocation(showError: false);
+      if (!hasLocation) {
+        _useNearMe = false;
+      }
     }
 
     await _loadGyms();
@@ -167,7 +170,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
         maxPrice: _priceRange < 10000 ? _priceRange : null,
         lat: _currentPosition?.latitude,
         lng: _currentPosition?.longitude,
-        radius: _useNearMe ? _nearMeRadiusKm : null,
+        radius: (_useNearMe && _currentPosition != null) ? _nearMeRadiusKm : null,
       );
 
       final gymsWithDistance = _attachComputedDistances(gyms);
@@ -332,7 +335,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
           print('[GYM_LIST] Gym ${gym.name} (${gym.id}) - Active member: ${_isManualSearch ? "shown (manual search)" : "hidden"}');
         }
 
-        return matchesSearch && matchesActivities && notActiveMember;
+        final matchesNearMe = !_useNearMe || _currentPosition == null
+            ? true
+            : _resolveGymDistanceKm(gym) <= _nearMeRadiusKm;
+
+        return matchesSearch && matchesActivities && notActiveMember && matchesNearMe;
       }).toList();
 
       // Apply current sort inline (avoids recursive setState issues)

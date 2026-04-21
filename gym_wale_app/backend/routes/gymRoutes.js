@@ -1124,10 +1124,12 @@ function haversineDistanceKm(lat1, lng1, lat2, lng2) {
 // Helper to build filter object
 function buildGymFilter({ search, city, state, pincode, activities }) {
   const filter = { status: 'approved' };
+  const andConditions = [];
 
   if (search && typeof search === 'string' && search.trim() !== '') {
     const searchRegex = new RegExp(escapeRegex(search.trim()), 'i');
-    filter.$or = [
+    andConditions.push({
+      $or: [
       { gymName: { $regex: searchRegex } },
       { description: { $regex: searchRegex } },
       { 'location.address': { $regex: searchRegex } },
@@ -1135,17 +1137,23 @@ function buildGymFilter({ search, city, state, pincode, activities }) {
       { 'location.state': { $regex: searchRegex } },
       { 'location.pincode': { $regex: searchRegex } },
       { 'activities.name': { $regex: searchRegex } },
-    ];
+      { activities: { $regex: searchRegex } },
+    ],
+    });
   }
 
   if (city && typeof city === 'string' && city.trim() !== '') {
-    filter['location.city'] = { $regex: new RegExp(city.trim(), 'i') };
+    andConditions.push({
+      'location.city': { $regex: new RegExp(city.trim(), 'i') }
+    });
   }
   if (state && typeof state === 'string' && state.trim() !== '') {
-    filter['location.state'] = { $regex: new RegExp(state.trim(), 'i') };
+    andConditions.push({
+      'location.state': { $regex: new RegExp(state.trim(), 'i') }
+    });
   }
   if (pincode) {
-    filter['location.pincode'] = pincode;
+    andConditions.push({ 'location.pincode': pincode });
   }
   if (activities.length > 0) {
     const cleanedActivities = activities
@@ -1153,10 +1161,20 @@ function buildGymFilter({ search, city, state, pincode, activities }) {
       // Exact (case-insensitive) activity name match against admin-configured names.
       .map(a => new RegExp(`^${escapeRegex(a.trim())}$`, 'i'));
     if (cleanedActivities.length > 0) {
-      // Search in activities.name field since activities are stored as objects
-      filter['activities.name'] = { $in: cleanedActivities };
+      // Support both activity object schema ({name}) and legacy string-array schema.
+      andConditions.push({
+        $or: [
+          { 'activities.name': { $in: cleanedActivities } },
+          { activities: { $in: cleanedActivities } },
+        ],
+      });
     }
   }
+
+  if (andConditions.length > 0) {
+    filter.$and = andConditions;
+  }
+
   return filter;
 }
 
