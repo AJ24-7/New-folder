@@ -16,6 +16,7 @@ import '../models/gym.dart';
 import '../models/trainer.dart';
 import '../models/banner_offer.dart';
 import '../models/activity.dart';
+import '../models/membership_plan.dart';
 import '../config/app_theme.dart';
 import '../widgets/gym_card.dart';
 import '../widgets/activity_widgets.dart';
@@ -57,7 +58,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _activeMembershipsData = []; // Full data for membership card
   List<Map<String, dynamic>> _nearbyOffers = []; // Nearby gym offers for top offers section
   int _registeredGymCount = 0;
+  int _heroTotalMembers = 0;
+  int _heroTotalCities = 0;
   bool _webUseNearMeSearch = false;
+  final Map<String, double> _webGymStartingPriceByGymId = {};
+  final Set<String> _webGymPriceLoadInFlight = {};
 
   // ── Location permission warning for geofence-enabled gyms ───────────────────
   bool _showLocationWarning = false;
@@ -797,12 +802,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           }
           return !isActiveMember;
         }).toList();
+
+        final uniqueCities = gyms
+            .map((gym) => (gym.city ?? '').trim().toLowerCase())
+            .where((city) => city.isNotEmpty)
+            .toSet();
+        final totalMembers = gyms.fold<int>(
+          0,
+          (sum, gym) => sum + gym.membersCount,
+        );
+
+        final gymsForPopular = List<Gym>.from(filteredGyms);
+        if (_currentPosition != null) {
+          gymsForPopular.sort((a, b) {
+            final aHasCoords = !(a.latitude == 0 && a.longitude == 0);
+            final bHasCoords = !(b.latitude == 0 && b.longitude == 0);
+
+            final aDistance = aHasCoords
+                ? Geolocator.distanceBetween(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                    a.latitude,
+                    a.longitude,
+                  )
+                : double.infinity;
+            final bDistance = bHasCoords
+                ? Geolocator.distanceBetween(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                    b.latitude,
+                    b.longitude,
+                  )
+                : double.infinity;
+
+            return aDistance.compareTo(bDistance);
+          });
+        }
         
         print('[HOME] Gyms after filtering: ${filteredGyms.length}');
+
+        if (kIsWeb) {
+          _loadWebGymStartingPrices(filteredGyms);
+        }
         
         setState(() {
           _registeredGymCount = gyms.length;
-          _popularGyms = filteredGyms.take(5).toList();
+          _heroTotalMembers = totalMembers;
+          _heroTotalCities = uniqueCities.length;
+          _popularGyms = gymsForPopular.take(5).toList();
         });
       }
     } catch (e) {
@@ -1054,17 +1101,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         print('[HOME] Nearby gyms loaded: ${gyms.length}');
         print('[HOME] Active gym IDs to filter: $_activeGymIds');
+
+        final filteredGyms = gyms.where((gym) {
+          final isActiveMember = _activeGymIds.contains(gym.id);
+          if (isActiveMember) {
+            print('[HOME] Filtering out nearby gym: ${gym.name} (${gym.id})');
+          }
+          return !isActiveMember;
+        }).toList();
+
+        if (kIsWeb) {
+          _loadWebGymStartingPrices(filteredGyms);
+        }
         
         setState(() {
-          // Filter out gyms where user is an active member
-          final filteredGyms = gyms.where((gym) {
-            final isActiveMember = _activeGymIds.contains(gym.id);
-            if (isActiveMember) {
-              print('[HOME] Filtering out nearby gym: ${gym.name} (${gym.id})');
-            }
-            return !isActiveMember;
-          }).toList();
-          
           print('[HOME] Nearby gyms after filtering: ${filteredGyms.length}');
           _popularGyms = filteredGyms.take(5).toList();
         });
@@ -1107,8 +1157,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         );
       }
-      
-      _loadData();
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1504,7 +1552,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ],
                   
                   // Quick Actions Grid - Only show if FAB is hidden
-                  if (!_showCenterFAB) ...[
+                  if (!kIsWeb && !_showCenterFAB) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -1538,7 +1586,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     const SizedBox(height: 16),
                   ],
-                  if (!_showCenterFAB)
+                  if (!kIsWeb && !_showCenterFAB)
                     GridView.count(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -1613,7 +1661,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ],
                   ),
                   
-                  if (!_showCenterFAB) const SizedBox(height: 32),
+                  if (!kIsWeb && !_showCenterFAB) const SizedBox(height: 32),
 
                   // ── Active Membership Card (shown when user has an active membership) ──
                   _buildActiveMembershipCard(),
@@ -1745,7 +1793,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ],
                   
                   // Popular Gyms
-                  if (_popularGyms.isNotEmpty) ...[
+                  if (!kIsWeb && _popularGyms.isNotEmpty) ...[
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -2065,9 +2113,27 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
-                  _buildHeroStat('${_registeredGymCount > 0 ? _registeredGymCount : '--'}+', _webText('Partner Gyms', 'पार्टनर जिम')),
-                  _buildHeroStat('10K+', _webText('Happy Members', 'खुश सदस्य')),
-                  _buildHeroStat('50+', _webText('Cities', 'शहर')),
+                  _buildHeroStat(
+                    icon: Icons.fitness_center,
+                    value: _registeredGymCount > 0
+                        ? _registeredGymCount.toString()
+                        : '--',
+                    label: _webText('Partner Gyms', 'पार्टनर जिम'),
+                  ),
+                  _buildHeroStat(
+                    icon: Icons.groups_rounded,
+                    value: _heroTotalMembers > 0
+                        ? _heroTotalMembers.toString()
+                        : '--',
+                    label: _webText('Total Members', 'कुल सदस्य'),
+                  ),
+                  _buildHeroStat(
+                    icon: Icons.location_city_rounded,
+                    value: _heroTotalCities > 0
+                        ? _heroTotalCities.toString()
+                        : '--',
+                    label: _webText('Cities', 'शहर'),
+                  ),
                 ],
               ),
             ],
@@ -2515,6 +2581,71 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     return gyms;
   }
 
+  Future<void> _loadWebGymStartingPrices(List<Gym> gyms) async {
+    if (!kIsWeb || gyms.isEmpty) return;
+
+    final targetGyms = gyms.take(8);
+    final tasks = <Future<void>>[];
+
+    for (final gym in targetGyms) {
+      if (gym.id.isEmpty ||
+          _webGymStartingPriceByGymId.containsKey(gym.id) ||
+          _webGymPriceLoadInFlight.contains(gym.id)) {
+        continue;
+      }
+
+      _webGymPriceLoadInFlight.add(gym.id);
+      tasks.add(_fetchWebGymStartingPrice(gym.id));
+    }
+
+    if (tasks.isEmpty) return;
+    await Future.wait(tasks);
+  }
+
+  Future<void> _fetchWebGymStartingPrice(String gymId) async {
+    try {
+      final plan = await ApiService.getGymMembershipPlan(gymId);
+      final lowest = _resolveLowestMembershipPrice(plan);
+      if (lowest != null && mounted) {
+        setState(() {
+          _webGymStartingPriceByGymId[gymId] = lowest;
+        });
+      }
+    } catch (e) {
+      debugPrint('[HOME] Failed to fetch starting price for gym $gymId: $e');
+    } finally {
+      _webGymPriceLoadInFlight.remove(gymId);
+    }
+  }
+
+  double? _resolveLowestMembershipPrice(MembershipPlan? plan) {
+    if (plan == null) return null;
+
+    double? minPrice;
+
+    if (plan.monthlyOptions.isNotEmpty) {
+      for (final option in plan.monthlyOptions) {
+        if (option.price <= 0) continue;
+        minPrice = minPrice == null
+            ? option.price
+            : (option.price < minPrice ? option.price : minPrice);
+      }
+    }
+
+    if (plan.tiers.isNotEmpty) {
+      for (final tier in plan.tiers) {
+        for (final option in tier.monthlyOptions) {
+          if (option.price <= 0) continue;
+          minPrice = minPrice == null
+              ? option.price
+              : (option.price < minPrice ? option.price : minPrice);
+        }
+      }
+    }
+
+    return minPrice;
+  }
+
   double _resolveGymDistanceKm(Gym gym) {
     if (gym.distance != null && gym.distance! >= 0) return gym.distance!;
     if (_currentPosition == null) return double.infinity;
@@ -2582,6 +2713,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildWebRecommendedGymCard(Gym gym) {
     final distanceKm = _resolveGymDistanceKm(gym);
     final hasDistance = distanceKm.isFinite && distanceKm >= 0;
+    final rating = gym.rating;
+    final reviewCount = gym.reviewCount;
+    final startingPrice = _webGymStartingPriceByGymId[gym.id];
+    final isPriceLoading = _webGymPriceLoadInFlight.contains(gym.id);
 
     return GestureDetector(
       onTap: () {
@@ -2608,27 +2743,69 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: gym.images.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: gym.images.first,
-                      height: 130,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => Container(
-                        height: 130,
-                        color: AppTheme.backgroundColor,
-                        child: const Icon(Icons.fitness_center, color: AppTheme.textSecondary),
-                      ),
-                    )
-                  : Container(
-                      height: 130,
-                      color: AppTheme.backgroundColor,
-                      child: const Center(
-                        child: Icon(Icons.fitness_center, color: AppTheme.textSecondary),
-                      ),
+            Stack(
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: gym.images.isNotEmpty
+                      ? CachedNetworkImage(
+                          imageUrl: gym.images.first,
+                          height: 130,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, __, ___) => Container(
+                            height: 130,
+                            color: AppTheme.backgroundColor,
+                            child: const Icon(Icons.fitness_center, color: AppTheme.textSecondary),
+                          ),
+                        )
+                      : Container(
+                          height: 130,
+                          color: AppTheme.backgroundColor,
+                          child: const Center(
+                            child: Icon(Icons.fitness_center, color: AppTheme.textSecondary),
+                          ),
+                        ),
+                ),
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.68),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white.withOpacity(0.18)),
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          rating > 0 ? rating.toStringAsFixed(1) : '--',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (reviewCount > 0) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            '($reviewCount)',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
             Padding(
               padding: const EdgeInsets.all(12),
@@ -2678,6 +2855,56 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                         ),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: isPriceLoading
+                        ? Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 12,
+                                height: 12,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppTheme.primaryColor.withOpacity(0.8),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _webText('Fetching starting price...', 'शुरुआती कीमत लोड हो रही है...'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context).textTheme.bodySmall?.color,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Text(
+                            startingPrice != null
+                                ? _webText(
+                                    'Starting from INR ${startingPrice.toInt()}/month',
+                                    'शुरुआत INR ${startingPrice.toInt()}/माह से',
+                                  )
+                                : _webText(
+                                    'Membership pricing available on details',
+                                    'कीमतें डिटेल पेज पर उपलब्ध हैं',
+                                  ),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: startingPrice != null
+                                  ? AppTheme.primaryColor
+                                  : Theme.of(context).textTheme.bodySmall?.color,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                   ),
                 ],
               ),
@@ -2772,32 +2999,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildHeroStat(String value, String label) {
+  Widget _buildHeroStat({
+    required IconData icon,
+    required String value,
+    required String label,
+  }) {
     return Container(
-      width: 130,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: 116,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        color: const Color(0x14000000),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(icon, size: 14, color: Colors.white70),
+          const SizedBox(height: 4),
           Text(
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 20,
+              fontSize: 16,
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 1),
           Text(
             label,
             style: TextStyle(
               color: Colors.white.withOpacity(0.8),
-              fontSize: 12,
+              fontSize: 10,
             ),
           ),
         ],
@@ -3271,7 +3504,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       body: _screens[_selectedIndex],
-      floatingActionButton: _selectedIndex == 0 && _showCenterFAB
+      floatingActionButton: _selectedIndex == 0 && _showCenterFAB && !kIsWeb
           ? FloatingActionButton.extended(
               onPressed: () {
                 // Show quick action menu

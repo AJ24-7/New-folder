@@ -19,6 +19,7 @@ class Gym {
   final GymOperatingHours? operatingHours;  // New structured hours
   final double rating;
   final int reviewCount;
+  final int membersCount;
   final double? distance;
   final bool isFavorite;
   final DateTime createdAt;
@@ -44,6 +45,7 @@ class Gym {
     this.operatingHours,
     this.rating = 0.0,
     this.reviewCount = 0,
+    this.membersCount = 0,
     this.distance,
     this.isFavorite = false,
     required this.createdAt,
@@ -175,6 +177,7 @@ class Gym {
           : null,
       rating: safeParseDouble(json['rating']),
       reviewCount: safeParseInt(json['reviewCount']),
+      membersCount: safeParseInt(json['membersCount']),
       distance: json['distance'] != null ? safeParseDouble(json['distance']) : null,
       isFavorite: json['isFavorite'] == true || json['isFavorite'] == 'true',
       createdAt: _safeParseDatetime(json['createdAt']),
@@ -312,6 +315,7 @@ class Gym {
       'operatingHours': operatingHours?.toJson(),
       'rating': rating,
       'reviewCount': reviewCount,
+      'membersCount': membersCount,
       'distance': distance,
       'isFavorite': isFavorite,
       'createdAt': createdAt.toIso8601String(),
@@ -338,6 +342,7 @@ class Gym {
     GymOperatingHours? operatingHours,
     double? rating,
     int? reviewCount,
+    int? membersCount,
     double? distance,
     bool? isFavorite,
     DateTime? createdAt,
@@ -362,6 +367,7 @@ class Gym {
       operatingHours: operatingHours ?? this.operatingHours,
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
+      membersCount: membersCount ?? this.membersCount,
       distance: distance ?? this.distance,
       isFavorite: isFavorite ?? this.isFavorite,
       createdAt: createdAt ?? this.createdAt,
