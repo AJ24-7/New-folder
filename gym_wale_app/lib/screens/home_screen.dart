@@ -63,6 +63,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _webUseNearMeSearch = false;
   final Map<String, double> _webGymStartingPriceByGymId = {};
   final Set<String> _webGymPriceLoadInFlight = {};
+  final Map<String, double> _webGymRatingByGymId = {};
+  final Map<String, int> _webGymReviewCountByGymId = {};
+  final Set<String> _webGymRatingLoadInFlight = {};
 
   // ── Location permission warning for geofence-enabled gyms ───────────────────
   bool _showLocationWarning = false;
@@ -843,6 +846,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         if (kIsWeb) {
           _loadWebGymStartingPrices(filteredGyms);
+          _loadWebGymRatings(filteredGyms);
         }
         
         setState(() {
@@ -1112,6 +1116,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         if (kIsWeb) {
           _loadWebGymStartingPrices(filteredGyms);
+          _loadWebGymRatings(filteredGyms);
         }
         
         setState(() {
@@ -2109,32 +2114,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 26),
               _buildWebCompactSearchContainer(),
               const SizedBox(height: 18),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _buildHeroStat(
-                    icon: Icons.fitness_center,
-                    value: _registeredGymCount > 0
-                        ? _registeredGymCount.toString()
-                        : '--',
-                    label: _webText('Partner Gyms', 'पार्टनर जिम'),
-                  ),
-                  _buildHeroStat(
-                    icon: Icons.groups_rounded,
-                    value: _heroTotalMembers > 0
-                        ? _heroTotalMembers.toString()
-                        : '--',
-                    label: _webText('Total Members', 'कुल सदस्य'),
-                  ),
-                  _buildHeroStat(
-                    icon: Icons.location_city_rounded,
-                    value: _heroTotalCities > 0
-                        ? _heroTotalCities.toString()
-                        : '--',
-                    label: _webText('Cities', 'शहर'),
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final statWidth =
+                      ((constraints.maxWidth - 20) / 3).clamp(76.0, 160.0);
+                  final compact = statWidth < 96;
+
+                  return Row(
+                    children: [
+                      SizedBox(
+                        width: statWidth,
+                        child: _buildHeroStat(
+                          icon: Icons.fitness_center,
+                          value: _registeredGymCount > 0
+                              ? _registeredGymCount.toString()
+                              : '--',
+                          label: _webText('Partner Gyms', 'पार्टनर जिम'),
+                          compact: compact,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: statWidth,
+                        child: _buildHeroStat(
+                          icon: Icons.groups_rounded,
+                          value: _heroTotalMembers > 0
+                              ? _heroTotalMembers.toString()
+                              : '--',
+                          label: _webText('Total Members', 'कुल सदस्य'),
+                          compact: compact,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      SizedBox(
+                        width: statWidth,
+                        child: _buildHeroStat(
+                          icon: Icons.location_city_rounded,
+                          value: _heroTotalCities > 0
+                              ? _heroTotalCities.toString()
+                              : '--',
+                          label: _webText('Cities', 'शहर'),
+                          compact: compact,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -2602,6 +2627,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Future.wait(tasks);
   }
 
+  Future<void> _loadWebGymRatings(List<Gym> gyms) async {
+    if (!kIsWeb || gyms.isEmpty) return;
+
+    final targetGyms = gyms.take(8);
+    final tasks = <Future<void>>[];
+
+    for (final gym in targetGyms) {
+      if (gym.id.isEmpty ||
+          _webGymRatingByGymId.containsKey(gym.id) ||
+          _webGymRatingLoadInFlight.contains(gym.id)) {
+        continue;
+      }
+
+      _webGymRatingLoadInFlight.add(gym.id);
+      tasks.add(_fetchWebGymRating(gym.id));
+    }
+
+    if (tasks.isEmpty) return;
+    await Future.wait(tasks);
+  }
+
+  Future<void> _fetchWebGymRating(String gymId) async {
+    try {
+      final gymDetails = await ApiService.getGymById(gymId);
+      if (gymDetails != null && mounted) {
+        setState(() {
+          _webGymRatingByGymId[gymId] = gymDetails.rating;
+          _webGymReviewCountByGymId[gymId] = gymDetails.reviewCount;
+        });
+      }
+    } catch (e) {
+      debugPrint('[HOME] Failed to fetch rating for gym $gymId: $e');
+    } finally {
+      _webGymRatingLoadInFlight.remove(gymId);
+    }
+  }
+
   Future<void> _fetchWebGymStartingPrice(String gymId) async {
     try {
       final plan = await ApiService.getGymMembershipPlan(gymId);
@@ -2696,7 +2758,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 14),
         SizedBox(
-          height: 220,
+          height: 282,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: recommendedGyms.length > 8 ? 8 : recommendedGyms.length,
@@ -2713,8 +2775,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildWebRecommendedGymCard(Gym gym) {
     final distanceKm = _resolveGymDistanceKm(gym);
     final hasDistance = distanceKm.isFinite && distanceKm >= 0;
-    final rating = gym.rating;
-    final reviewCount = gym.reviewCount;
+    final rating = _webGymRatingByGymId[gym.id] ?? gym.rating;
+    final reviewCount = _webGymReviewCountByGymId[gym.id] ?? gym.reviewCount;
     final startingPrice = _webGymStartingPriceByGymId[gym.id];
     final isPriceLoading = _webGymPriceLoadInFlight.contains(gym.id);
 
@@ -2812,15 +2874,47 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    gym.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Theme.of(context).textTheme.titleMedium?.color,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        width: 30,
+                        height: 30,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Theme.of(context).colorScheme.surface,
+                          border: Border.all(color: Theme.of(context).dividerColor),
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: gym.logoUrl != null && gym.logoUrl!.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: gym.logoUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => const Icon(
+                                  Icons.fitness_center,
+                                  size: 16,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              )
+                            : const Icon(
+                                Icons.fitness_center,
+                                size: 16,
+                                color: AppTheme.textSecondary,
+                              ),
+                      ),
+                      Expanded(
+                        child: Text(
+                          gym.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).textTheme.titleMedium?.color,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Row(
@@ -2856,7 +2950,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const Spacer(),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -2877,12 +2971,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                _webText('Fetching starting price...', 'शुरुआती कीमत लोड हो रही है...'),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Theme.of(context).textTheme.bodySmall?.color,
-                                  fontWeight: FontWeight.w500,
+                              Expanded(
+                                child: Text(
+                                  _webText('Fetching starting price...', 'शुरुआती कीमत लोड हो रही है...'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Theme.of(context).textTheme.bodySmall?.color,
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                               ),
                             ],
@@ -2897,6 +2995,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                     'Membership pricing available on details',
                                     'कीमतें डिटेल पेज पर उपलब्ध हैं',
                                   ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11,
                               color: startingPrice != null
@@ -3003,35 +3103,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     required IconData icon,
     required String value,
     required String label,
+    bool compact = false,
   }) {
     return Container(
-      width: 116,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      width: double.infinity,
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 8 : 10,
+        vertical: compact ? 7 : 9,
+      ),
       decoration: BoxDecoration(
-        color: const Color(0x14000000),
+        color: Colors.white.withOpacity(0.16),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.14)),
+        border: Border.all(color: Colors.white.withOpacity(0.26)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: Colors.white70),
-          const SizedBox(height: 4),
+          Icon(icon, size: compact ? 12 : 14, color: const Color(0xFFFFD166)),
+          SizedBox(height: compact ? 3 : 4),
           Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
+            style: TextStyle(
+              color: Color(0xFFFFD166),
+              fontSize: compact ? 13 : 16,
               fontWeight: FontWeight.w800,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 1),
           Text(
             label,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.8),
-              fontSize: 10,
+              color: const Color(0xFFFFF0BD),
+              fontSize: compact ? 8.5 : 10,
+              fontWeight: FontWeight.w600,
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
