@@ -166,7 +166,7 @@ class Gym {
       pincode: json['location']?['pincode']?.toString() ?? json['pincode']?.toString(),
       phone: json['phone']?.toString(),
       email: json['email']?.toString(),
-      logoUrl: json['logoUrl']?.toString(),
+      logoUrl: (json['logoUrl'] ?? json['logo'])?.toString(),
       images: _safeParseImages(json),
       amenities: _safeParseList(json['amenities']),
       activities: _safeParseActivities(json['activities']),

@@ -43,6 +43,25 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+class _WebMembershipPriceSummary {
+  final double basePrice;
+  final double finalPrice;
+  final int discountPercent;
+  final String durationLabel;
+  final String? tierName;
+
+  const _WebMembershipPriceSummary({
+    required this.basePrice,
+    required this.finalPrice,
+    required this.discountPercent,
+    required this.durationLabel,
+    this.tierName,
+  });
+
+  bool get hasDiscount =>
+      discountPercent > 0 && finalPrice > 0 && finalPrice < basePrice;
+}
+
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _selectedIndex = 0;
   List<Gym> _popularGyms = [];
@@ -61,7 +80,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _heroTotalMembers = 0;
   int _heroTotalCities = 0;
   bool _webUseNearMeSearch = false;
-  final Map<String, double> _webGymStartingPriceByGymId = {};
+  final Map<String, _WebMembershipPriceSummary> _webGymPriceSummaryByGymId =
+      {};
+  final Map<String, String> _webGymLogoByGymId = {};
   final Set<String> _webGymPriceLoadInFlight = {};
   final Map<String, double> _webGymRatingByGymId = {};
   final Map<String, int> _webGymReviewCountByGymId = {};
@@ -891,7 +912,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         
         setState(() {
           _currentPosition = position;
-          _currentCity = city ?? 'Location found';
+          _currentCity = _resolveCityName(city, address);
           _currentAddress = address;
         });
         
@@ -918,6 +939,54 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     }
+  }
+
+  String? _resolveCityName(String? city, String? address) {
+    final cleanedCity = city?.trim();
+    if (cleanedCity != null && cleanedCity.isNotEmpty) {
+      return cleanedCity;
+    }
+
+    final cleanedAddress = address?.trim();
+    if (cleanedAddress == null || cleanedAddress.isEmpty) {
+      return null;
+    }
+
+    final parts = cleanedAddress
+        .split(',')
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .toList();
+
+    if (parts.isEmpty) return null;
+
+    const excluded = {'india', 'bharat'};
+    for (var i = parts.length - 1; i >= 0; i--) {
+      final token = parts[i];
+      final tokenLower = token.toLowerCase();
+      if (excluded.contains(tokenLower)) continue;
+      if (RegExp(r'\d').hasMatch(token)) continue;
+      return token;
+    }
+
+    return parts.first;
+  }
+
+  String _displayLocationLabel() {
+    final city = _currentCity?.trim();
+    if (city == null || city.isEmpty) {
+      return _webText('Around Me', 'मेरे आसपास');
+    }
+
+    final normalized = city.toLowerCase();
+    if (normalized == 'city unavailable' ||
+        normalized == 'location unavailable' ||
+        normalized == 'enable location' ||
+        normalized == 'getting location...') {
+      return _webText('Around Me', 'मेरे आसपास');
+    }
+
+    return city;
   }
   
   /// Load top trainers
@@ -1499,7 +1568,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _currentCity ?? 'Getting location...',
+                                  _displayLocationLabel(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -2356,7 +2425,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               children: [
                 _buildWebSearchCell(
                   icon: Icons.location_on_outlined,
-                  title: _currentCity ?? _webText('Around Me', 'मेरे आसपास'),
+                  title: _displayLocationLabel(),
                   subtitle: _currentAddress ?? _webText('Use your location to discover gyms nearby', 'पास के जिम देखने के लिए लोकेशन का उपयोग करें'),
                   trailing: OutlinedButton.icon(
                     onPressed: () {
@@ -2471,7 +2540,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   flex: 3,
                   child: _buildWebSearchCell(
                     icon: Icons.location_on_outlined,
-                    title: _currentCity ?? _webText('Around Me', 'मेरे आसपास'),
+                    title: _displayLocationLabel(),
                     subtitle: _currentAddress ?? _webText('Use your location to discover gyms nearby', 'पास के जिम देखने के लिए लोकेशन का उपयोग करें'),
                     trailing: OutlinedButton.icon(
                       onPressed: () {
@@ -2614,7 +2683,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     for (final gym in targetGyms) {
       if (gym.id.isEmpty ||
-          _webGymStartingPriceByGymId.containsKey(gym.id) ||
+          _webGymPriceSummaryByGymId.containsKey(gym.id) ||
           _webGymPriceLoadInFlight.contains(gym.id)) {
         continue;
       }
@@ -2655,6 +2724,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         setState(() {
           _webGymRatingByGymId[gymId] = gymDetails.rating;
           _webGymReviewCountByGymId[gymId] = gymDetails.reviewCount;
+          if (gymDetails.logoUrl != null && gymDetails.logoUrl!.isNotEmpty) {
+            _webGymLogoByGymId[gymId] = gymDetails.logoUrl!;
+          }
         });
       }
     } catch (e) {
@@ -2667,10 +2739,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _fetchWebGymStartingPrice(String gymId) async {
     try {
       final plan = await ApiService.getGymMembershipPlan(gymId);
-      final lowest = _resolveLowestMembershipPrice(plan);
-      if (lowest != null && mounted) {
+      final bestPrice = _resolveBestMembershipPrice(plan);
+      if (bestPrice != null && mounted) {
         setState(() {
-          _webGymStartingPriceByGymId[gymId] = lowest;
+          _webGymPriceSummaryByGymId[gymId] = bestPrice;
         });
       }
     } catch (e) {
@@ -2680,32 +2752,57 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  double? _resolveLowestMembershipPrice(MembershipPlan? plan) {
+  _WebMembershipPriceSummary? _resolveBestMembershipPrice(MembershipPlan? plan) {
     if (plan == null) return null;
 
-    double? minPrice;
+    _WebMembershipPriceSummary? best;
+
+    void considerOption(
+      MonthlyOption option, {
+      String? tierName,
+    }) {
+      if (option.price <= 0) return;
+
+      final discountedPrice = option.finalPrice;
+      final discountPercent = option.discount;
+      final candidate = _WebMembershipPriceSummary(
+        basePrice: option.price,
+        finalPrice: discountedPrice,
+        discountPercent: discountPercent,
+        durationLabel: option.durationLabel,
+        tierName: tierName,
+      );
+
+      if (best == null) {
+        best = candidate;
+        return;
+      }
+
+      final candidateWinsOnPrice = candidate.finalPrice < best!.finalPrice;
+      final tieButBetterDiscount =
+          candidate.finalPrice == best!.finalPrice &&
+              candidate.discountPercent > best!.discountPercent;
+
+      if (candidateWinsOnPrice || tieButBetterDiscount) {
+        best = candidate;
+      }
+    }
 
     if (plan.monthlyOptions.isNotEmpty) {
       for (final option in plan.monthlyOptions) {
-        if (option.price <= 0) continue;
-        minPrice = minPrice == null
-            ? option.price
-            : (option.price < minPrice ? option.price : minPrice);
+        considerOption(option);
       }
     }
 
     if (plan.tiers.isNotEmpty) {
       for (final tier in plan.tiers) {
         for (final option in tier.monthlyOptions) {
-          if (option.price <= 0) continue;
-          minPrice = minPrice == null
-              ? option.price
-              : (option.price < minPrice ? option.price : minPrice);
+          considerOption(option, tierName: tier.name);
         }
       }
     }
 
-    return minPrice;
+    return best;
   }
 
   double _resolveGymDistanceKm(Gym gym) {
@@ -2758,7 +2855,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         const SizedBox(height: 14),
         SizedBox(
-          height: 282,
+          height: 320,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: recommendedGyms.length > 8 ? 8 : recommendedGyms.length,
@@ -2777,8 +2874,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final hasDistance = distanceKm.isFinite && distanceKm >= 0;
     final rating = _webGymRatingByGymId[gym.id] ?? gym.rating;
     final reviewCount = _webGymReviewCountByGymId[gym.id] ?? gym.reviewCount;
-    final startingPrice = _webGymStartingPriceByGymId[gym.id];
+    final priceSummary = _webGymPriceSummaryByGymId[gym.id];
     final isPriceLoading = _webGymPriceLoadInFlight.contains(gym.id);
+    final resolvedLogoUrl =
+      (gym.logoUrl != null && gym.logoUrl!.isNotEmpty)
+        ? gym.logoUrl!
+        : (_webGymLogoByGymId[gym.id] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -2886,9 +2987,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           border: Border.all(color: Theme.of(context).dividerColor),
                         ),
                         clipBehavior: Clip.antiAlias,
-                        child: gym.logoUrl != null && gym.logoUrl!.isNotEmpty
+                        child: resolvedLogoUrl.isNotEmpty
                             ? CachedNetworkImage(
-                                imageUrl: gym.logoUrl!,
+                                imageUrl: resolvedLogoUrl,
                                 fit: BoxFit.cover,
                                 errorWidget: (_, __, ___) => const Icon(
                                   Icons.fitness_center,
@@ -2950,61 +3051,165 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                     ],
                   ),
-                  const Spacer(),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: isPriceLoading
-                        ? Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.primaryColor.withOpacity(0.8),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  _webText('Fetching starting price...', 'शुरुआती कीमत लोड हो रही है...'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Theme.of(context).textTheme.bodySmall?.color,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          )
-                        : Text(
-                            startingPrice != null
-                                ? _webText(
-                                    'Starting from INR ${startingPrice.toInt()}/month',
-                                    'शुरुआत INR ${startingPrice.toInt()}/माह से',
-                                  )
-                                : _webText(
-                                    'Membership pricing available on details',
-                                    'कीमतें डिटेल पेज पर उपलब्ध हैं',
-                                  ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: startingPrice != null
-                                  ? AppTheme.primaryColor
-                                  : Theme.of(context).textTheme.bodySmall?.color,
-                              fontWeight: FontWeight.w700,
+                  const SizedBox(height: 10),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () {
+                        if (isPriceLoading) return;
+                        if (priceSummary == null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => GymDetailScreen(gymId: gym.id),
                             ),
+                          );
+                          return;
+                        }
+                        _showWebMembershipPriceDialog(gym, priceSummary);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppTheme.primaryColor.withOpacity(0.2),
                           ),
+                        ),
+                        child: isPriceLoading
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppTheme.primaryColor.withOpacity(0.8),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      _webText('Fetching starting price...', 'शुरुआती कीमत लोड हो रही है...'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context).textTheme.bodySmall?.color,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : priceSummary != null
+                                ? Row(
+                                    children: [
+                                      Expanded(
+                                        child: Wrap(
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          spacing: 6,
+                                          runSpacing: 2,
+                                          children: [
+                                            Text(
+                                              'INR ${priceSummary.finalPrice.toInt()}/month',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w900,
+                                                color: Color.fromARGB(255, 226, 190, 44),
+                                              ),
+                                            ),
+                                            if (priceSummary.hasDiscount)
+                                              Text(
+                                                'INR ${priceSummary.basePrice.toInt()}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  color: Theme.of(context)
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.color,
+                                                  decoration: TextDecoration.lineThrough,
+                                                ),
+                                              ),
+                                            if (priceSummary.hasDiscount)
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                    horizontal: 6, vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.green.withOpacity(0.16),
+                                                  borderRadius: BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  'SAVE ${priceSummary.discountPercent}%',
+                                                  style: TextStyle(
+                                                    color: Colors.green.shade700,
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w800,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            _webText('Details', 'विवरण'),
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppTheme.primaryColor,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(
+                                            Icons.open_in_new,
+                                            size: 14,
+                                            color: AppTheme.primaryColor,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          _webText(
+                                            'Membership pricing available on details',
+                                            'कीमतें डिटेल पेज पर उपलब्ध हैं',
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Theme.of(context)
+                                                .textTheme
+                                                .bodySmall
+                                                ?.color,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _webText('View Plans', 'प्लान देखें'),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppTheme.primaryColor,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -3012,6 +3217,111 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
       ),
+    );
+  }
+
+  void _showWebMembershipPriceDialog(
+    Gym gym,
+    _WebMembershipPriceSummary summary,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  gym.name,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Text(
+                      'INR ${summary.finalPrice.toInt()}/month',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.primaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    if (summary.hasDiscount)
+                      Text(
+                        'INR ${summary.basePrice.toInt()}',
+                        style: TextStyle(
+                          fontSize: 14,
+                          decoration: TextDecoration.lineThrough,
+                          color: Theme.of(context).textTheme.bodySmall?.color,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  summary.tierName != null
+                      ? _webText(
+                          'Best deal for ${summary.durationLabel} in ${summary.tierName} tier',
+                          '${summary.tierName} टियर में ${summary.durationLabel} के लिए सबसे अच्छा ऑफर',
+                        )
+                      : _webText(
+                          'Best deal for ${summary.durationLabel}',
+                          '${summary.durationLabel} के लिए सबसे अच्छा ऑफर',
+                        ),
+                  style: TextStyle(
+                    color: Theme.of(context).textTheme.bodyMedium?.color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (summary.hasDiscount) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _webText(
+                      'You save INR ${(summary.basePrice - summary.finalPrice).toInt()} (${summary.discountPercent}%)',
+                      'आप INR ${(summary.basePrice - summary.finalPrice).toInt()} (${summary.discountPercent}%) बचाते हैं',
+                    ),
+                    style: const TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        this.context,
+                        MaterialPageRoute(
+                          builder: (_) => GymDetailScreen(gymId: gym.id),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(_webText('View Membership Plans', 'मेंबरशिप प्लान देखें')),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

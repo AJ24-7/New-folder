@@ -270,8 +270,8 @@ router.post('/resend-2fa-email', async (req, res) => {
     const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
     const smtpPort = Number(process.env.SMTP_PORT || 465);
     const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
-    const smtpUser = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
-    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+    const smtpUser = process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
+    const smtpPass = process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
     const transporter = nodemailer.createTransport({
       host: smtpHost,
@@ -283,7 +283,7 @@ router.post('/resend-2fa-email', async (req, res) => {
       }
     });
 
-    const fromAddress = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
+    const fromAddress = process.env.MAIL_FORCE_FROM || process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
     
     const mailOptions = {
       from: fromAddress,

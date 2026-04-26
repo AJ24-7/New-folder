@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:carousel_slider/carousel_slider.dart' as cs;
 import 'package:flutter_rating_bar/flutter_rating_bar.dart';
@@ -48,6 +49,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Map<String, dynamic>? _userMembership; // Store raw membership data
   bool _hasActiveMembership = false;
   late PageController _imagePageController;
+  final GlobalKey _plansSectionKey = GlobalKey();
   int _currentImageIndex = 0;
   int _currentOfferIndex = 0;
 
@@ -244,6 +246,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final webFooterPlan = _getWebFooterPlanSummary();
+    final showWebBookNowFooter =
+        kIsWeb && !_hasActiveMembership && webFooterPlan != null;
+
     if (_isLoading) {
       return Scaffold(
         appBar: AppBar(),
@@ -259,6 +265,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     }
 
     return Scaffold(
+      bottomNavigationBar:
+          showWebBookNowFooter ? _buildWebBookNowFooter(webFooterPlan) : null,
       body: Stack(
         children: [
           CustomScrollView(
@@ -345,98 +353,68 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Enhanced Gym Info Card
-                    Container(
-                      margin: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 4),
+                    Align(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 940),
+                        child: Container(
+                          margin: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.08),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Gym Logo
-                                if (_gym!.logoUrl != null && _gym!.logoUrl!.isNotEmpty)
-                                  Container(
-                                    width: 50,
-                                    height: 50,
-                                    margin: const EdgeInsets.only(right: 12),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      border: Border.all(color: AppTheme.primaryColor, width: 2),
-                                      color: Colors.white,
-                                    ),
-                                    child: ClipOval(
-                                      child: CachedNetworkImage(
-                                        imageUrl: _gym!.logoUrl!,
-                                        fit: BoxFit.cover,
-                                        errorWidget: (context, url, error) => const Icon(
-                                          Icons.fitness_center,
-                                          color: AppTheme.primaryColor,
-                                          size: 24,
+                                Row(
+                                  children: [
+                                    // Gym Logo
+                                    if (_gym!.logoUrl != null && _gym!.logoUrl!.isNotEmpty)
+                                      Container(
+                                        width: 46,
+                                        height: 46,
+                                        margin: const EdgeInsets.only(right: 10),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(color: AppTheme.primaryColor, width: 2),
+                                          color: Colors.white,
+                                        ),
+                                        child: ClipOval(
+                                          child: CachedNetworkImage(
+                                            imageUrl: _gym!.logoUrl!,
+                                            fit: BoxFit.cover,
+                                            errorWidget: (context, url, error) => const Icon(
+                                              Icons.fitness_center,
+                                              color: AppTheme.primaryColor,
+                                              size: 24,
+                                            ),
+                                          ),
                                         ),
                                       ),
+                                    Expanded(
+                                      child: Text(
+                                        _gym!.name,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                              color: Theme.of(context).textTheme.titleLarge?.color,
+                                            ),
+                                      ),
                                     ),
-                                  ),
-                                Expanded(
-                                  child: Text(
-                                    _gym!.name,
-                                    style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                                          fontWeight: FontWeight.bold,
-                                          color: Theme.of(context).textTheme.titleLarge?.color,
-                                        ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppTheme.warningColor.withValues(alpha: 0.3),
-                                    AppTheme.secondaryColor.withValues(alpha: 0.2),
+                                    const SizedBox(width: 10),
+                                    _buildCompactRatingBadge(),
                                   ],
                                 ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.star, size: 20, color: AppTheme.warningColor),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _gym!.rating.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                  Text(
-                                    ' (${_gym!.reviewCount} reviews)',
-                                    style: TextStyle(
-                                      color: Theme.of(context).textTheme.bodyMedium?.color,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 20),
+                                const SizedBox(height: 10),
                             
                             // Address with enhanced styling
                             _buildInfoRow(
@@ -446,44 +424,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                               onAction: _openMap,
                             ),
                             
-                            // Timings - New structured format with morning & evening slots
-                            if (_gym!.operatingHours != null) ...[
-                              if (_gym!.operatingHours!.morning?.opening != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 12),
-                                  child: _buildInfoRow(
-                                    icon: Icons.wb_sunny,
-                                    title: 'Morning: ${_formatHHMMTime(_gym!.operatingHours!.morning!.opening)} - ${_formatHHMMTime(_gym!.operatingHours!.morning!.closing)}',
-                                    actionLabel: null,
-                                    onAction: null,
-                                  ),
-                                ),
-                              if (_gym!.operatingHours!.evening?.opening != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 12),
-                                  child: _buildInfoRow(
-                                    icon: Icons.nights_stay,
-                                    title: 'Evening: ${_formatHHMMTime(_gym!.operatingHours!.evening!.opening)} - ${_formatHHMMTime(_gym!.operatingHours!.evening!.closing)}',
-                                    actionLabel: null,
-                                    onAction: null,
-                                  ),
-                                ),
-                            ] else if (_gym!.openingTime != null) ...[
-                              // Fallback to legacy format
-                              Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: _buildInfoRow(
-                                  icon: Icons.access_time,
-                                  title: '${_gym!.openingTime} - ${_gym!.closingTime}',
-                                  actionLabel: null,
-                                  onAction: null,
-                                ),
-                              ),
-                            ],
+                                const SizedBox(height: 10),
+
+                                // Timings - compact, responsive operating hours UI
+                                _buildOperatingHoursSection(),
                             
                             // Active Membership Badge (if user is a member)
                             if (_hasActiveMembership && _userMembership != null) ...[
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 16),
                               _buildActiveMembershipBadge(),
                               const SizedBox(height: 12),
                               // Member Problem Report Button
@@ -543,7 +491,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                               ),
                             ] else ...[
                               // Book Trial Button (only for non-members)
-                              const SizedBox(height: 20),
+                              const SizedBox(height: 16),
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
@@ -570,6 +518,8 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                         ),
                       ),
                     ),
+                      ),
+                    ),
                     const SizedBox(height: 8),
 
                     // Offers Carousel - shown when offers are available
@@ -577,21 +527,25 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
 
                     // Enhanced Tabs with animations - Mobile optimized
                     Container(
+                      key: _plansSectionKey,
                       margin: const EdgeInsets.symmetric(horizontal: 16),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
-                        color: AppTheme.backgroundColor,
+                        color: Theme.of(context).colorScheme.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
+                        ),
                       ),
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Row(
                           children: [
-                            _buildTab('About', Icons.info_outline, 0),
-                            _buildTab('Photos', Icons.photo_library_outlined, 1),
-                            _buildTab('Equipment', Icons.fitness_center, 2),
-                            _buildTab('Plans', Icons.card_membership, 3),
+                            _buildTab('Plans', Icons.card_membership, 0),
+                            _buildTab('About', Icons.info_outline, 1),
+                            _buildTab('Photos', Icons.photo_library_outlined, 2),
+                            _buildTab('Equipment', Icons.fitness_center, 3),
                             _buildTab('Reviews', Icons.rate_review_outlined, 4),
                           ],
                         ),
@@ -605,6 +559,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       padding: const EdgeInsets.all(20),
                       child: _buildTabContent(),
                     ),
+                    if (showWebBookNowFooter) const SizedBox(height: 96),
                   ],
                 ),
               ),
@@ -612,8 +567,291 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           ),
           
           // Floating Chat Button
-          FloatingChatButton(gym: _gym!),
+          if (!showWebBookNowFooter) FloatingChatButton(gym: _gym!),
         ],
+      ),
+    );
+  }
+
+  _WebFooterPlanSummary? _getWebFooterPlanSummary() {
+    final plan = _membershipPlan;
+    if (plan == null || !plan.hasOptions) return null;
+
+    _WebFooterPlanSummary? best;
+
+    if (plan.isMultiTier && plan.tiers.isNotEmpty) {
+      for (final tier in plan.tiers) {
+        final oneMonthOptions =
+            tier.monthlyOptions.where((o) => o.months == 1).toList();
+        if (oneMonthOptions.isEmpty) continue;
+
+        final option = oneMonthOptions.firstWhere(
+          (o) => o.isPopular,
+          orElse: () => oneMonthOptions.first,
+        );
+        final offer = _bestApplicableOfferFor(tierName: tier.name, option: option);
+        final offerDiscount = offer?.calculateDiscount(option.finalPrice) ?? 0.0;
+        final payable = (option.finalPrice - offerDiscount).clamp(0, double.infinity).toDouble();
+        final candidate = _WebFooterPlanSummary(
+          planName: tier.name,
+          note: tier.note,
+          benefits: tier.benefits,
+          option: option,
+          bestOffer: offer,
+          payableAmount: payable,
+        );
+
+        if (best == null || candidate.payableAmount < best.payableAmount) {
+          best = candidate;
+        }
+      }
+      return best;
+    }
+
+    final oneMonthOptions =
+        plan.monthlyOptions.where((o) => o.months == 1).toList();
+    if (oneMonthOptions.isEmpty) return null;
+
+    final option = oneMonthOptions.firstWhere(
+      (o) => o.isPopular,
+      orElse: () => oneMonthOptions.first,
+    );
+    final offer = _bestApplicableOfferFor(option: option);
+    final offerDiscount = offer?.calculateDiscount(option.finalPrice) ?? 0.0;
+
+    return _WebFooterPlanSummary(
+      planName: plan.name,
+      note: plan.note,
+      benefits: plan.benefits,
+      option: option,
+      bestOffer: offer,
+      payableAmount: (option.finalPrice - offerDiscount).clamp(0, double.infinity).toDouble(),
+    );
+  }
+
+  GymOffer? _bestApplicableOfferFor({
+    required MonthlyOption option,
+    String? tierName,
+  }) {
+    final applicable = _offers
+        .where((o) =>
+            o.status == 'active' &&
+            !o.isExpired &&
+            (o.category == 'membership' || o.category == 'all') &&
+            o.appliesTo(tierName: tierName, months: option.months))
+        .toList();
+
+    if (applicable.isEmpty) return null;
+
+    applicable.sort((a, b) {
+      final da = a.calculateDiscount(option.finalPrice);
+      final db = b.calculateDiscount(option.finalPrice);
+      return db.compareTo(da);
+    });
+
+    return applicable.first;
+  }
+
+  Future<bool> _checkLoginBeforeBooking() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (authProvider.isAuthenticated) return true;
+
+    final shouldLogin = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Login Required'),
+        content: const Text('Please login to continue with booking.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Login'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldLogin != true || !mounted) return false;
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+
+    if (!mounted) return false;
+    return Provider.of<AuthProvider>(context, listen: false).isAuthenticated;
+  }
+
+  Future<void> _jumpToMembershipPlansSection() async {
+    setState(() => _selectedTab = 0);
+
+    await Future.delayed(const Duration(milliseconds: 80));
+    if (!mounted) return;
+
+    final targetContext = _plansSectionKey.currentContext;
+    if (targetContext != null) {
+      await Scrollable.ensureVisible(
+        targetContext,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeOutCubic,
+        alignment: 0.05,
+      );
+    }
+  }
+
+  Future<void> _bookFromWebFooter(_WebFooterPlanSummary summary) async {
+    if (_gym == null) return;
+    final canProceed = await _checkLoginBeforeBooking();
+    if (!canProceed || !mounted) return;
+
+    final pricePerMonth =
+        summary.option.months > 0 ? summary.option.price / summary.option.months : summary.option.price;
+    final membership = Membership(
+      id: '',
+      gymId: _gym!.id,
+      name: summary.planName,
+      description: summary.note,
+      price: pricePerMonth,
+      duration: summary.option.months * 30,
+      durationType: 'month',
+      features: summary.benefits,
+      isPopular: summary.option.isPopular,
+      createdAt: DateTime.now(),
+    );
+
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookingScreen(
+          gym: _gym!,
+          membership: membership,
+          selectedMonths: summary.option.months,
+          appliedOffer: summary.bestOffer,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebBookNowFooter(_WebFooterPlanSummary? summary) {
+    if (summary == null) return const SizedBox.shrink();
+
+    final option = summary.option;
+    final hasPlanDiscount = option.discount > 0;
+    final finalPrice = option.finalPrice;
+
+    return SafeArea(
+      top: false,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          border: Border(
+            top: BorderSide(
+              color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
+            ),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: _jumpToMembershipPlansSection,
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${summary.planName} • 1 Month',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          if (hasPlanDiscount) ...[
+                            Text(
+                              '₹${option.price.toStringAsFixed(0)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(context).textTheme.bodySmall?.color,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Text(
+                            '₹${finalPrice.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppTheme.primaryColor,
+                            ),
+                          ),
+                          if (hasPlanDiscount) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '${option.discount}% OFF',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            SizedBox(
+              height: 46,
+              child: ElevatedButton(
+                onPressed: () => _bookFromWebFooter(summary),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: const Text(
+                  'Book Now',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -673,53 +911,236 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
     );
   }
 
-  Widget _buildTab(String title, IconData icon, int index) {
-    final isSelected = _selectedTab == index;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        child: InkWell(
-          onTap: () => setState(() => _selectedTab = index),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(
-              gradient: isSelected
-                  ? LinearGradient(
-                      colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
-                    )
-                  : null,
-              color: isSelected ? null : Theme.of(context).colorScheme.surface,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: AppTheme.primaryColor.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ]
-                  : null,
+  Widget _buildCompactRatingBadge() {
+    final rating = _gym?.rating ?? 0.0;
+    final reviewCount = _gym?.reviewCount ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.warningColor.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: AppTheme.warningColor.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.star_rounded, size: 16, color: AppTheme.warningColor),
+          const SizedBox(width: 4),
+          Text(
+            rating.toStringAsFixed(1),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+          ),
+          if (reviewCount > 0) ...[
+            const SizedBox(width: 4),
+            Text(
+              '($reviewCount)',
+              style: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).textTheme.bodySmall?.color,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-            child: Row(
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperatingHoursSection() {
+    final hasStructuredHours = _gym?.operatingHours != null;
+    final morning = _gym?.operatingHours?.morning;
+    final evening = _gym?.operatingHours?.evening;
+    final hasMorning =
+        morning?.opening != null && (morning!.opening?.isNotEmpty ?? false);
+    final hasEvening =
+        evening?.opening != null && (evening!.opening?.isNotEmpty ?? false);
+
+    if (!hasStructuredHours && _gym?.openingTime == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withValues(alpha: 0.24),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.schedule,
+                size: 18,
+                color: Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Operating Hours',
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          if (hasStructuredHours && (hasMorning || hasEvening))
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (hasMorning)
+                  _buildHourChip(
+                    icon: Icons.wb_sunny,
+                    label: 'Morning',
+                    timeRange:
+                        '${_formatHHMMTime(morning?.opening)} - ${_formatHHMMTime(morning?.closing)}',
+                  ),
+                if (hasEvening)
+                  _buildHourChip(
+                    icon: Icons.nights_stay,
+                    label: 'Evening',
+                    timeRange:
+                        '${_formatHHMMTime(evening?.opening)} - ${_formatHHMMTime(evening?.closing)}',
+                  ),
+              ],
+            )
+          else
+            _buildHourChip(
+              icon: Icons.access_time,
+              label: 'Open',
+              timeRange: '${_gym!.openingTime ?? 'N/A'} - ${_gym!.closingTime ?? 'N/A'}',
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHourChip({
+    required IconData icon,
+    required String label,
+    required String timeRange,
+  }) {
+    final theme = Theme.of(context);
+
+    return Container(
+      constraints: const BoxConstraints(minWidth: 170),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.dividerColor.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: AppTheme.primaryColor),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  icon,
-                  size: 18,
-                  color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
-                ),
-                const SizedBox(width: 6),
                 Text(
-                  title,
+                  label,
                   style: TextStyle(
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                    color: isSelected ? Colors.white : Theme.of(context).textTheme.bodyMedium?.color,
-                    fontSize: 13,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: theme.textTheme.bodyMedium?.color,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  timeRange,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.textTheme.bodySmall?.color,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab(String title, IconData icon, int index) {
+    final isSelected = _selectedTab == index;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _selectedTab = index),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 108),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                gradient: isSelected
+                    ? LinearGradient(
+                        colors: [AppTheme.primaryColor, AppTheme.secondaryColor],
+                      )
+                    : null,
+                color: isSelected ? null : theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.transparent
+                      : theme.dividerColor.withValues(alpha: isDark ? 0.45 : 0.25),
+                ),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.primaryColor.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    icon,
+                    size: 18,
+                    color: isSelected
+                        ? Colors.white
+                        : theme.textTheme.bodyMedium?.color,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      color: isSelected
+                          ? Colors.white
+                          : theme.textTheme.bodyMedium?.color,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -730,13 +1151,13 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   Widget _buildTabContent() {
     switch (_selectedTab) {
       case 0:
-        return _buildAboutTab();
-      case 1:
-        return _buildPhotosTab();
-      case 2:
-        return _buildEquipmentTab();
-      case 3:
         return _buildMembershipsTab();
+      case 1:
+        return _buildAboutTab();
+      case 2:
+        return _buildPhotosTab();
+      case 3:
+        return _buildEquipmentTab();
       case 4:
         return _buildReviewsTab();
       default:
@@ -2454,7 +2875,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
               ElevatedButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  setState(() => _selectedTab = 3); // Switch to Plans tab
+                  setState(() => _selectedTab = 0); // Switch to Plans tab
                 },
                 child: const Text('View Plans'),
               ),
@@ -3299,6 +3720,24 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
   }
 }
 
+class _WebFooterPlanSummary {
+  final String planName;
+  final String note;
+  final List<String> benefits;
+  final MonthlyOption option;
+  final GymOffer? bestOffer;
+  final double payableAmount;
+
+  const _WebFooterPlanSummary({
+    required this.planName,
+    required this.note,
+    required this.benefits,
+    required this.option,
+    required this.bestOffer,
+    required this.payableAmount,
+  });
+}
+
 // Enhanced Membership Plan Card Widget
 class _MembershipPlanCardWidget extends StatefulWidget {
   final MembershipPlan membershipPlan;
@@ -3324,10 +3763,33 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
   int _selectedOptionIndex = 0;
   int _selectedTierIndex = 0;
 
+  PlanTier? get _safeActiveTier {
+    if (!_isMultiTier) return null;
+    if (_selectedTierIndex < 0 ||
+        _selectedTierIndex >= widget.membershipPlan.tiers.length) {
+      return null;
+    }
+    return widget.membershipPlan.tiers[_selectedTierIndex];
+  }
+
+  Color get _benefitTextColor =>
+      Theme.of(context).textTheme.bodyMedium?.color ??
+      (Theme.of(context).brightness == Brightness.dark
+          ? Colors.white
+          : AppTheme.textPrimary);
+
+  Color get _benefitIconColor {
+    if (Theme.of(context).brightness == Brightness.dark &&
+        _activePlanColor.computeLuminance() < 0.32) {
+      return Colors.lightGreenAccent;
+    }
+    return _activePlanColor;
+  }
+
   bool get _isMultiTier => widget.membershipPlan.isMultiTier && widget.membershipPlan.tiers.isNotEmpty;
 
   // Active tier (for multi-tier mode)
-  dynamic get _activeTier => _isMultiTier ? widget.membershipPlan.tiers[_selectedTierIndex] : null;
+  dynamic get _activeTier => _safeActiveTier;
 
   // The list of monthlyOptions relevant to the current tier/plan
   List<MonthlyOption> get _activeOptions => _isMultiTier
@@ -3340,15 +3802,18 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
           : (_activeOptions.isNotEmpty ? _activeOptions.first : null);
 
   Color get _activePlanColor {
-    if (_isMultiTier && _activeTier != null) {
-      try { return Color(int.parse((_activeTier!.color as String).replaceFirst('#', '0xFF'))); } catch (_) {}
+    if (_isMultiTier && _safeActiveTier != null) {
+      try {
+        final tierColor = _safeActiveTier!.color;
+        return Color(int.parse(tierColor.replaceFirst('#', '0xFF')));
+      } catch (_) {}
     }
     return widget.planColor;
   }
 
   IconData get _activePlanIcon {
-    if (_isMultiTier && _activeTier != null) {
-      final iconName = _activeTier!.icon as String;
+    if (_isMultiTier && _safeActiveTier != null) {
+      final iconName = _safeActiveTier!.icon;
       switch (iconName) {
         case 'fa-gem':    return Icons.diamond;
         case 'fa-crown':  return Icons.workspace_premium;
@@ -3361,16 +3826,16 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
     return widget.planIcon;
   }
 
-  String get _activePlanName => _isMultiTier && _activeTier != null
-      ? (_activeTier!.name as String)
+    String get _activePlanName => _isMultiTier && _safeActiveTier != null
+      ? _safeActiveTier!.name
       : widget.membershipPlan.name;
 
-  String get _activePlanNote => _isMultiTier && _activeTier != null
-      ? (_activeTier!.note as String)
+    String get _activePlanNote => _isMultiTier && _safeActiveTier != null
+      ? _safeActiveTier!.note
       : widget.membershipPlan.note;
 
-  List<String> get _activeBenefits => _isMultiTier && _activeTier != null
-      ? List<String>.from(_activeTier!.benefits as List)
+    List<String> get _activeBenefits => _isMultiTier && _safeActiveTier != null
+      ? _safeActiveTier!.benefits.where((b) => b.trim().isNotEmpty).toList()
       : widget.membershipPlan.benefits;
 
   @override
@@ -3552,6 +4017,10 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
   }
 
   Widget _buildCardContent() {
+    final theme = Theme.of(context);
+    final optionBgColor = theme.colorScheme.surfaceContainerHighest;
+    final optionBorderColor = theme.dividerColor.withValues(alpha: 0.45);
+
     final opt = _selectedOption;
     final bestOffer = _bestApplicableOffer;
     final offerDiscount = (opt != null && bestOffer != null)
@@ -3570,9 +4039,14 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
             ..._activeBenefits.map((benefit) => Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Row(children: [
-                Icon(Icons.check_circle, color: _activePlanColor, size: 18),
+                Icon(Icons.check_circle, color: _benefitIconColor, size: 18),
                 const SizedBox(width: 10),
-                Expanded(child: Text(benefit, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                Expanded(
+                  child: Text(
+                    benefit,
+                    style: TextStyle(fontSize: 13, color: _benefitTextColor),
+                  ),
+                ),
               ]),
             )),
             const SizedBox(height: 16),
@@ -3596,12 +4070,22 @@ class _MembershipPlanCardWidgetState extends State<_MembershipPlanCardWidget> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? _activePlanColor : Colors.grey.shade100,
+                    color: isSelected ? _activePlanColor : optionBgColor,
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: isSelected ? _activePlanColor : Colors.grey.shade300, width: 1.5),
+                    border: Border.all(
+                      color: isSelected ? _activePlanColor : optionBorderColor,
+                      width: 1.5,
+                    ),
                   ),
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Text(option.durationLabel, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: isSelected ? Colors.white : AppTheme.textPrimary)),
+                    Text(
+                      option.durationLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: isSelected ? Colors.white : _benefitTextColor,
+                      ),
+                    ),
                     if (option.discount > 0)
                       Text('${option.discount}% off', style: TextStyle(fontSize: 10, color: isSelected ? Colors.white : Colors.green)),
                     if (hasOffer)
@@ -3984,6 +4468,12 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
   }
 
   Widget _buildCardContent() {
+    final theme = Theme.of(context);
+    final benefitTextColor = theme.textTheme.bodyMedium?.color ??
+        (theme.brightness == Brightness.dark ? Colors.white : AppTheme.textPrimary);
+    final optionBgColor = theme.colorScheme.surfaceContainerHighest;
+    final optionBorderColor = theme.dividerColor.withValues(alpha: 0.45);
+
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -4004,9 +4494,9 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
                 Expanded(
                   child: Text(
                     feature,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: AppTheme.textPrimary,
+                      color: benefitTextColor,
                     ),
                   ),
                 ),
@@ -4041,12 +4531,12 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
                         decoration: BoxDecoration(
                           color: isSelected
                               ? widget.planColor
-                              : Colors.grey.shade100,
+                              : optionBgColor,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
                             color: isSelected
                                 ? widget.planColor
-                                : Colors.grey.shade300,
+                                : optionBorderColor,
                             width: 1.5,
                           ),
                         ),
@@ -4055,7 +4545,7 @@ class _MembershipCardWithMonthSelectionState extends State<_MembershipCardWithMo
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : AppTheme.textPrimary,
+                            color: isSelected ? Colors.white : benefitTextColor,
                           ),
                         ),
                       ),
