@@ -267,31 +267,21 @@ router.post('/resend-2fa-email', async (req, res) => {
     // Send OTP via email (use the same function from gymController)
     const nodemailer = require('nodemailer');
     
-    const smtpHost = process.env.SMTP_HOST;
-    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
+    const smtpPort = Number(process.env.SMTP_PORT || 465);
     const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
     const smtpUser = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
     const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
-    const transporter = nodemailer.createTransport(
-      smtpHost
-        ? {
-            host: smtpHost,
-            port: smtpPort,
-            secure: smtpSecure,
-            auth: {
-              user: smtpUser,
-              pass: smtpPass
-            }
-          }
-        : {
-            service: process.env.EMAIL_SERVICE || 'gmail',
-            auth: {
-              user: smtpUser,
-              pass: smtpPass
-            }
-          }
-    );
+    const transporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: smtpPort,
+      secure: smtpSecure,
+      auth: {
+        user: smtpUser,
+        pass: smtpPass
+      }
+    });
 
     const fromAddress = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
     

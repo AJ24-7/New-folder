@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Initialize Firebase Admin SDK (non-blocking — graceful if creds not set)
 const { initializeFirebase } = require('./config/firebase');
@@ -197,60 +197,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// TEMPORARY: Add sample activities to all gyms (for testing)
-app.post('/api/debug/add-activities', async (req, res) => {
-  try {
-    const Gym = mongoose.model('Gym');
-    const sampleActivities = [
-      {
-        name: 'Cardio Training',
-        icon: 'fa-running',
-        description: 'High-intensity cardiovascular exercises to boost endurance and burn calories'
-      },
-      {
-        name: 'Weight Training',
-        icon: 'fa-dumbbell',
-        description: 'Build strength and muscle with free weights and resistance machines'
-      },
-      {
-        name: 'Yoga Classes',
-        icon: 'fa-yoga',
-        description: 'Improve flexibility, balance, and mindfulness through guided yoga sessions'
-      },
-      {
-        name: 'Swimming',
-        icon: 'fa-swimmer',
-        description: 'Full-body aquatic workout suitable for all fitness levels'
-      },
-      {
-        name: 'Cycling',
-        icon: 'fa-bicycle',
-        description: 'Indoor cycling classes for cardio and leg strength training'
-      },
-      {
-        name: 'Boxing',
-        icon: 'fa-boxing',
-        description: 'High-energy boxing and martial arts training sessions'
-      }
-    ];
-    
-    const result = await Gym.updateMany(
-      {},
-      { $set: { activities: sampleActivities } }
-    );
-    
-    res.json({
-      success: true,
-      message: `Updated ${result.modifiedCount} gyms with sample activities`,
-      total: result.matchedCount
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -270,13 +216,6 @@ app.use((req, res) => {
 });
 
 // Start server
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Gym-Wale Backend Server running on port ${PORT}`);
-  console.log(`📍 Local URL: http://localhost:${PORT}/api`);
-  console.log(`📱 Network URL: http://192.168.1.13:${PORT}/api`);
-  console.log(`🔗 Health Check: http://192.168.1.13:${PORT}/api/health`);
-  console.log(`\n✅ Mobile devices on the same WiFi can now connect!`);
-});
+
 
 module.exports = app;

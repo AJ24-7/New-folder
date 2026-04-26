@@ -82,23 +82,16 @@ const generateOTP = () => {
 };
 
 const getEmailTransportConfig = () => {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
+  const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
+  const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
   const user = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
   const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
-  if (host) {
-    return {
-      host,
-      port,
-      secure,
-      auth: { user, pass }
-    };
-  }
-
   return {
-    service: process.env.EMAIL_SERVICE || 'gmail',
+    host,
+    port,
+    secure,
     auth: { user, pass }
   };
 };
