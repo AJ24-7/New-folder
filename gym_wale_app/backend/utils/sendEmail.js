@@ -1,14 +1,33 @@
 const nodemailer = require('nodemailer');
 const { wrapEmail, DEFAULT_BRAND } = require('./emailTemplate');
 
+const smtpHost = process.env.SMTP_HOST;
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+const senderEmail = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
+
 // Create transporter only once
-const transporter = nodemailer.createTransport({
-  service: process.env.EMAIL_SERVICE || 'Gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+const transporter = nodemailer.createTransport(
+  smtpHost
+    ? {
+        host: smtpHost,
+        port: smtpPort,
+        secure: smtpSecure,
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      }
+    : {
+        service: process.env.EMAIL_SERVICE || 'Gmail',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass
+        }
+      }
+);
 
 // Generate simple text version of email content
 function generateTextVersion(options) {
@@ -90,7 +109,7 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   });
 
   console.log('[SendEmail] Prepared email', { to, subject, wrapped: !skipWrap });
-  console.log('[SendEmail] From user configured:', !!process.env.EMAIL_USER);
+  console.log('[SendEmail] Sender configured:', !!senderEmail);
   
   // Debug: Log the HTML content length
   console.log('[SendEmail] HTML content length:', finalHtml.length);
@@ -109,8 +128,12 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   const textContent = generateTextVersion(options);
 
   try {
+    const fromAddress = senderEmail
+      ? `${process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name} <${senderEmail}>`
+      : process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name;
+
     const mailOptions = {
-      from: `${process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name} <${process.env.EMAIL_USER}>`,
+      from: fromAddress,
       to,
       subject,
       html: finalHtml,

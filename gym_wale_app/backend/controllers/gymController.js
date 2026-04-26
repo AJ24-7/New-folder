@@ -81,19 +81,38 @@ const generateOTP = () => {
     return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
+const getEmailTransportConfig = () => {
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+  const user = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+
+  if (host) {
+    return {
+      host,
+      port,
+      secure,
+      auth: { user, pass }
+    };
+  }
+
+  return {
+    service: process.env.EMAIL_SERVICE || 'gmail',
+    auth: { user, pass }
+  };
+};
+
+const getFromAddress = () =>
+  process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER;
+
 // Send OTP via email with enhanced HTML template
 const sendOTPEmail = async (email, otp, gymName = 'Gym Admin') => {
     try {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            }
-        });
+    const transporter = nodemailer.createTransport(getEmailTransportConfig());
         
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+      from: getFromAddress(),
             to: email,
             subject: 'Password Reset OTP - Gym Admin',
             html: `
@@ -151,16 +170,10 @@ const sendOTPEmail = async (email, otp, gymName = 'Gym Admin') => {
 // Send 2FA OTP via email
 const send2FAEmail = async (email, otp, gymName) => {
     try {
-        const transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASS
-            }
-        });
+    const transporter = nodemailer.createTransport(getEmailTransportConfig());
         
         const mailOptions = {
-            from: process.env.EMAIL_USER,
+      from: getFromAddress(),
             to: email,
             subject: 'Two-Factor Authentication Code - Gym Admin Login',
             html: `

@@ -267,16 +267,36 @@ router.post('/resend-2fa-email', async (req, res) => {
     // Send OTP via email (use the same function from gymController)
     const nodemailer = require('nodemailer');
     
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+    const smtpHost = process.env.SMTP_HOST;
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+    const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+    const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
+
+    const transporter = nodemailer.createTransport(
+      smtpHost
+        ? {
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpSecure,
+            auth: {
+              user: smtpUser,
+              pass: smtpPass
+            }
+          }
+        : {
+            service: process.env.EMAIL_SERVICE || 'gmail',
+            auth: {
+              user: smtpUser,
+              pass: smtpPass
+            }
+          }
+    );
+
+    const fromAddress = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
     
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: fromAddress,
       to: email,
       subject: 'Two-Factor Authentication Code - Gym Admin Login',
       html: `

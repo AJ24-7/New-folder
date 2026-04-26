@@ -4,12 +4,12 @@ const sendEmail = require('../utils/sendEmail');
 class EmailService {
     constructor() {
         this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: process.env.SMTP_PORT || 587,
-            secure: false,
+            host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+            port: process.env.SMTP_PORT || 465,
+            secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT || 465) === 465,
             auth: {
-                user: process.env.SMTP_USER || 'your-email@gmail.com',
-                pass: process.env.SMTP_PASS || 'your-app-password'
+                user: process.env.SMTP_USER || process.env.SUPPORT_EMAIL || 'Support@gym-wale.com',
+                pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || 'your-hostinger-mailbox-password'
             }
         });
     }
