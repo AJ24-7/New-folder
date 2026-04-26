@@ -217,5 +217,19 @@ app.use((req, res) => {
 
 // Start server
 
+const PORT = Number(process.env.PORT) || 5000;
+const HOST = '0.0.0.0';
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`🚀 Server listening on ${HOST}:${PORT}`);
+  console.log(`🌐 Health check: /health and /api/health`);
+  console.log(`🧭 Environment: ${process.env.NODE_ENV || 'development'}`);
+});
+
+server.on('error', (error) => {
+  console.error('❌ Server startup error:', error.message);
+  process.exit(1);
+});
+
 
 module.exports = app;
