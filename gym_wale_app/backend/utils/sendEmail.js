@@ -4,7 +4,7 @@ const { wrapEmail, DEFAULT_BRAND } = require('./emailTemplate');
 const smtpHost = process.env.SMTP_HOST;
 const smtpPort = Number(process.env.SMTP_PORT || 587);
 const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
-const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
+const smtpUser = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
 const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 const senderEmail = process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
 

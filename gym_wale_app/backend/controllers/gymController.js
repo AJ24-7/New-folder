@@ -85,7 +85,7 @@ const getEmailTransportConfig = () => {
   const host = process.env.SMTP_HOST;
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  const user = process.env.SMTP_USER || process.env.EMAIL_USER;
+  const user = process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
   const pass = process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
   if (host) {
@@ -104,7 +104,7 @@ const getEmailTransportConfig = () => {
 };
 
 const getFromAddress = () =>
-  process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER;
+  process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
 
 // Send OTP via email with enhanced HTML template
 const sendOTPEmail = async (email, otp, gymName = 'Gym Admin') => {
@@ -124,7 +124,7 @@ const sendOTPEmail = async (email, otp, gymName = 'Gym Admin') => {
                     <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 10px 10px; border: 1px solid #e9ecef;">
                         <h2 style="color: #333; margin-top: 0;">Reset Your Password</h2>
                         <p style="color: #666; font-size: 16px; line-height: 1.5;">
-                            Hello from <strong>${gymName}</strong>,
+                            Hello from <strong>Gym-Wale</strong>,
                         </p>
                         <p style="color: #666; font-size: 16px; line-height: 1.5;">
                             We received a request to reset your password. To complete the password reset process, please enter the verification code below:

@@ -8,8 +8,8 @@ class EmailService {
             port: process.env.SMTP_PORT || 465,
             secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT || 465) === 465,
             auth: {
-                user: process.env.SMTP_USER || process.env.SUPPORT_EMAIL || 'Support@gym-wale.com',
-                pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || 'your-hostinger-mailbox-password'
+                user: process.env.SUPPORT_EMAIL || process.env.SMTP_USER || 'Support@gym-wale.com',
+                pass: process.env.SMTP_PASS || process.env.EMAIL_PASS || 'your-email-password'
             }
         });
     }
