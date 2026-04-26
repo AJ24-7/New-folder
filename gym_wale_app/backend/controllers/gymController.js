@@ -92,6 +92,9 @@ const getEmailTransportConfig = () => {
     host,
     port,
     secure,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000),
     auth: { user, pass }
   };
 };
@@ -598,15 +601,9 @@ exports.validateToken = async (req, res) => {
 // Request Password Change OTP (moved from gymadminController)
 exports.requestPasswordChangeOTP = async (req, res) => {
     const { email } = req.body;
-    console.log('🔍 OTP Request - Email:', email);
-    console.log('🔍 Database:', mongoose.connection.name);
-    console.log('🔍 Collection:', mongoose.connection.collections.gyms ? 'gyms exists' : 'gyms NOT FOUND');
+  console.log('🔍 OTP Request - Email:', email);
     
     try {
-        // First, let's see all gyms in the database
-        const allGyms = await Gym.find({}, 'email gymName').limit(5);
-        console.log('📋 Sample gyms in database:', allGyms.map(g => ({ email: g.email, name: g.gymName })));
-        
         // Case-insensitive email search
         const adminUser = await Gym.findOne({ 
             email: { $regex: new RegExp(`^${email}$`, 'i') } 
@@ -627,17 +624,21 @@ exports.requestPasswordChangeOTP = async (req, res) => {
         await adminUser.save();
         
         console.log('✅ OTP generated:', otp, '| Expires:', otpExpiry);
-        
-        // Send OTP via email with gym name
-        const emailResult = await sendOTPEmail(adminUser.email, otp, adminUser.gymName || 'Gym Admin');
-        
-        if (emailResult.success) {
-            console.log('✅ OTP email sent successfully to:', adminUser.email);
-            res.json({ success: true, message: 'OTP sent to your email. Please check your inbox.', email: adminUser.email });
-        } else {
-            console.error('❌ Failed to send OTP email:', emailResult.error);
-            res.status(500).json({ success: false, message: 'Failed to send OTP email. Please try again.' });
-        }
+
+        // Respond immediately to avoid client-side timeout; send email in background.
+        res.json({ success: true, message: 'OTP generated. Please check your email inbox shortly.', email: adminUser.email });
+
+        sendOTPEmail(adminUser.email, otp, adminUser.gymName || 'Gym Admin')
+          .then((emailResult) => {
+            if (emailResult.success) {
+              console.log('✅ OTP email sent successfully to:', adminUser.email);
+            } else {
+              console.error('❌ Failed to send OTP email:', emailResult.error);
+            }
+          })
+          .catch((emailError) => {
+            console.error('❌ Background OTP email dispatch failed:', emailError.message);
+          });
     } catch (err) {
         console.error('❌ OTP request error:', err);
         res.status(500).json({ success: false, message: 'Server error during OTP generation.' });
