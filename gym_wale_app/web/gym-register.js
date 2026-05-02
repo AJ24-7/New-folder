@@ -264,8 +264,11 @@ function displayMembershipPlans() {
     }
     
     container.innerHTML = membershipPlans.map((plan, index) => {
-        const discount = plan.discount || 0;
-        const originalPrice = discount > 0 ? Math.round(plan.price / (1 - discount / 100)) : null;
+        const discount = normalizeDiscount(plan.discount);
+        const finalPrice = resolvePlanFinalPrice(plan);
+        const originalPrice = Number.isFinite(plan.originalPrice) && plan.originalPrice > finalPrice
+            ? plan.originalPrice
+            : (discount > 0 ? plan.price : null);
         const tierName = plan.tierName ? `<div class="plan-tier">${escapeHtml(plan.tierName)}</div>` : '';
         const popularBadge = plan.isPopular ? '<div class="plan-popular-tag">Most Popular</div>' : '';
         
@@ -275,7 +278,7 @@ function displayMembershipPlans() {
                 ${tierName}
                 <div class="plan-duration">${plan.months} Month${plan.months > 1 ? 's' : ''}</div>
                 <div class="plan-price">
-                    ₹${plan.price.toLocaleString('en-IN')}
+                    ₹${finalPrice.toLocaleString('en-IN')}
                     ${originalPrice ? `<span class="plan-original-price">₹${originalPrice.toLocaleString('en-IN')}</span>` : ''}
                 </div>
                 ${discount > 0 ? `<div class="plan-discount">Save ${discount}%</div>` : ''}
@@ -292,6 +295,8 @@ function normalizeMembershipPlans(data) {
             const durationDays = Number(item?.duration || 0);
             const months = durationDays > 0 ? Math.max(1, Math.round(durationDays / 30)) : 1;
             const price = Number(item?.price);
+            const discount = normalizeDiscount(item?.discount);
+            const pricing = calculatePlanPricing(price, discount, item?.finalPrice, item?.originalPrice);
 
             if (!Number.isFinite(price) || price <= 0) {
                 return;
@@ -300,7 +305,9 @@ function normalizeMembershipPlans(data) {
             plans.push({
                 months,
                 price,
-                discount: 0,
+                discount,
+                finalPrice: pricing.finalPrice,
+                originalPrice: pricing.originalPrice,
                 isPopular: Boolean(item?.isPopular),
                 tierName: item?.name || null
             });
@@ -341,7 +348,9 @@ function normalizeMembershipPlans(data) {
 
 function normalizeMonthlyOption(option, tierName) {
     const months = Number(option?.months);
-    const price = Number(option?.price ?? option?.finalPrice);
+    const price = Number(option?.price ?? option?.originalPrice ?? option?.finalPrice);
+    const discount = normalizeDiscount(option?.discount);
+    const pricing = calculatePlanPricing(price, discount, option?.finalPrice, option?.originalPrice);
 
     if (!Number.isFinite(months) || months <= 0 || !Number.isFinite(price) || price <= 0) {
         return null;
@@ -350,10 +359,56 @@ function normalizeMonthlyOption(option, tierName) {
     return {
         months,
         price,
-        discount: Number(option?.discount || 0),
+        discount,
+        finalPrice: pricing.finalPrice,
+        originalPrice: pricing.originalPrice,
         isPopular: Boolean(option?.isPopular),
         tierName: tierName || null
     };
+}
+
+function normalizeDiscount(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue) || numberValue <= 0) {
+        return 0;
+    }
+    return Math.min(100, Math.max(0, numberValue));
+}
+
+function calculatePlanPricing(price, discount, finalPrice, originalPrice) {
+    const resolvedPrice = Number(price);
+    const resolvedFinal = Number(finalPrice);
+    const resolvedOriginal = Number(originalPrice);
+
+    if (!Number.isFinite(resolvedPrice) || resolvedPrice <= 0) {
+        return { finalPrice: null, originalPrice: null };
+    }
+
+    if (Number.isFinite(resolvedFinal) && resolvedFinal > 0) {
+        return {
+            finalPrice: resolvedFinal,
+            originalPrice: Number.isFinite(resolvedOriginal) && resolvedOriginal > resolvedFinal ? resolvedOriginal : null
+        };
+    }
+
+    if (discount > 0) {
+        const discounted = Math.max(0, Math.round(resolvedPrice - (resolvedPrice * discount) / 100));
+        return {
+            finalPrice: discounted,
+            originalPrice: resolvedPrice
+        };
+    }
+
+    return { finalPrice: resolvedPrice, originalPrice: null };
+}
+
+function resolvePlanFinalPrice(plan) {
+    if (!plan) {
+        return 0;
+    }
+
+    const value = Number(plan.finalPrice ?? plan.price);
+    return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function normalizeActivities(activities) {
@@ -400,14 +455,38 @@ function renderActivitiesIntoContainer(containerId, inputName) {
             return '';
         }
 
+        const iconClass = resolveActivityIconClass(activity.icon);
+        const iconMarkup = iconClass
+            ? `<span class="activity-icon"><i class="${escapeHtml(iconClass)}"></i></span>`
+            : '<span class="activity-icon activity-icon-fallback"></span>';
+
         const safeId = `${containerId}-${index}`;
         return `
             <label class="checkbox-label activity-chip" for="${safeId}">
                 <input type="checkbox" id="${safeId}" name="${inputName}" value="${escapeHtml(value)}">
+                ${iconMarkup}
                 <span>${escapeHtml(value)}</span>
             </label>
         `;
     }).join('');
+}
+
+function resolveActivityIconClass(icon) {
+    if (!icon) {
+        return '';
+    }
+
+    const trimmed = String(icon).trim();
+    if (!trimmed) {
+        return '';
+    }
+
+    const hasPrefix = /(^|\s)(fa|fas|far|fal|fab|fa-solid|fa-regular|fa-light|fa-brands)\s/.test(trimmed);
+    if (hasPrefix) {
+        return trimmed;
+    }
+
+    return `fa-solid ${trimmed}`;
 }
 
 function escapeHtml(value) {
@@ -489,10 +568,11 @@ function previousStep(step) {
 
 // Update Payment Summary
 function updatePaymentSummary() {
+    const finalPrice = resolvePlanFinalPrice(selectedPlan);
     document.getElementById('summaryName').textContent = memberData.name || '-';
     document.getElementById('summaryPlan').textContent = resolvePlanTier(selectedPlan.months);
     document.getElementById('summaryDuration').textContent = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
-    document.getElementById('summaryAmount').textContent = `₹${selectedPlan.price.toLocaleString('en-IN')}`;
+    document.getElementById('summaryAmount').textContent = `₹${finalPrice.toLocaleString('en-IN')}`;
 }
 
 function resolvePlanTier(months) {
@@ -607,6 +687,7 @@ async function submitNewMember() {
 
         const monthlyPlan = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
         const paymentMode = normalizePaymentMode(paymentMethod);
+        const finalPrice = resolvePlanFinalPrice(selectedPlan);
 
         const data = {
             gymId: gymId,
@@ -621,16 +702,17 @@ async function submitNewMember() {
             planSelected: resolvePlanTier(selectedPlan.months),
             monthlyPlan,
             paymentMode,
-            paymentAmount: selectedPlan.price,
+            paymentAmount: finalPrice,
             membershipPlan: {
                 months: selectedPlan.months,
                 price: selectedPlan.price,
+                finalPrice,
                 discount: selectedPlan.discount || 0,
                 tier: resolvePlanTier(selectedPlan.months)
             },
             payment: {
                 method: paymentMode,
-                amount: selectedPlan.price,
+                amount: finalPrice,
                 transactionId: transactionId || null
             }
         };

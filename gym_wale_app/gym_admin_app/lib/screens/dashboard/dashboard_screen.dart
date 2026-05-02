@@ -4511,7 +4511,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ...opts.asMap().entries.map((entry) {
                   final idx = entry.key;
                   final opt = entry.value;
-                  // Local controllers kept stable per index (recreated on rebuild but values are set)
                   final mCtrl = TextEditingController(
                     text: opt.months.toString(),
                   );
@@ -4520,15 +4519,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                   final dCtrl = TextEditingController(
                     text: opt.discount.toString(),
-                  );
-                  mCtrl.selection = TextSelection.collapsed(
-                    offset: mCtrl.text.length,
-                  );
-                  pCtrl.selection = TextSelection.collapsed(
-                    offset: pCtrl.text.length,
-                  );
-                  dCtrl.selection = TextSelection.collapsed(
-                    offset: dCtrl.text.length,
                   );
                   return Card(
                     margin: const EdgeInsets.only(bottom: 10),
@@ -4553,8 +4543,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           final updated =
                                               List<MonthlyOption>.from(opts);
                                           updated[idx] = opt.copyWith(
-                                            months:
-                                                int.tryParse(v) ?? opt.months,
+                                            months: int.tryParse(v) ?? 0,
                                           );
                                           onUpdate(updated);
                                         },
@@ -4574,8 +4563,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           final updated =
                                               List<MonthlyOption>.from(opts);
                                           updated[idx] = opt.copyWith(
-                                            price:
-                                                double.tryParse(v) ?? opt.price,
+                                            price: double.tryParse(v) ?? 0,
                                           );
                                           onUpdate(updated);
                                         },
@@ -4599,8 +4587,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           final updated =
                                               List<MonthlyOption>.from(opts);
                                           updated[idx] = opt.copyWith(
-                                            discount:
-                                                int.tryParse(v) ?? opt.discount,
+                                            discount: int.tryParse(v) ?? 0,
                                           );
                                           onUpdate(updated);
                                         },
@@ -4673,7 +4660,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         opts,
                                       );
                                       updated[idx] = opt.copyWith(
-                                        months: int.tryParse(v) ?? opt.months,
+                                        months: int.tryParse(v) ?? 0,
                                       );
                                       onUpdate(updated);
                                     },
@@ -4693,7 +4680,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         opts,
                                       );
                                       updated[idx] = opt.copyWith(
-                                        price: double.tryParse(v) ?? opt.price,
+                                        price: double.tryParse(v) ?? 0,
                                       );
                                       onUpdate(updated);
                                     },
@@ -4714,8 +4701,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                         opts,
                                       );
                                       updated[idx] = opt.copyWith(
-                                        discount:
-                                            int.tryParse(v) ?? opt.discount,
+                                        discount: int.tryParse(v) ?? 0,
                                       );
                                       onUpdate(updated);
                                     },
@@ -5353,6 +5339,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               ElevatedButton(
                 onPressed: () async {
+                  bool hasInvalidPricing(List<MonthlyOption> options) {
+                    return options.any(
+                      (opt) => opt.months <= 0 || opt.price <= 0,
+                    );
+                  }
+
                   // Validate
                   if (planMode == 'single') {
                     if (nameController.text.trim().isEmpty) {
@@ -5367,6 +5359,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('Add at least one pricing option'),
+                        ),
+                      );
+                      return;
+                    }
+                    if (hasInvalidPricing(monthOptions)) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'Months and amount must be greater than 0',
+                          ),
                         ),
                       );
                       return;
@@ -5392,6 +5394,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           SnackBar(
                             content: Text(
                               'Tier "${t.name}" needs at least one pricing option',
+                            ),
+                          ),
+                        );
+                        return;
+                      }
+                      if (hasInvalidPricing(t.monthlyOptions)) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Tier "${t.name}": months and amount must be greater than 0',
                             ),
                           ),
                         );

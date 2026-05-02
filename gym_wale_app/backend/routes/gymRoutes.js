@@ -211,19 +211,29 @@ router.get('/:id/membership-plans', async (req, res) => {
     }
 
     // Transform to match frontend Membership model
-    const memberships = plans.map((plan, index) => ({
-      id: `${req.params.id}_${plan.name}`,
-      _id: `${req.params.id}_${plan.name}`,
-      gymId: req.params.id,
-      name: plan.name,
-      description: plan.note || `${plan.name} membership plan`,
-      price: plan.price,
-      duration: plan.discountMonths > 0 ? plan.discountMonths * 30 : 30, // days
-      durationType: plan.discountMonths > 0 ? 'month' : 'month',
-      features: plan.benefits || [],
-      isPopular: plan.name === 'Standard',
-      createdAt: new Date().toISOString()
-    }));
+    const memberships = plans.map((plan, index) => {
+      const discount = Number(plan.discount || 0);
+      const finalPrice = discount > 0
+        ? Math.max(0, Math.round(plan.price - (plan.price * discount) / 100))
+        : plan.price;
+
+      return {
+        id: `${req.params.id}_${plan.name}`,
+        _id: `${req.params.id}_${plan.name}`,
+        gymId: req.params.id,
+        name: plan.name,
+        description: plan.note || `${plan.name} membership plan`,
+        price: plan.price,
+        originalPrice: plan.price,
+        finalPrice,
+        discount,
+        duration: plan.discountMonths > 0 ? plan.discountMonths * 30 : 30, // days
+        durationType: plan.discountMonths > 0 ? 'month' : 'month',
+        features: plan.benefits || [],
+        isPopular: plan.name === 'Standard',
+        createdAt: new Date().toISOString()
+      };
+    });
 
     res.json({ 
       success: true, 

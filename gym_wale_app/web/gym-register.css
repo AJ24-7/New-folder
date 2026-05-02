@@ -423,6 +423,22 @@ body {
     background: #edf4ff;
 }
 
+.activity-chip .activity-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e8f1ff;
+    color: var(--primary-color);
+    flex-shrink: 0;
+}
+
+.activity-chip .activity-icon-fallback {
+    background: #edf2f7;
+}
+
 /* Membership Plans */
 .membership-plans {
     display: grid;

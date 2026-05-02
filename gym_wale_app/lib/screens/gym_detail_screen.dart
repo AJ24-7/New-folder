@@ -28,8 +28,13 @@ import 'report_problem_screen.dart';
 
 class GymDetailScreen extends StatefulWidget {
   final String gymId;
+  final bool openMembershipPlans;
 
-  const GymDetailScreen({Key? key, required this.gymId}) : super(key: key);
+  const GymDetailScreen({
+    Key? key,
+    required this.gymId,
+    this.openMembershipPlans = false,
+  }) : super(key: key);
 
   @override
   State<GymDetailScreen> createState() => _GymDetailScreenState();
@@ -159,6 +164,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
           _isFavorite = isFav;
           _isLoading = false;
         });
+
+        if (widget.openMembershipPlans) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _jumpToMembershipPlansSection();
+            }
+          });
+        }
       }
     } catch (e) {
       print('Error loading gym details: $e');
@@ -1002,14 +1015,14 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                     icon: Icons.wb_sunny,
                     label: 'Morning',
                     timeRange:
-                        '${_formatHHMMTime(morning?.opening)} - ${_formatHHMMTime(morning?.closing)}',
+                        '${_formatHHMMTime(morning.opening)} - ${_formatHHMMTime(morning.closing)}',
                   ),
                 if (hasEvening)
                   _buildHourChip(
                     icon: Icons.nights_stay,
                     label: 'Evening',
                     timeRange:
-                        '${_formatHHMMTime(evening?.opening)} - ${_formatHHMMTime(evening?.closing)}',
+                        '${_formatHHMMTime(evening.opening)} - ${_formatHHMMTime(evening.closing)}',
                   ),
               ],
             )

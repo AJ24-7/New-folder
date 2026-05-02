@@ -159,7 +159,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       // Skip geofence checks on web platform
       if (kIsWeb) {
-        debugPrint('[HOME] Web platform detected - Skipping geofence checks');
+        // debugPrint('[HOME] Web platform detected - Skipping geofence checks');
         return;
       }
       
@@ -167,12 +167,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final user = authProvider.user;
       
       if (user == null) {
-        debugPrint('[HOME] User not authenticated, skipping geofence check');
+        // debug// print('[HOME] User not authenticated, skipping geofence check');
         return; // User not logged in
       }
 
       // Get user's active memberships
-      debugPrint('[HOME] Checking geofence settings for active memberships');
+      // debug// print('[HOME] Checking geofence settings for active memberships');
       final activeMemberships = await ApiService.getActiveMemberships();
       
       if (activeMemberships.isEmpty) {
@@ -207,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // ── Always fetch attendance settings and configure geofence ──────────
         // This MUST happen every time the app opens, regardless of whether
         // the daily warning dialog has already been shown today.
-        debugPrint('[HOME] Fetching attendance settings for gym: $gymId ($gymName)');
+        // debug// print('[HOME] Fetching attendance settings for gym: $gymId ($gymName)');
         final response = await ApiService.getGymAttendanceSettings(gymId);
 
         if (response['success'] != true) continue;
@@ -217,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 settings['mode'] == 'geofence' ||
                                 settings['mode'] == 'hybrid';
 
-        debugPrint('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
+        // debug// print('[HOME] Gym $gymId geofence enabled: $geofenceEnabled');
 
         if (geofenceEnabled) {
           // ── Frozen membership check ─────────────────────────────────────────
@@ -226,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           final isFrozen = membership['currentlyFrozen'] == true;
           await ForegroundTaskService.persistFrozenMembership(isFrozen);
           if (isFrozen) {
-            debugPrint('[HOME] Membership frozen for gym $gymId — geofence paused');
+            // debug// print('[HOME] Membership frozen for gym $gymId — geofence paused');
             continue;
           }
 
@@ -247,16 +247,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // not just the first time the permission warning is shown.
           if (!geofencingService.isServiceRunning ||
               geofencingService.currentGymId != gymId) {
-            debugPrint('[HOME] Auto-configuring geofence for gym: $gymId ($gymName)');
+            // debug// print('[HOME] Auto-configuring geofence for gym: $gymId ($gymName)');
             try {
               final attendanceProvider =
                   Provider.of<AttendanceProvider>(context, listen: false);
               await attendanceProvider.setupGeofencingWithSettings(gymId);
             } catch (autoSetupErr) {
-              debugPrint('[HOME] Auto geofence setup failed: $autoSetupErr');
+              // debug// print('[HOME] Auto geofence setup failed: $autoSetupErr');
             }
           } else {
-            debugPrint('[HOME] Geofence already running for gym $gymId — skipping setup');
+            // debug// print('[HOME] Geofence already running for gym $gymId — skipping setup');
           }
         }
 
@@ -271,36 +271,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           continue; // Geofence off, or warning already shown today
         }
 
-        debugPrint('[HOME] Checking if should show location warning for gym: $gymName');
+        // debug// print('[HOME] Checking if should show location warning for gym: $gymName');
         try {
           final shouldShow = await BackgroundLocationWarningDialog.shouldShow(
             geofencingService: geofencingService,
             geofenceEnabled: geofenceEnabled,
           );
 
-          debugPrint('[HOME] Should show warning: $shouldShow');
+          // debug// print('[HOME] Should show warning: $shouldShow');
 
           if (shouldShow && mounted) {
             await Future.delayed(const Duration(milliseconds: 800));
             if (mounted) {
-              debugPrint('[HOME] Showing location warning dialog for gym: $gymName');
+              // debug// print('[HOME] Showing location warning dialog for gym: $gymName');
               await BackgroundLocationWarningDialog.show(
                 context: context,
                 gymName: gymName,
                 geofencingService: geofencingService,
               );
               await prefs.setInt('geofence_warning_shown_$gymId', now);
-              debugPrint('[HOME] Location warning shown and marked in preferences');
+              // debug// print('[HOME] Location warning shown and marked in preferences');
             }
             break; // Only show warning for one gym at a time
           }
         } catch (warningError) {
-          debugPrint('[HOME] Error showing location warning: $warningError');
+          // debug// print('[HOME] Error showing location warning: $warningError');
           continue;
         }
       }
     } catch (e) {
-      debugPrint('[HOME] Error checking geofence settings: $e');
+      // debug// print('[HOME] Error checking geofence settings: $e');
       // Silently fail - don't disrupt user experience
     }
   }
@@ -695,12 +695,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _activeMembershipsData = activeMemberships;
       });
       
-      print('[HOME] Loaded ${_activeGymIds.length} active gym memberships');
+      // print('[HOME] Loaded ${_activeGymIds.length} active gym memberships');
       if (_activeGymIds.isNotEmpty) {
-        print('[HOME] Active gym IDs: $_activeGymIds');
+        // print('[HOME] Active gym IDs: $_activeGymIds');
       }
     } catch (e) {
-      print('[HOME] Error loading active memberships: $e');
+      // print('[HOME] Error loading active memberships: $e');
     }
   }
 
@@ -712,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _showCenterFAB = prefs.getBool('show_center_fab') ?? true;
       });
     } catch (e) {
-      print('Error loading preferences: $e');
+      // print('Error loading preferences: $e');
     }
   }
 
@@ -725,7 +725,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _showCenterFAB = value;
       });
     } catch (e) {
-      print('Error saving FAB preference: $e');
+      // print('Error saving FAB preference: $e');
     }
   }
 
@@ -804,7 +804,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
       await notificationProvider.loadNotifications();
     } catch (e) {
-      print('Error loading notifications: $e');
+      // print('Error loading notifications: $e');
     }
   }
 
@@ -815,14 +815,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final gyms = await ApiService.getGyms();
       
       if (mounted) {
-        print('[HOME] Total gyms loaded: ${gyms.length}');
-        print('[HOME] Active gym IDs to filter: $_activeGymIds');
+        // print('[HOME] Total gyms loaded: ${gyms.length}');
+        // print('[HOME] Active gym IDs to filter: $_activeGymIds');
         
         // Filter out gyms where user is an active member
         final filteredGyms = gyms.where((gym) {
           final isActiveMember = _activeGymIds.contains(gym.id);
           if (isActiveMember) {
-            print('[HOME] Filtering out gym: ${gym.name} (${gym.id})');
+            // print('[HOME] Filtering out gym: ${gym.name} (${gym.id})');
           }
           return !isActiveMember;
         }).toList();
@@ -863,7 +863,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           });
         }
         
-        print('[HOME] Gyms after filtering: ${filteredGyms.length}');
+        // print('[HOME] Gyms after filtering: ${filteredGyms.length}');
 
         if (kIsWeb) {
           _loadWebGymStartingPrices(filteredGyms);
@@ -878,7 +878,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      print('Error loading gyms: $e');
+      // print('Error loading gyms: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -893,9 +893,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   /// Load user's current location
   Future<void> _loadLocation() async {
     try {
-      print('Starting location fetch...');
+      // print('Starting location fetch...');
       final position = await LocationService.getCurrentPosition();
-      print('Position received: $position');
+      // print('Position received: $position');
       
       if (position != null && mounted) {
         // Get city name and address from coordinates
@@ -908,7 +908,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           position.longitude,
         );
         
-        print('City: $city, Address: $address');
+        // print('City: $city, Address: $address');
         
         setState(() {
           _currentPosition = position;
@@ -923,7 +923,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         // Load nearby gym offers for top offers section
         _loadNearbyOffers();
       } else {
-        print('Position is null or widget not mounted');
+        // print('Position is null or widget not mounted');
         // Set a fallback message
         if (mounted) {
           setState(() {
@@ -932,7 +932,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      print('Error getting location: $e');
+      // print('Error getting location: $e');
       if (mounted) {
         setState(() {
           _currentCity = 'Location unavailable';
@@ -1001,7 +1001,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      print('Error loading trainers: $e');
+      // print('Error loading trainers: $e');
     }
   }
   
@@ -1033,7 +1033,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      print('Error loading offers: $e');
+      // print('Error loading offers: $e');
       // Still show static banners even if backend fails
       if (mounted) {
         setState(() {
@@ -1093,7 +1093,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      debugPrint('Error loading nearby offers: $e');
+      // debug// print('Error loading nearby offers: $e');
     }
   }
 
@@ -1172,13 +1172,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       );
       
       if (mounted) {
-        print('[HOME] Nearby gyms loaded: ${gyms.length}');
-        print('[HOME] Active gym IDs to filter: $_activeGymIds');
+        // print('[HOME] Nearby gyms loaded: ${gyms.length}');
+        // print('[HOME] Active gym IDs to filter: $_activeGymIds');
 
         final filteredGyms = gyms.where((gym) {
           final isActiveMember = _activeGymIds.contains(gym.id);
           if (isActiveMember) {
-            print('[HOME] Filtering out nearby gym: ${gym.name} (${gym.id})');
+            // print('[HOME] Filtering out nearby gym: ${gym.name} (${gym.id})');
           }
           return !isActiveMember;
         }).toList();
@@ -1189,12 +1189,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
         
         setState(() {
-          print('[HOME] Nearby gyms after filtering: ${filteredGyms.length}');
+          // print('[HOME] Nearby gyms after filtering: ${filteredGyms.length}');
           _popularGyms = filteredGyms.take(5).toList();
         });
       }
     } catch (e) {
-      print('Error loading nearby gyms: $e');
+      // print('Error loading nearby gyms: $e');
     }
   }
 
@@ -1538,7 +1538,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   : null,
                               onBackgroundImageError: authProvider.user?.profileImage != null && authProvider.user!.profileImage!.isNotEmpty
                                   ? (exception, stackTrace) {
-                                      print('❌ Error loading profile image: ${authProvider.user!.profileImage} - $exception');
+                                      // print('❌ Error loading profile image: ${authProvider.user!.profileImage} - $exception');
                                     }
                                   : null,
                               child: authProvider.user?.profileImage == null || authProvider.user!.profileImage!.isEmpty
@@ -2730,7 +2730,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      debugPrint('[HOME] Failed to fetch rating for gym $gymId: $e');
+      // debug// print('[HOME] Failed to fetch rating for gym $gymId: $e');
     } finally {
       _webGymRatingLoadInFlight.remove(gymId);
     }
@@ -2746,7 +2746,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
     } catch (e) {
-      debugPrint('[HOME] Failed to fetch starting price for gym $gymId: $e');
+      // debug// print('[HOME] Failed to fetch starting price for gym $gymId: $e');
     } finally {
       _webGymPriceLoadInFlight.remove(gymId);
     }
@@ -3118,7 +3118,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                             Text(
                                               'INR ${priceSummary.finalPrice.toInt()}/month',
                                               style: const TextStyle(
-                                                fontSize: 12,
+                                                fontSize: 14,
                                                 fontWeight: FontWeight.w900,
                                                 color: Color.fromARGB(255, 226, 190, 44),
                                               ),
@@ -3127,7 +3127,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                               Text(
                                                 'INR ${priceSummary.basePrice.toInt()}',
                                                 style: TextStyle(
-                                                  fontSize: 10,
+                                                  fontSize: 12,
                                                   color: Theme.of(context)
                                                       .textTheme
                                                       .bodySmall
@@ -3156,24 +3156,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            _webText('Details', 'विवरण'),
+                                      SizedBox(
+                                        height: 32,
+                                        child: ElevatedButton.icon(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => GymDetailScreen(
+                                                  gymId: gym.id,
+                                                  openMembershipPlans: true,
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppTheme.primaryColor,
+                                            foregroundColor: Colors.white,
+                                            elevation: 0,
+                                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                                            minimumSize: const Size(0, 32),
+                                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                          ),
+                                          icon: const Icon(Icons.shopping_bag_outlined, size: 15),
+                                          label: Text(
+                                            _webText('Book Now', 'अभी बुक करें'),
                                             style: const TextStyle(
                                               fontSize: 11,
-                                              color: AppTheme.primaryColor,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
-                                          const SizedBox(width: 4),
-                                          const Icon(
-                                            Icons.open_in_new,
-                                            size: 14,
-                                            color: AppTheme.primaryColor,
-                                          ),
-                                        ],
+                                        ),
                                       ),
                                     ],
                                   )
@@ -3198,13 +3214,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                         ),
                                       ),
                                       const SizedBox(width: 8),
-                                      Text(
-                                        _webText('View Plans', 'प्लान देखें'),
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppTheme.primaryColor,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+                                            SizedBox(
+                                              height: 32,
+                                              child: ElevatedButton.icon(
+                                                onPressed: () {
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => GymDetailScreen(
+                                                        gymId: gym.id,
+                                                        openMembershipPlans: true,
+                                                      ),
+                                                    ),
+                                                  );
+                                                },
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: AppTheme.primaryColor,
+                                                  foregroundColor: Colors.white,
+                                                  elevation: 0,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                                  minimumSize: const Size(0, 32),
+                                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                  shape: RoundedRectangleBorder(
+                                                    borderRadius: BorderRadius.circular(10),
+                                                  ),
+                                                ),
+                                                icon: const Icon(Icons.shopping_bag_outlined, size: 15),
+                                                label: Text(
+                                                  _webText('Book Now', 'अभी बुक करें'),
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
                                       ),
                                     ],
                                   ),
