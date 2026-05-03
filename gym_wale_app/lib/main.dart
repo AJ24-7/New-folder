@@ -235,8 +235,10 @@ class _SplashScreenState extends State<SplashScreen>
       } catch (_) {}
     }
 
-    // Add a small delay for splash screen effect
-    await Future.delayed(const Duration(seconds: 2));
+    // Add a small delay for splash screen effect (skip on web).
+    if (!kIsWeb) {
+      await Future.delayed(const Duration(seconds: 2));
+    }
 
     if (mounted) {
       Widget destination;
@@ -486,40 +488,42 @@ class _SplashScreenState extends State<SplashScreen>
                       ],
                     ),
 
-                    const SizedBox(height: 56),
+                    if (!kIsWeb) ...[
+                      const SizedBox(height: 56),
 
-                    // Loading indicator
-                    AnimatedBuilder(
-                      animation: _pulseAnim,
-                      builder: (_, __) => Opacity(
-                        opacity: _pulseAnim.value,
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              width: 180,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  backgroundColor: Colors.white12,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      _tealAccent),
-                                  minHeight: 3,
+                      // Loading indicator
+                      AnimatedBuilder(
+                        animation: _pulseAnim,
+                        builder: (_, __) => Opacity(
+                          opacity: _pulseAnim.value,
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                width: 180,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    backgroundColor: Colors.white12,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        _tealAccent),
+                                    minHeight: 3,
+                                  ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 14),
-                            Text(
-                              'Getting things ready...',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.5),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
+                              const SizedBox(height: 14),
+                              Text(
+                                'Getting things ready...',
+                                style: TextStyle(
+                                  color: Colors.white.withOpacity(0.5),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

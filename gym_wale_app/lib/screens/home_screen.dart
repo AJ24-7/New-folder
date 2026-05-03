@@ -80,6 +80,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _heroTotalMembers = 0;
   int _heroTotalCities = 0;
   bool _webUseNearMeSearch = false;
+  List<Gym> _allGyms = [];
+  bool _cityHasGyms = true;
   final Map<String, _WebMembershipPriceSummary> _webGymPriceSummaryByGymId =
       {};
   final Map<String, String> _webGymLogoByGymId = {};
@@ -99,6 +101,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       kIsWeb && Localizations.localeOf(context).languageCode == 'hi';
 
   String _webText(String english, String hindi) => _isHindiWeb ? hindi : english;
+
+  bool get _showCityUnavailableMessage {
+    final city = _currentCity?.trim();
+    return city != null && city.isNotEmpty && _allGyms.isNotEmpty && !_cityHasGyms;
+  }
 
   @override
   void initState() {
@@ -870,7 +877,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _loadWebGymRatings(filteredGyms);
         }
         
+        final cityHasGyms = _resolveCityHasGyms(_currentCity, gyms);
+
         setState(() {
+          _allGyms = gyms;
+          _cityHasGyms = cityHasGyms;
           _registeredGymCount = gyms.length;
           _heroTotalMembers = totalMembers;
           _heroTotalCities = uniqueCities.length;
@@ -915,6 +926,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           _currentCity = _resolveCityName(city, address);
           _currentAddress = address;
         });
+
+        _updateCityAvailability();
         
         // Load nearby gyms if location available
         _loadNearbyGyms();
@@ -987,6 +1000,31 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return city;
+  }
+
+  void _updateCityAvailability() {
+    if (!mounted) return;
+    final cityHasGyms = _resolveCityHasGyms(_currentCity, _allGyms);
+    if (cityHasGyms == _cityHasGyms) return;
+    setState(() {
+      _cityHasGyms = cityHasGyms;
+    });
+  }
+
+  bool _resolveCityHasGyms(String? city, List<Gym> gyms) {
+    final normalizedCity = city?.trim().toLowerCase();
+    if (normalizedCity == null || normalizedCity.isEmpty || gyms.isEmpty) {
+      return true;
+    }
+    return gyms.any((gym) => _cityMatchesGym(gym, normalizedCity));
+  }
+
+  bool _cityMatchesGym(Gym gym, String normalizedCity) {
+    final gymCity = (gym.city ?? '').trim().toLowerCase();
+    if (gymCity.isEmpty) return false;
+    return gymCity == normalizedCity ||
+        gymCity.contains(normalizedCity) ||
+        normalizedCity.contains(gymCity);
   }
   
   /// Load top trainers
@@ -1794,6 +1832,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               ),
                             ],
                           ),
+                          if (_showCityUnavailableMessage) ...[
+                            const SizedBox(height: 12),
+                            _buildCityUnavailableBanner(isWeb: false),
+                            const SizedBox(height: 12),
+                          ],
                           const SizedBox(height: 24),
                           
                           // Price Range Slider
@@ -2242,100 +2285,254 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final isHindi = languageCode == 'hi';
     final isCompact = MediaQuery.of(context).size.width < 980;
 
-    final actions = Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      alignment: WrapAlignment.end,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        PopupMenuButton<String>(
-          tooltip: 'Language',
-          onSelected: (value) async {
-            if (value == 'en') {
-              await localeProvider.setLanguage(AppLanguage.english);
-            } else if (value == 'hi') {
-              await localeProvider.setLanguage(AppLanguage.hindi);
-            }
-          },
-          color: const Color(0xFF1F2937),
-          itemBuilder: (_) => [
-            PopupMenuItem<String>(
-              value: 'en',
-              child: Text(
-                AppLocalizations.of(context)!.languageEnglish,
-                style: TextStyle(
-                  color: isHindi ? Colors.white70 : Colors.white,
-                  fontWeight: isHindi ? FontWeight.w400 : FontWeight.w700,
-                ),
-              ),
-            ),
-            PopupMenuItem<String>(
-              value: 'hi',
-              child: Text(
-                AppLocalizations.of(context)!.languageHindi,
-                style: TextStyle(
-                  color: isHindi ? Colors.white : Colors.white70,
-                  fontWeight: isHindi ? FontWeight.w700 : FontWeight.w400,
-                ),
-              ),
-            ),
-          ],
-          child: _buildWebNavChip(
-            icon: Icons.language,
-            label: isHindi ? 'हिंदी' : 'English',
-          ),
-        ),
-        TextButton.icon(
-          onPressed: _showWebInstallDialog,
-          icon: const Icon(Icons.download_for_offline_outlined, color: Colors.white),
-          label: Text(
-            _webText('Install App', 'ऐप इंस्टॉल करें'),
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-          style: TextButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.12),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: BorderSide(color: Colors.white.withOpacity(0.2)),
+    final languageAction = PopupMenuButton<String>(
+      tooltip: 'Language',
+      onSelected: (value) async {
+        if (value == 'en') {
+          await localeProvider.setLanguage(AppLanguage.english);
+        } else if (value == 'hi') {
+          await localeProvider.setLanguage(AppLanguage.hindi);
+        }
+      },
+      color: const Color(0xFF1F2937),
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: 'en',
+          child: Text(
+            AppLocalizations.of(context)!.languageEnglish,
+            style: TextStyle(
+              color: isHindi ? Colors.white70 : Colors.white,
+              fontWeight: isHindi ? FontWeight.w400 : FontWeight.w700,
             ),
           ),
         ),
-        ElevatedButton.icon(
-          onPressed: () {
-            if (authProvider.isAuthenticated) {
-              _handleLogout();
-            } else {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-              );
-            }
-          },
-          icon: Icon(authProvider.isAuthenticated ? Icons.logout : Icons.login),
-            label: Text(authProvider.isAuthenticated
-              ? _webText('Logout', 'लॉगआउट')
-              : _webText('Login', 'लॉगिन')),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.primaryColor,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        PopupMenuItem<String>(
+          value: 'hi',
+          child: Text(
+            AppLocalizations.of(context)!.languageHindi,
+            style: TextStyle(
+              color: isHindi ? Colors.white : Colors.white70,
+              fontWeight: isHindi ? FontWeight.w700 : FontWeight.w400,
+            ),
           ),
         ),
       ],
+      child: isCompact
+          ? _buildWebNavIcon(icon: Icons.language)
+          : _buildWebNavChip(
+              icon: Icons.language,
+              label: isHindi ? 'हिंदी' : 'English',
+            ),
     );
 
-    if (isCompact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildWebBrandTitle(),
-          const SizedBox(height: 12),
-          actions,
-        ],
-      );
-    }
+    final installAction = isCompact
+        ? InkWell(
+            onTap: _showWebInstallDialog,
+            borderRadius: BorderRadius.circular(10),
+            child: _buildWebNavIcon(icon: Icons.download_for_offline_outlined),
+          )
+        : TextButton.icon(
+            onPressed: _showWebInstallDialog,
+            icon: const Icon(Icons.download_for_offline_outlined, color: Colors.white),
+            label: Text(
+              _webText('Install App', 'ऐप इंस्टॉल करें'),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: Colors.white.withOpacity(0.2)),
+              ),
+            ),
+          );
+
+    final accountAction = authProvider.isAuthenticated
+        ? PopupMenuButton<String>(
+            tooltip: _webText('Account', 'खाता'),
+            onSelected: (value) {
+              switch (value) {
+                case 'profile':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+                  );
+                  break;
+                case 'settings':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                  break;
+                case 'logout':
+                  _handleLogout();
+                  break;
+              }
+            },
+            offset: const Offset(0, 48),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            color: const Color(0xFF1F2937),
+            itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: AppTheme.primaryColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      _webText('My Profile', 'मेरा प्रोफाइल'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              PopupMenuItem<String>(
+                value: 'settings',
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondaryColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.settings_outlined,
+                        color: AppTheme.secondaryColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      _webText('Settings', 'सेटिंग्स'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.errorColor.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.logout,
+                        color: AppTheme.errorColor,
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      _webText('Logout', 'लॉगआउट'),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: AppTheme.errorColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            child: CircleAvatar(
+              radius: 20,
+              backgroundColor: Colors.white.withOpacity(0.16),
+              backgroundImage: authProvider.user?.profileImage != null &&
+                      authProvider.user!.profileImage!.isNotEmpty
+                  ? CachedNetworkImageProvider(authProvider.user!.profileImage!)
+                  : null,
+              onBackgroundImageError: authProvider.user?.profileImage != null &&
+                      authProvider.user!.profileImage!.isNotEmpty
+                  ? (exception, stackTrace) {}
+                  : null,
+              child: authProvider.user?.profileImage == null ||
+                      authProvider.user!.profileImage!.isEmpty
+                  ? const Icon(
+                      Icons.person_outline,
+                      color: Colors.white,
+                      size: 22,
+                    )
+                  : null,
+            ),
+          )
+        : (isCompact
+            ? InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+                borderRadius: BorderRadius.circular(10),
+                child: _buildWebNavIcon(icon: Icons.login),
+              )
+            : ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+                icon: const Icon(Icons.login),
+                label: Text(_webText('Login', 'लॉगिन')),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ));
+
+    final actions = isCompact
+        ? Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              languageAction,
+              const SizedBox(width: 8),
+              installAction,
+              const SizedBox(width: 8),
+              accountAction,
+            ],
+          )
+        : Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            alignment: WrapAlignment.end,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              languageAction,
+              installAction,
+              accountAction,
+            ],
+          );
 
     return Row(
       children: [
@@ -2403,6 +2600,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWebNavIcon({required IconData icon}) {
+    return Container(
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Icon(icon, color: Colors.white, size: 20),
     );
   }
 
@@ -2823,7 +3032,40 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final recommendedGyms = _getWebRecommendedGyms();
 
     if (recommendedGyms.isEmpty) {
-      return const SizedBox.shrink();
+      if (!_showCityUnavailableMessage) {
+        return const SizedBox.shrink();
+      }
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.recommend_outlined, color: AppTheme.primaryColor, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                _webText('Recommended Gyms For You', 'आपके लिए सुझाए गए जिम'),
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Theme.of(context).textTheme.titleLarge?.color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _currentCity != null && _currentCity!.trim().isNotEmpty
+                ? _webText('Based on your city: ${_currentCity!}', 'आपके शहर पर आधारित: ${_currentCity!}')
+                : _webText('Best picks near your location', 'आपकी लोकेशन के पास बेहतरीन विकल्प'),
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodyMedium?.color,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildCityUnavailableBanner(isWeb: true),
+        ],
+      );
     }
 
     return Column(
@@ -3418,6 +3660,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(width: 8),
             trailing,
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCityUnavailableBanner({required bool isWeb}) {
+    final message =
+        "We're currently unavailable in your city, but don't worry we'll reach there soon 😊";
+    final backgroundColor = isWeb
+        ? Colors.white.withOpacity(0.08)
+        : AppTheme.primaryColor.withOpacity(0.08);
+    final borderColor = isWeb
+        ? Colors.white.withOpacity(0.2)
+        : AppTheme.primaryColor.withOpacity(0.2);
+    final textColor = isWeb
+        ? Colors.white.withOpacity(0.9)
+        : Theme.of(context).textTheme.bodyMedium?.color;
+    final iconColor = isWeb ? Colors.amber : AppTheme.primaryColor;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.location_off, size: 18, color: iconColor),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.w600,
+                fontSize: isWeb ? 13 : 12,
+                height: 1.35,
+              ),
+            ),
+          ),
         ],
       ),
     );

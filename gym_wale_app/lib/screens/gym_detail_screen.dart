@@ -3034,10 +3034,10 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: AppTheme.backgroundColor,
+                          color: Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                            color: AppTheme.primaryColor.withValues(alpha: 0.2),
+                            color: Theme.of(context).dividerColor.withValues(alpha: 0.35),
                             width: 1,
                           ),
                         ),
@@ -3123,7 +3123,7 @@ class _GymDetailScreenState extends State<GymDetailScreen> {
                             Text(
                               review.adminReply!.reply,
                               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: AppTheme.textPrimary,
+                                color: Theme.of(context).textTheme.bodyMedium?.color,
                               ),
                             ),
                           ],

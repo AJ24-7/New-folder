@@ -43,6 +43,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   late TabController _tabController;
   final _searchController = TextEditingController();
   final _cityController = TextEditingController();
+  final FocusNode _cityFocusNode = FocusNode();
   final _pincodeController = TextEditingController();
   List<Gym> _gyms = [];
   List<Gym> _filteredGyms = [];
@@ -57,6 +58,87 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   double _nearMeRadiusKm = 10.0;
   List<Activity> _availableActivities = [];
   Timer? _reloadDebounce;
+  Timer? _cityAvailabilityDebounce;
+  final Map<String, bool> _cityAvailabilityCache = {};
+  bool? _cityAvailability;
+  bool _checkingCityAvailability = false;
+  final List<String> _indianCities = const [
+    'Agartala',
+    'Agra',
+    'Ahmedabad',
+    'Aizawl',
+    'Ajmer',
+    'Akola',
+    'Aligarh',
+    'Allahabad',
+    'Amritsar',
+    'Aurangabad',
+    'Bengaluru',
+    'Bhopal',
+    'Bhubaneswar',
+    'Bilaspur',
+    'Chandigarh',
+    'Chennai',
+    'Coimbatore',
+    'Cuttack',
+    'Dehradun',
+    'Delhi',
+    'Dhanbad',
+    'Durgapur',
+    'Faridabad',
+    'Gandhinagar',
+    'Ghaziabad',
+    'Goa',
+    'Gorakhpur',
+    'Guntur',
+    'Gurugram',
+    'Guwahati',
+    'Gwalior',
+    'Hubli',
+    'Hyderabad',
+    'Indore',
+    'Jabalpur',
+    'Jaipur',
+    'Jammu',
+    'Jamnagar',
+    'Jamshedpur',
+    'Jodhpur',
+    'Kanpur',
+    'Kochi',
+    'Kolkata',
+    'Kota',
+    'Lucknow',
+    'Ludhiana',
+    'Madurai',
+    'Mangaluru',
+    'Meerut',
+    'Mumbai',
+    'Mysuru',
+    'Nagpur',
+    'Nashik',
+    'Noida',
+    'Patna',
+    'Pondicherry',
+    'Pune',
+    'Raipur',
+    'Rajkot',
+    'Ranchi',
+    'Rourkela',
+    'Salem',
+    'Shimla',
+    'Siliguri',
+    'Solapur',
+    'Surat',
+    'Thane',
+    'Tiruchirappalli',
+    'Trivandrum',
+    'Udaipur',
+    'Ujjain',
+    'Vadodara',
+    'Varanasi',
+    'Vijayawada',
+    'Visakhapatnam',
+  ];
   final Map<String, double> _gymRatingById = {};
   final Map<String, int> _gymReviewCountById = {};
   final Map<String, String> _gymLogoById = {};
@@ -68,6 +150,10 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
       kIsWeb && Localizations.localeOf(context).languageCode == 'hi';
 
   String _webText(String english, String hindi) => _isHindiWeb ? hindi : english;
+
+  bool get _showCityUnavailableMessage {
+    return _cityController.text.trim().isNotEmpty && _cityAvailability == false;
+  }
 
   @override
   void initState() {
@@ -134,9 +220,11 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   @override
   void dispose() {
     _reloadDebounce?.cancel();
+    _cityAvailabilityDebounce?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     _cityController.dispose();
+    _cityFocusNode.dispose();
     _pincodeController.dispose();
     super.dispose();
   }
@@ -151,6 +239,91 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
     _reloadDebounce = Timer(const Duration(milliseconds: 350), () {
       _loadGyms();
     });
+  }
+
+  String _normalizeCity(String city) => city.trim().toLowerCase();
+
+  void _handleCityInputChange(String value) {
+    final trimmed = value.trim();
+    if (_useNearMe) {
+      setState(() => _useNearMe = false);
+    }
+    if (trimmed.isEmpty) {
+      setState(() {
+        _cityAvailability = null;
+        _checkingCityAvailability = false;
+      });
+      _scheduleReloadGyms(immediate: true);
+      _applyFilters();
+      return;
+    }
+    if (_cityAvailability != null) {
+      setState(() => _cityAvailability = null);
+    }
+    _scheduleReloadGyms();
+    _applyFilters();
+    _scheduleCityAvailabilityCheck(trimmed);
+  }
+
+  void _applyCitySelection(String city) {
+    final trimmed = city.trim();
+    _cityController.text = trimmed;
+    if (_useNearMe) {
+      setState(() => _useNearMe = false);
+    }
+    if (trimmed.isEmpty) {
+      setState(() {
+        _cityAvailability = null;
+        _checkingCityAvailability = false;
+      });
+      _scheduleReloadGyms(immediate: true);
+      _applyFilters();
+      return;
+    }
+    _scheduleReloadGyms(immediate: true);
+    _applyFilters();
+    _scheduleCityAvailabilityCheck(trimmed);
+  }
+
+  void _scheduleCityAvailabilityCheck(String city) {
+    _cityAvailabilityDebounce?.cancel();
+    final normalized = _normalizeCity(city);
+    if (normalized.isEmpty) return;
+    _cityAvailabilityDebounce = Timer(const Duration(milliseconds: 400), () {
+      _checkCityAvailability(city);
+    });
+  }
+
+  Future<void> _checkCityAvailability(String city) async {
+    final normalized = _normalizeCity(city);
+    if (normalized.isEmpty) return;
+    if (_cityAvailabilityCache.containsKey(normalized)) {
+      if (mounted) {
+        setState(() => _cityAvailability = _cityAvailabilityCache[normalized]);
+      }
+      return;
+    }
+
+    if (mounted) {
+      setState(() => _checkingCityAvailability = true);
+    }
+
+    try {
+      final gyms = await ApiService.getGyms(city: city);
+      final available = gyms.isNotEmpty;
+      _cityAvailabilityCache[normalized] = available;
+      if (mounted) {
+        setState(() => _cityAvailability = available);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _cityAvailability = null);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _checkingCityAvailability = false);
+      }
+    }
   }
 
   /// Load user's active memberships to filter gyms
@@ -225,9 +398,7 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
   Future<void> _getUserLocation() async {
     try {
       final found = await _captureUserLocation();
-      if (!found) {
-        return;
-      }
+      if (!found) return;
 
       setState(() => _useNearMe = true);
       await _loadGyms();
@@ -637,6 +808,12 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
       }
     }();
 
+    final locationLabel = _useNearMe
+      ? _webText('${_nearMeRadiusKm.toInt()} km radius', '${_nearMeRadiusKm.toInt()} किमी')
+      : (_cityController.text.trim().isNotEmpty
+        ? _cityController.text.trim()
+        : _webText('Location', 'लोकेशन'));
+
     return Column(
       children: [
         // Compact Search + Actions Bar
@@ -682,10 +859,8 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                 children: [
                   _buildFilterPill(
                     icon: Icons.my_location,
-                    label: _useNearMe
-                        ? _webText('${_nearMeRadiusKm.toInt()} km radius', '${_nearMeRadiusKm.toInt()} किमी')
-                        : _webText('Location', 'लोकेशन'),
-                    isActive: _useNearMe,
+                    label: locationLabel,
+                    isActive: _useNearMe || _cityController.text.trim().isNotEmpty,
                     onTap: _openLocationSheet,
                   ),
                   _buildFilterPill(
@@ -1074,13 +1249,136 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                       _scheduleReloadGyms(immediate: true);
                       return;
                     }
-                    await _getUserLocation();
+                    final hasLocation = await _captureUserLocation();
+                    if (!hasLocation) {
+                      if (mounted) {
+                        setState(() => _useNearMe = false);
+                      }
+                      return;
+                    }
                     if (mounted) {
-                      setState(() => _useNearMe = true);
+                      _cityController.clear();
+                      setState(() {
+                        _useNearMe = true;
+                        _cityAvailability = null;
+                      });
                       _scheduleReloadGyms(immediate: true);
                     }
                   },
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  _webText('City', 'शहर'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                RawAutocomplete<String>(
+                  textEditingController: _cityController,
+                  focusNode: _cityFocusNode,
+                  optionsBuilder: (TextEditingValue value) {
+                    final query = value.text.trim().toLowerCase();
+                    if (query.isEmpty) return _indianCities;
+                    return _indianCities.where(
+                      (city) => city.toLowerCase().contains(query),
+                    );
+                  },
+                  onSelected: (city) => _applyCitySelection(city),
+                  fieldViewBuilder: (context, controller, focusNode, onSubmit) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: InputDecoration(
+                        hintText: _webText('Type or select a city', 'शहर टाइप करें या चुनें'),
+                        prefixIcon: const Icon(Icons.location_city),
+                        suffixIcon: controller.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear),
+                                onPressed: () {
+                                  controller.clear();
+                                  setState(() {
+                                    _cityAvailability = null;
+                                    _checkingCityAvailability = false;
+                                  });
+                                  _scheduleReloadGyms(immediate: true);
+                                  _applyFilters();
+                                },
+                              )
+                            : null,
+                        filled: true,
+                        fillColor: Theme.of(context).brightness == Brightness.dark
+                            ? const Color(0xFF2C2C2C)
+                            : AppTheme.backgroundColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.search,
+                      onChanged: _handleCityInputChange,
+                      onSubmitted: (value) => _applyCitySelection(value),
+                    );
+                  },
+                  optionsViewBuilder: (context, onSelected, options) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4,
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                          height: 220,
+                          child: ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: options.length,
+                            itemBuilder: (context, index) {
+                              final option = options.elementAt(index);
+                              return ListTile(
+                                title: Text(option),
+                                onTap: () => onSelected(option),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (_checkingCityAvailability) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: const [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 8),
+                      Text('Checking availability...'),
+                    ],
+                  ),
+                ],
+                if (_showCityUnavailableMessage) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                    ),
+                    child: const Text(
+                      "We're currently unavailable in your city, but don't worry we'll reach there soon 😊",
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Text(
                   _webText('Radius: ${_nearMeRadiusKm.toInt()} km', 'रेडियस: ${_nearMeRadiusKm.toInt()} किमी'),
@@ -1092,14 +1390,16 @@ class _GymListScreenState extends State<GymListScreen> with SingleTickerProvider
                   max: 25,
                   divisions: 23,
                   label: '${_nearMeRadiusKm.toInt()} km',
-                  onChanged: (value) {
-                    setState(() => _nearMeRadiusKm = value);
-                  },
-                  onChangeEnd: (_) {
-                    if (_useNearMe) {
-                      _scheduleReloadGyms(immediate: true);
-                    }
-                  },
+                  onChanged: _useNearMe
+                      ? (value) {
+                          setState(() => _nearMeRadiusKm = value);
+                        }
+                      : null,
+                  onChangeEnd: _useNearMe
+                      ? (_) {
+                          _scheduleReloadGyms(immediate: true);
+                        }
+                      : null,
                 ),
                 const SizedBox(height: 8),
                 SizedBox(

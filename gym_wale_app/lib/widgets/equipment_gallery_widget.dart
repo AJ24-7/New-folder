@@ -93,6 +93,9 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     if (widget.equipment.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(40),
@@ -157,7 +160,9 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
                         Text(
                           category == 'all' ? 'All' : category.toUpperCase(),
                           style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.grey[700],
+                            color: isSelected
+                                ? Colors.white
+                                : theme.textTheme.bodyMedium?.color,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
                           ),
@@ -165,8 +170,13 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
                       ],
                     ),
                     selectedColor: color,
-                    backgroundColor: Colors.grey[100],
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
                     checkmarkColor: Colors.white,
+                    side: BorderSide(
+                      color: isSelected
+                          ? Colors.transparent
+                          : theme.dividerColor.withValues(alpha: isDark ? 0.5 : 0.35),
+                    ),
                     onSelected: (selected) {
                       if (selected) {
                         setState(() => _selectedCategory = category);
@@ -203,16 +213,17 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
   Widget _buildEquipmentCard(GymEquipment equipment) {
     final categoryColor = _getCategoryColor(equipment.category);
     final statusColor = _getStatusColor(equipment.status);
+    final theme = Theme.of(context);
 
     return GestureDetector(
       onTap: () => _showEquipmentDetails(equipment),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: theme.colorScheme.surface,
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.08),
+              color: Colors.black.withValues(alpha: theme.brightness == Brightness.dark ? 0.25 : 0.08),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -237,26 +248,26 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
                             fit: BoxFit.cover,
                             width: double.infinity,
                             placeholder: (context, url) => Container(
-                              color: Colors.grey[200],
+                              color: theme.colorScheme.surfaceContainerHighest,
                               child: const Center(
                                 child: CircularProgressIndicator(),
                               ),
                             ),
                             errorWidget: (context, url, error) => Container(
-                              color: Colors.grey[200],
+                              color: theme.colorScheme.surfaceContainerHighest,
                               child: Icon(
                                 Icons.fitness_center,
                                 size: 48,
-                                color: Colors.grey[400],
+                                color: theme.textTheme.bodySmall?.color,
                               ),
                             ),
                           )
                         : Container(
-                            color: Colors.grey[200],
+                            color: theme.colorScheme.surfaceContainerHighest,
                             child: Icon(
                               Icons.fitness_center,
                               size: 48,
-                              color: Colors.grey[400],
+                              color: theme.textTheme.bodySmall?.color,
                             ),
                           ),
                   ),
@@ -360,10 +371,10 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
                     // Equipment name
                     Text(
                       equipment.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+                        color: theme.textTheme.bodyMedium?.color,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -375,7 +386,7 @@ class _EquipmentGalleryWidgetState extends State<EquipmentGalleryWidget> {
                         equipment.brand,
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.grey[600],
+                          color: theme.textTheme.bodySmall?.color,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
