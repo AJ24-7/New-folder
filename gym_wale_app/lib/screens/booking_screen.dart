@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/gym.dart';
 import '../models/membership.dart';
 import '../models/gym_offer.dart';
 import '../services/api_service.dart';
 import '../config/app_theme.dart';
+import '../config/api_config.dart';
 
 class BookingScreen extends StatefulWidget {
   final Gym gym;
   final Membership membership;
   final int selectedMonths;
   final GymOffer? appliedOffer;
+  final int? selectedPlanDiscountPercent;
 
   const BookingScreen({
     Key? key,
@@ -18,6 +21,7 @@ class BookingScreen extends StatefulWidget {
     required this.membership,
     this.selectedMonths = 1,
     this.appliedOffer,
+    this.selectedPlanDiscountPercent,
   }) : super(key: key);
 
   @override
@@ -30,7 +34,8 @@ class _BookingScreenState extends State<BookingScreen> {
   bool _isLoadingCoupons = false;
   String _selectedPaymentMode = 'Online';
   int _selectedMonths = 1;
-  
+  final TextEditingController _txnIdController = TextEditingController();
+
   List<Map<String, dynamic>> _availableCoupons = [];
   Map<String, dynamic>? _appliedCoupon;
   final TextEditingController _couponController = TextEditingController();
@@ -48,46 +53,72 @@ class _BookingScreenState extends State<BookingScreen> {
   @override
   void dispose() {
     _couponController.dispose();
+    _txnIdController.dispose();
     super.dispose();
   }
 
   // Calculate end date based on months
   DateTime get _endDate {
     // Add months properly
-    final year = _selectedStartDate.year + (_selectedStartDate.month + _selectedMonths - 1) ~/ 12;
+    final year = _selectedStartDate.year +
+        (_selectedStartDate.month + _selectedMonths - 1) ~/ 12;
     final month = (_selectedStartDate.month + _selectedMonths - 1) % 12 + 1;
     final day = _selectedStartDate.day;
-    
+
     // Handle day overflow (e.g., Jan 31 + 1 month = Feb 28/29)
     int lastDayOfMonth = DateTime(year, month + 1, 0).day;
     final adjustedDay = day > lastDayOfMonth ? lastDayOfMonth : day;
-    
+
     return DateTime(year, month, adjustedDay);
   }
 
   double get _baseAmount => widget.membership.price * _selectedMonths;
 
-  /// Discount from the applied membership offer
-  double get _offerDiscount {
-    if (widget.appliedOffer == null) return 0.0;
-    return widget.appliedOffer!.calculateDiscount(_baseAmount);
-  }
-
-  /// Amount after offer discount (before coupon)
-  double get _afterOfferAmount => _baseAmount - _offerDiscount;
-  
-  double get _discountAmount {
-    if (_appliedCoupon == null) return 0.0;
-    return (_appliedCoupon!['discountAmount'] ?? 0.0).toDouble();
-  }
-  
-  double get _totalAmount => _afterOfferAmount - _discountAmount;
-
-  int get _discountPercent {
+  int get _fallbackDiscountPercent {
     if (_selectedMonths >= 12) return 15;
     if (_selectedMonths >= 6) return 10;
     if (_selectedMonths >= 3) return 5;
     return 0;
+  }
+
+  int get _planDiscountPercent {
+    if (widget.selectedPlanDiscountPercent != null &&
+        _selectedMonths == widget.selectedMonths) {
+      return widget.selectedPlanDiscountPercent!;
+    }
+    return _fallbackDiscountPercent;
+  }
+
+  double get _planDiscountAmount => (_baseAmount * _planDiscountPercent) / 100;
+
+  double get _afterPlanAmount =>
+      (_baseAmount - _planDiscountAmount).clamp(0, double.infinity).toDouble();
+
+  /// Discount from the applied membership offer
+  double get _offerDiscount {
+    if (widget.appliedOffer == null) return 0.0;
+    if (!_isOfferApplicable) return 0.0;
+    return widget.appliedOffer!.calculateDiscount(_afterPlanAmount);
+  }
+
+  /// Amount after offer discount (before coupon)
+  double get _afterOfferAmount =>
+      (_afterPlanAmount - _offerDiscount).clamp(0, double.infinity).toDouble();
+
+  double get _discountAmount {
+    if (_appliedCoupon == null) return 0.0;
+    return (_appliedCoupon!['discountAmount'] ?? 0.0).toDouble();
+  }
+
+  double get _totalAmount => (_afterOfferAmount - _discountAmount)
+      .clamp(0, double.infinity)
+      .toDouble();
+
+  bool get _isOfferApplicable {
+    final offer = widget.appliedOffer;
+    if (offer == null) return false;
+    return offer.appliesTo(
+        tierName: widget.membership.name, months: _selectedMonths);
   }
 
   Color get _planColor {
@@ -112,7 +143,7 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<void> _loadAvailableCoupons() async {
     setState(() => _isLoadingCoupons = true);
-    
+
     try {
       final coupons = await ApiService.getAvailableCoupons(widget.gym.id);
       setState(() {
@@ -136,7 +167,7 @@ class _BookingScreenState extends State<BookingScreen> {
       final result = await ApiService.applyCoupon(
         code: code.trim(),
         gymId: widget.gym.id,
-        amount: _baseAmount,
+        amount: _afterOfferAmount,
       );
 
       if (result['success'] == true) {
@@ -198,14 +229,86 @@ class _BookingScreenState extends State<BookingScreen> {
     setState(() => _isProcessing = true);
 
     try {
+      String? transactionId;
+
+      if (_selectedPaymentMode == 'Online' || _selectedPaymentMode == 'UPI') {
+        final opened = await _openRazorpayPaymentLink();
+        if (!opened) {
+          setState(() => _isProcessing = false);
+          return;
+        }
+
+        // Payment link opened — now require the user to confirm payment
+        // and optionally enter the Razorpay transaction / UTR reference.
+        setState(() => _isProcessing = false);
+        _txnIdController.clear();
+        final confirmed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Complete Your Payment'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Complete the payment on the Razorpay page that just opened, '
+                  'then tap "I\'ve Paid" below.',
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _txnIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Transaction / UTR Reference (optional)',
+                    hintText: 'e.g. pay_XXXXXXXXXXXXXXXX',
+                    border: OutlineInputBorder(),
+                  ),
+                  textCapitalization: TextCapitalization.none,
+                  keyboardType: TextInputType.text,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Entering the reference helps the gym verify your payment faster.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text("I've Paid"),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmed != true || !mounted) return;
+        transactionId = _txnIdController.text.trim().isEmpty
+            ? null
+            : _txnIdController.text.trim();
+        setState(() => _isProcessing = true);
+      }
+
       final result = await ApiService.bookMembership(
         gymId: widget.gym.id,
         membershipPlan: widget.membership.name,
         monthlyPlan: '$_selectedMonths Month${_selectedMonths > 1 ? 's' : ''}',
         paymentMode: _selectedPaymentMode,
         paymentAmount: _totalAmount,
-        offerId: widget.appliedOffer?.id,
+        offerId: _isOfferApplicable ? widget.appliedOffer?.id : null,
         offerDiscount: _offerDiscount > 0 ? _offerDiscount : null,
+        transactionId: transactionId,
+        paymentStatus: (_selectedPaymentMode == 'Online' ||
+                _selectedPaymentMode == 'UPI')
+            ? 'pending_verification'
+            : 'paid',
       );
 
       if (result['success'] && mounted) {
@@ -236,7 +339,12 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  result['message'] ?? 'Your membership has been booked successfully',
+                  (_selectedPaymentMode == 'Online' ||
+                          _selectedPaymentMode == 'UPI')
+                      ? (result['message'] ??
+                          'Booking recorded. Your payment is pending verification by the gym.')
+                      : (result['message'] ??
+                          'Your membership has been booked successfully'),
                   style: Theme.of(context).textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -275,6 +383,40 @@ class _BookingScreenState extends State<BookingScreen> {
     } finally {
       setState(() => _isProcessing = false);
     }
+  }
+
+  Future<bool> _openRazorpayPaymentLink() async {
+    final link = ApiConfig.razorpayPaymentLink.trim();
+    if (link.isEmpty) {
+      _showMessage('Payment link is not configured', isError: true);
+      return false;
+    }
+
+    Uri uri;
+    try {
+      uri = Uri.parse(link);
+    } catch (_) {
+      _showMessage('Payment link is invalid', isError: true);
+      return false;
+    }
+
+    // Only allow safe HTTPS URLs (prevent javascript: / data: injection)
+    if (uri.scheme != 'https') {
+      _showMessage('Payment link must use a secure HTTPS connection',
+          isError: true);
+      return false;
+    }
+
+    if (!await canLaunchUrl(uri)) {
+      _showMessage('Unable to open payment link', isError: true);
+      return false;
+    }
+
+    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!launched) {
+      _showMessage('Unable to open payment link', isError: true);
+    }
+    return launched;
   }
 
   @override
@@ -374,7 +516,10 @@ class _BookingScreenState extends State<BookingScreen> {
                               children: [
                                 Text(
                                   widget.membership.name,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleLarge
+                                      ?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: _planColor,
                                       ),
@@ -382,7 +527,10 @@ class _BookingScreenState extends State<BookingScreen> {
                                 const SizedBox(height: 4),
                                 Text(
                                   '₹${widget.membership.price.toStringAsFixed(0)}/month',
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(
                                         color: AppTheme.textSecondary,
                                       ),
                                 ),
@@ -411,15 +559,15 @@ class _BookingScreenState extends State<BookingScreen> {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      
+
                       // Description
                       Text(
                         widget.membership.description,
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
-                      
+
                       const SizedBox(height: 16),
-                      
+
                       // Features preview (top 3)
                       if (widget.membership.features.isNotEmpty)
                         ...widget.membership.features.take(3).map((feature) {
@@ -436,7 +584,8 @@ class _BookingScreenState extends State<BookingScreen> {
                                 Expanded(
                                   child: Text(
                                     feature,
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                   ),
                                 ),
                               ],
@@ -452,13 +601,16 @@ class _BookingScreenState extends State<BookingScreen> {
             const SizedBox(height: 16),
 
             // Applied Offer Banner
-            if (widget.appliedOffer != null && _offerDiscount > 0)
+            if (widget.appliedOffer != null &&
+                _offerDiscount > 0 &&
+                _isOfferApplicable)
               Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16),
                 elevation: 2,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: AppTheme.accentColor, width: 1.5),
+                  side:
+                      const BorderSide(color: AppTheme.accentColor, width: 1.5),
                 ),
                 child: Container(
                   decoration: BoxDecoration(
@@ -494,7 +646,10 @@ class _BookingScreenState extends State<BookingScreen> {
                           children: [
                             Text(
                               widget.appliedOffer!.title,
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(
                                     fontWeight: FontWeight.bold,
                                     color: AppTheme.accentColor,
                                   ),
@@ -504,7 +659,10 @@ class _BookingScreenState extends State<BookingScreen> {
                               widget.appliedOffer!.type == 'percentage'
                                   ? '${widget.appliedOffer!.value.toStringAsFixed(0)}% off applied'
                                   : '₹${widget.appliedOffer!.value.toStringAsFixed(0)} off applied',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.copyWith(
                                     color: AppTheme.textSecondary,
                                   ),
                             ),
@@ -534,7 +692,9 @@ class _BookingScreenState extends State<BookingScreen> {
                 ),
               ),
 
-            if (widget.appliedOffer != null && _offerDiscount > 0)
+            if (widget.appliedOffer != null &&
+                _offerDiscount > 0 &&
+                _isOfferApplicable)
               const SizedBox(height: 16),
 
             // Duration Selection with Discount
@@ -550,11 +710,12 @@ class _BookingScreenState extends State<BookingScreen> {
                       children: [
                         Text(
                           'Select Duration',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                         ),
-                        if (_discountPercent > 0)
+                        if (_planDiscountPercent > 0)
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -565,7 +726,7 @@ class _BookingScreenState extends State<BookingScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'SAVE $_discountPercent%',
+                              'SAVE $_planDiscountPercent%',
                               style: const TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -581,13 +742,24 @@ class _BookingScreenState extends State<BookingScreen> {
                       runSpacing: 8,
                       children: _monthOptions.map((months) {
                         final isSelected = months == _selectedMonths;
-                        final discount = months >= 12 ? 15 : months >= 6 ? 10 : months >= 3 ? 5 : 0;
-                        
+                        final discount =
+                            (widget.selectedPlanDiscountPercent != null &&
+                                    months == widget.selectedMonths)
+                                ? widget.selectedPlanDiscountPercent!
+                                : (months >= 12
+                                    ? 15
+                                    : months >= 6
+                                        ? 10
+                                        : months >= 3
+                                            ? 5
+                                            : 0);
+
                         return InkWell(
                           onTap: () {
                             setState(() {
                               _selectedMonths = months;
-                              _appliedCoupon = null; // Reset coupon on duration change
+                              _appliedCoupon =
+                                  null; // Reset coupon on duration change
                             });
                           },
                           child: Container(
@@ -596,10 +768,14 @@ class _BookingScreenState extends State<BookingScreen> {
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: isSelected ? _planColor : Colors.grey.shade100,
+                              color: isSelected
+                                  ? _planColor
+                                  : Colors.grey.shade100,
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: isSelected ? _planColor : Colors.grey.shade300,
+                                color: isSelected
+                                    ? _planColor
+                                    : Colors.grey.shade300,
                                 width: 2,
                               ),
                               boxShadow: isSelected
@@ -619,7 +795,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: isSelected ? Colors.white : AppTheme.textPrimary,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : AppTheme.textPrimary,
                                   ),
                                 ),
                                 if (discount > 0) ...[
@@ -629,7 +807,9 @@ class _BookingScreenState extends State<BookingScreen> {
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
-                                      color: isSelected ? Colors.white : AppTheme.successColor,
+                                      color: isSelected
+                                          ? Colors.white
+                                          : AppTheme.successColor,
                                     ),
                                   ),
                                 ],
@@ -661,7 +841,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                     ),
                     const SizedBox(height: 12),
-                    
+
                     // Coupon input
                     if (_appliedCoupon == null)
                       Row(
@@ -686,7 +866,8 @@ class _BookingScreenState extends State<BookingScreen> {
                           ElevatedButton(
                             onPressed: _isProcessing
                                 ? null
-                                : () => _applyCouponCode(_couponController.text),
+                                : () =>
+                                    _applyCouponCode(_couponController.text),
                             style: ElevatedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 20,
@@ -739,7 +920,8 @@ class _BookingScreenState extends State<BookingScreen> {
                                   ),
                                   Text(
                                     'Saved ₹${_discountAmount.toStringAsFixed(0)}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                   ),
                                 ],
                               ),
@@ -752,9 +934,10 @@ class _BookingScreenState extends State<BookingScreen> {
                           ],
                         ),
                       ),
-                    
+
                     // Available coupons
-                    if (_availableCoupons.isNotEmpty && _appliedCoupon == null) ...[
+                    if (_availableCoupons.isNotEmpty &&
+                        _appliedCoupon == null) ...[
                       const SizedBox(height: 16),
                       Text(
                         'Available Coupons',
@@ -802,8 +985,11 @@ class _BookingScreenState extends State<BookingScreen> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Text(
-                                    coupon['title'] ?? coupon['description'] ?? '',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    coupon['title'] ??
+                                        coupon['description'] ??
+                                        '',
+                                    style:
+                                        Theme.of(context).textTheme.bodySmall,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -849,7 +1035,9 @@ class _BookingScreenState extends State<BookingScreen> {
                         title: Row(
                           children: [
                             Icon(
-                              mode == 'Online' ? Icons.credit_card : Icons.qr_code_2,
+                              mode == 'Online'
+                                  ? Icons.credit_card
+                                  : Icons.qr_code_2,
                               size: 20,
                               color: _selectedPaymentMode == mode
                                   ? AppTheme.primaryColor
@@ -899,7 +1087,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                     ),
                     const SizedBox(height: 16),
-                    
+
                     // Start Date (Optional)
                     InkWell(
                       onTap: _selectStartDate,
@@ -934,14 +1122,21 @@ class _BookingScreenState extends State<BookingScreen> {
                                 children: [
                                   Text(
                                     'Start Date (Optional)',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
                                           color: AppTheme.textSecondary,
                                         ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    DateFormat('MMMM dd, yyyy').format(_selectedStartDate),
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    DateFormat('MMMM dd, yyyy')
+                                        .format(_selectedStartDate),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleSmall
+                                        ?.copyWith(
                                           fontWeight: FontWeight.w600,
                                         ),
                                   ),
@@ -957,9 +1152,9 @@ class _BookingScreenState extends State<BookingScreen> {
                         ),
                       ),
                     ),
-                    
+
                     const SizedBox(height: 12),
-                    
+
                     // End Date (Calculated)
                     Container(
                       padding: const EdgeInsets.all(14),
@@ -992,14 +1187,20 @@ class _BookingScreenState extends State<BookingScreen> {
                               children: [
                                 Text(
                                   'Valid Until',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
                                         color: AppTheme.textSecondary,
                                       ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   DateFormat('MMMM dd, yyyy').format(_endDate),
-                                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleSmall
+                                      ?.copyWith(
                                         fontWeight: FontWeight.w600,
                                         color: AppTheme.successColor,
                                       ),
@@ -1068,7 +1269,10 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                           Text(
                             '₹${widget.membership.price.toStringAsFixed(0)} × $_selectedMonths',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
                                   color: AppTheme.textSecondary,
                                 ),
                           ),
@@ -1088,9 +1292,9 @@ class _BookingScreenState extends State<BookingScreen> {
                           ),
                         ],
                       ),
-                      
+
                       // Duration discount
-                      if (_discountPercent > 0) ...[
+                      if (_planDiscountPercent > 0) ...[
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1104,16 +1308,22 @@ class _BookingScreenState extends State<BookingScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'Duration Discount ($_discountPercent%)',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  'Duration Discount ($_planDiscountPercent%)',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
                                         color: AppTheme.successColor,
                                       ),
                                 ),
                               ],
                             ),
                             Text(
-                              '-₹${(_baseAmount * _discountPercent / 100).toStringAsFixed(0)}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              '-₹${_planDiscountAmount.toStringAsFixed(0)}',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
                                     color: AppTheme.successColor,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1121,9 +1331,11 @@ class _BookingScreenState extends State<BookingScreen> {
                           ],
                         ),
                       ],
-                      
+
                       // Offer discount
-                      if (widget.appliedOffer != null && _offerDiscount > 0) ...[
+                      if (widget.appliedOffer != null &&
+                          _offerDiscount > 0 &&
+                          _isOfferApplicable) ...[
                         const SizedBox(height: 8),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1139,7 +1351,10 @@ class _BookingScreenState extends State<BookingScreen> {
                                 Flexible(
                                   child: Text(
                                     'Offer: ${widget.appliedOffer!.title}',
-                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(
                                           color: AppTheme.accentColor,
                                         ),
                                     overflow: TextOverflow.ellipsis,
@@ -1149,7 +1364,10 @@ class _BookingScreenState extends State<BookingScreen> {
                             ),
                             Text(
                               '-₹${_offerDiscount.toStringAsFixed(0)}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
                                     color: AppTheme.accentColor,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1157,7 +1375,7 @@ class _BookingScreenState extends State<BookingScreen> {
                           ],
                         ),
                       ],
-                      
+
                       // Coupon discount
                       if (_appliedCoupon != null && _discountAmount > 0) ...[
                         const SizedBox(height: 8),
@@ -1174,7 +1392,10 @@ class _BookingScreenState extends State<BookingScreen> {
                                 const SizedBox(width: 4),
                                 Text(
                                   'Coupon (${_appliedCoupon!['coupon']['code']})',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
                                         color: AppTheme.accentColor,
                                       ),
                                 ),
@@ -1182,7 +1403,10 @@ class _BookingScreenState extends State<BookingScreen> {
                             ),
                             Text(
                               '-₹${_discountAmount.toStringAsFixed(0)}',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
                                     color: AppTheme.accentColor,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -1190,31 +1414,39 @@ class _BookingScreenState extends State<BookingScreen> {
                           ],
                         ),
                       ],
-                      
+
                       const Divider(height: 24, thickness: 2),
-                      
+
                       // Total
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             'Total Amount',
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
                           ),
                           Text(
                             '₹${_totalAmount.toStringAsFixed(0)}',
-                            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineMedium
+                                ?.copyWith(
                                   color: AppTheme.primaryColor,
                                   fontWeight: FontWeight.bold,
                                 ),
                           ),
                         ],
                       ),
-                      
+
                       // Savings indicator
-                      if (_discountAmount > 0 || _discountPercent > 0 || _offerDiscount > 0) ...[
+                      if (_discountAmount > 0 ||
+                          _planDiscountPercent > 0 ||
+                          _offerDiscount > 0) ...[
                         const SizedBox(height: 12),
                         Container(
                           padding: const EdgeInsets.symmetric(
@@ -1235,7 +1467,7 @@ class _BookingScreenState extends State<BookingScreen> {
                               ),
                               const SizedBox(width: 8),
                               Text(
-                                'You save ₹${((_baseAmount * _discountPercent / 100) + _offerDiscount + _discountAmount).toStringAsFixed(0)}!',
+                                'You save ₹${(_planDiscountAmount + _offerDiscount + _discountAmount).toStringAsFixed(0)}!',
                                 style: const TextStyle(
                                   color: AppTheme.successColor,
                                   fontWeight: FontWeight.bold,

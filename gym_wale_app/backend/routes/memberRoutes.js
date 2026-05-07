@@ -481,7 +481,9 @@ router.post('/book-membership', require('../middleware/authMiddleware'), async (
       paymentAmount,
       activityPreference,
       offerId,
-      offerDiscount
+      offerDiscount,
+      transactionId,
+      paymentStatus: incomingPaymentStatus
     } = req.body;
 
     // Get user details
@@ -517,7 +519,8 @@ router.post('/book-membership', require('../middleware/authMiddleware'), async (
       monthlyPlan: monthlyPlan,
       activityPreference: activityPreference || 'General Fitness',
       address: user.address || '',
-      paymentStatus: paymentMode === 'Online' ? 'paid' : 'pending',
+      transactionId: transactionId || null,
+      paymentStatus: incomingPaymentStatus || (paymentMode === 'Online' || paymentMode === 'UPI' ? 'pending_verification' : 'paid'),
       membershipId: `MEM${Date.now()}`,
       validUntil: validUntil,
       amount: paymentAmount,

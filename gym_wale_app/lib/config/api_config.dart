@@ -1,4 +1,6 @@
 
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class ApiConfig {
   static const String _defaultApiOrigin = 'https://gym-wale.onrender.com';
 
@@ -121,4 +123,8 @@ class ApiConfig {
     ...headers,
     'Authorization': 'Bearer $token',
   };
+
+  // ========== Payment ==========
+  static String get razorpayPaymentLink =>
+      dotenv.env['RAZORPAY_PAYMENT_LINK'] ?? '';
 }

@@ -61,9 +61,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
         'paymentMethod': _selectedPaymentMethod,
       });
 
-      // Simulate payment processing
-      await Future.delayed(const Duration(seconds: 2));
-
       if (result['success'] && mounted) {
         // Show success dialog
         showDialog(

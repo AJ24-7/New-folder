@@ -124,6 +124,8 @@ class PaymentStats {
   final int totalPaid;
   final int totalPending;
   final int totalDue;
+  final double pendingVerification;
+  final int pendingVerificationCount;
 
   PaymentStats({
     required this.amountReceived,
@@ -139,6 +141,8 @@ class PaymentStats {
     this.totalPaid = 0,
     this.totalPending = 0,
     this.totalDue = 0,
+    this.pendingVerification = 0.0,
+    this.pendingVerificationCount = 0,
   });
 
   factory PaymentStats.fromJson(Map<String, dynamic> json) {
@@ -156,6 +160,8 @@ class PaymentStats {
       totalPaid: json['totalPaid'] ?? 0,
       totalPending: json['totalPending'] ?? 0,
       totalDue: json['totalDue'] ?? 0,
+      pendingVerification: (json['pendingVerification'] ?? 0).toDouble(),
+      pendingVerificationCount: json['pendingVerificationCount'] ?? 0,
     );
   }
 }

@@ -440,7 +440,7 @@ const getPaymentStats = async (req, res) => {
       gymIdQuery = { gymId: gymId };
     }
     
-    const [periodStats, currentDuePending] = await Promise.all([
+    const [periodStats, currentDuePending, pendingVerificationAgg] = await Promise.all([
       // Period-based stats for completed payments (received/paid)
       Payment.aggregate([
         {
@@ -474,6 +474,24 @@ const getPaymentStats = async (req, res) => {
             count: { $sum: 1 }
           }
         }
+      ]),
+      // Members whose Razorpay payment is pending verification by the gym
+      Member.aggregate([
+        {
+          $match: {
+            gym: mongoose.Types.ObjectId.isValid(gymId)
+              ? new mongoose.Types.ObjectId(gymId)
+              : gymId,
+            paymentStatus: 'pending_verification'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: '$paymentAmount' },
+            count: { $sum: 1 }
+          }
+        }
       ])
     ]);
 
@@ -484,10 +502,12 @@ const getPaymentStats = async (req, res) => {
     const paid = periodStats.find(s => s._id === 'paid')?.total || 0;
     const due = currentDuePending.find(s => s._id === 'due')?.total || 0;
     const pending = currentDuePending.find(s => s._id === 'pending')?.total || 0;
+    const pendingVerification = pendingVerificationAgg[0]?.total || 0;
+    const pendingVerificationCount = pendingVerificationAgg[0]?.count || 0;
     const profit = received - paid;
 
     // If no data found, return demo data for testing
-    if (received === 0 && paid === 0 && due === 0 && pending === 0) {
+    if (received === 0 && paid === 0 && due === 0 && pending === 0 && pendingVerification === 0) {
       console.log('No payment data found, returning demo data');
       return res.json({
         success: true,
@@ -496,6 +516,8 @@ const getPaymentStats = async (req, res) => {
           paid: 18000,
           due: 8000,
           pending: 5500,
+          pendingVerification: 0,
+          pendingVerificationCount: 0,
           profit: 27000,
           receivedGrowth: 18.5,
           paidGrowth: -12.3,
@@ -579,6 +601,8 @@ const getPaymentStats = async (req, res) => {
         paid,
         due,
         pending,
+        pendingVerification,
+        pendingVerificationCount,
         profit,
         receivedGrowth,
         paidGrowth,

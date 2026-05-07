@@ -528,7 +528,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     final isMobile = size.width <= 600;
 
     return GridView.count(
-      crossAxisCount: isDesktop ? 3 : 2,
+      crossAxisCount: isDesktop ? 4 : 2,
       mainAxisSpacing: isMobile ? 8 : 16,
       crossAxisSpacing: isMobile ? 8 : 16,
       shrinkWrap: true,
@@ -561,6 +561,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           icon: Icons.trending_up,
           color: _stats!.profitLoss >= 0 ? AppTheme.successColor : AppTheme.errorColor,
           trend: _stats!.profitChange,
+        ),
+        GestureDetector(
+          onTap: () => _showPendingVerificationDetails(),
+          child: StatCard(
+            title: 'Pending Verification',
+            value: _currencyFormat.format(_stats!.pendingVerification),
+            icon: Icons.pending_actions_outlined,
+            color: AppTheme.warningColor,
+            trend: 0,
+            subtitle: _stats!.pendingVerificationCount > 0
+                ? '${_stats!.pendingVerificationCount} member${_stats!.pendingVerificationCount == 1 ? '' : 's'}'
+                : null,
+          ),
         ),
       ],
     );
@@ -1486,6 +1499,105 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           ),
                         ),
                       ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showPendingVerificationDetails() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          width: 600,
+          constraints: const BoxConstraints(maxHeight: 700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: AppTheme.warningColor.withValues(alpha: 0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warningColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.pending_actions_outlined,
+                        color: AppTheme.warningColor,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Pending Verification',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${_stats?.pendingVerificationCount ?? 0} member${(_stats?.pendingVerificationCount ?? 0) == 1 ? '' : 's'} — ${_currencyFormat.format(_stats?.pendingVerification ?? 0)}',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.warningColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const FaIcon(FontAwesomeIcons.xmark, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'These members paid via Razorpay (Online/UPI) and entered a transaction reference. Verify the payment in your Razorpay dashboard and approve to mark them as active members.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Theme.of(context).textTheme.bodyMedium?.color?.withValues(alpha: 0.7),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      // Placeholder: full list is in the pending payments section
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.arrow_downward),
+                          label: const Text('See list below on the payments screen'),
+                        ),
+                      ),
                     ],
                   ),
                 ),

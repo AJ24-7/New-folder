@@ -759,6 +759,8 @@ class ApiService {
     String activityPreference = 'General Fitness',
     String? offerId,
     double? offerDiscount,
+    String? transactionId,
+    String? paymentStatus,
   }) async {
     if (_token == null) {
       return {'success': false, 'message': 'Not authenticated'};
@@ -776,6 +778,10 @@ class ApiService {
       };
       if (offerId != null) body['offerId'] = offerId;
       if (offerDiscount != null) body['offerDiscount'] = offerDiscount;
+      if (transactionId != null && transactionId.isNotEmpty) {
+        body['transactionId'] = transactionId;
+      }
+      if (paymentStatus != null) body['paymentStatus'] = paymentStatus;
 
       final response = await http.post(
         url,

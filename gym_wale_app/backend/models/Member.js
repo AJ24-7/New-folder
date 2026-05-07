@@ -22,9 +22,10 @@ const memberSchema = new mongoose.Schema({
   profileImage: { type: String },
   membershipId: { type: String },
   membershipValidUntil: { type: String },
+  transactionId: { type: String, default: null }, // Razorpay txn / UTR reference
   paymentStatus: { 
     type: String, 
-    enum: ['paid', 'pending', 'overdue'], 
+    enum: ['paid', 'pending', 'pending_verification', 'overdue'], 
     default: 'paid' 
   },
   pendingPaymentAmount: { type: Number, default: 0 },

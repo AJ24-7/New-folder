@@ -8,6 +8,7 @@ class StatCard extends Widget {
   final Color color;
   final double? trend;
   final VoidCallback? onTap;
+  final String? subtitle;
 
   const StatCard({
     super.key,
@@ -17,6 +18,7 @@ class StatCard extends Widget {
     required this.color,
     this.trend,
     this.onTap,
+    this.subtitle,
   });
 
   @override
@@ -139,6 +141,19 @@ class _StatCardElement extends ComponentElement {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
+                if (widget.subtitle != null) ...[
+                  SizedBox(height: isMobile ? 2 : 3),
+                  Text(
+                    widget.subtitle!,
+                    style: TextStyle(
+                      fontSize: isMobile ? 9 : 11,
+                      color: widget.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),

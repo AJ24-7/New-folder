@@ -30,6 +30,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
   List<TrialBooking> _upcomingTrials = [];
   List<UserDietSubscription> _dietSubscriptions = [];
   List<dynamic> _trainerBookings = [];
+  List<Map<String, dynamic>> _paymentHistory = [];
   Map<String, bool> _gymFreezeSettings = {}; // Store freeze settings per gym
 
   bool _isLoading = true;
@@ -38,7 +39,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _tabController.addListener(() {
       if (_tabController.indexIsChanging) {
         setState(() => _selectedTabIndex = _tabController.index);
@@ -121,12 +122,21 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
       List<dynamic> trainers = [];
       // TODO: Implement trainer booking API in backend
 
+      // Load payment history (all membership transactions)
+      List<Map<String, dynamic>> transactions = [];
+      try {
+        transactions = await ApiService.getTransactions();
+      } catch (e) {
+        debugPrint('Error loading transactions: $e');
+      }
+
       setState(() {
         _gymMemberships = memberships;
         _gymFreezeSettings = gymSettings;
         _upcomingTrials = upcomingTrials;
         _dietSubscriptions = diets;
         _trainerBookings = trainers;
+        _paymentHistory = transactions;
         _isLoading = false;
       });
     } catch (e) {
@@ -902,6 +912,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                       _buildDietPlansTab(),
                       _buildUpcomingTrialsTab(),
                       _buildTrainersTab(),
+                      _buildPaymentHistoryTab(),
                     ],
                   ),
           ),
@@ -926,6 +937,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                 l10n.upcomingTrials, Icons.schedule, 2, _upcomingTrials.length),
             _buildTabButton(
                 l10n.trainers, Icons.person_outline, 3, _trainerBookings.length),
+            _buildTabButton(
+                'Payments', Icons.receipt_long_outlined, 4, _paymentHistory.length),
           ],
         ),
       ),
@@ -2440,6 +2453,278 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
                   ),
               textAlign: TextAlign.center,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Payment History Tab ─────────────────────────────────────────────────
+
+  Widget _buildPaymentHistoryTab() {
+    if (_paymentHistory.isEmpty) {
+      return _buildEmptyState(
+        icon: Icons.receipt_long_outlined,
+        title: 'No Payments Yet',
+        subtitle: 'Your payment history will appear here after you book a membership.',
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadAllSubscriptions,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _paymentHistory.length,
+        itemBuilder: (context, index) {
+          final tx = _paymentHistory[index];
+          return _buildPaymentHistoryCard(tx);
+        },
+      ),
+    );
+  }
+
+  Widget _buildPaymentHistoryCard(Map<String, dynamic> tx) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final gymName = tx['gymName'] as String? ?? 'Unknown Gym';
+    final gymLogo = tx['gymLogo'] as String?;
+    final planName = tx['planName'] as String? ?? 'Membership';
+    final duration = tx['duration'] as String? ?? '';
+    final amount = (tx['amount'] as num?)?.toDouble() ?? 0.0;
+    final paymentMode = tx['paymentMode'] as String? ?? 'Cash';
+    final paymentStatus = tx['paymentStatus'] as String? ?? 'pending';
+    final transactionId = tx['transactionId'] as String?;
+    final membershipId = tx['membershipId'] as String? ?? '';
+
+    DateTime? date;
+    try {
+      final rawDate = tx['date'];
+      if (rawDate != null) date = DateTime.tryParse(rawDate.toString());
+    } catch (_) {}
+
+    // Determine status badge styling
+    Color statusColor;
+    String statusLabel;
+    switch (paymentStatus) {
+      case 'paid':
+        statusColor = Colors.green;
+        statusLabel = 'Paid';
+        break;
+      case 'pending_verification':
+        statusColor = Colors.orange;
+        statusLabel = 'Pending Verification';
+        break;
+      case 'overdue':
+        statusColor = Colors.red;
+        statusLabel = 'Overdue';
+        break;
+      default:
+        statusColor = Colors.orange;
+        statusLabel = 'Pending';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E1E1E) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0xFF2C2C2C) : AppTheme.borderColor,
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Gym header row
+            Row(
+              children: [
+                // Gym logo
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2C2C2C) : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: gymLogo != null && gymLogo.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: CachedNetworkImage(
+                            imageUrl: gymLogo,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, __, ___) => Icon(
+                              Icons.fitness_center,
+                              color: AppTheme.primaryColor,
+                              size: 22,
+                            ),
+                          ),
+                        )
+                      : Icon(Icons.fitness_center, color: AppTheme.primaryColor, size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        gymName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                          color: Theme.of(context).textTheme.bodyLarge?.color,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        membershipId,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // Amount
+                Text(
+                  '₹${amount.toStringAsFixed(0)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Plan + duration chip row
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    planName,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Theme.of(context).textTheme.bodyLarge?.color,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                if (duration.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      duration,
+                      style: TextStyle(
+                        color: AppTheme.primaryColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Date + payment mode + status row
+            Row(
+              children: [
+                Icon(Icons.calendar_today_outlined, size: 13, color: AppTheme.textSecondary),
+                const SizedBox(width: 4),
+                Text(
+                  date != null
+                      ? DateFormat('dd MMM yyyy').format(date)
+                      : 'N/A',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // Payment mode chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF2C2C2C) : Colors.grey[100],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isDark ? const Color(0xFF3C3C3C) : AppTheme.borderColor,
+                    ),
+                  ),
+                  child: Text(
+                    paymentMode,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                // Status badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: statusColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(
+                      color: statusColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            // Transaction / UTR ID (if available)
+            if (transactionId != null && transactionId.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF141414) : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isDark ? const Color(0xFF2C2C2C) : Colors.grey[200]!,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.tag, size: 14, color: AppTheme.textSecondary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'UTR / Txn ID: $transactionId',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                          fontFamily: 'monospace',
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

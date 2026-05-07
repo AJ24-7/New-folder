@@ -12,6 +12,7 @@ const API_BASE_URL = resolvedApiBase.replace(/\/+$/, '').endsWith('/api')
     ? resolvedApiBase.replace(/\/+$/, '')
     : `${resolvedApiBase.replace(/\/+$/, '')}/api`;
 const API_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
+const RAZORPAY_PAYMENT_LINK = window.GYM_WALE_RAZORPAY_PAYMENT_LINK || '';
 const FALLBACK_ACTIVITIES = [
     'Cardio',
     'Weight Training',
@@ -588,6 +589,19 @@ function normalizePaymentMode(mode) {
     return 'Online';
 }
 
+function openRazorpayPaymentLink() {
+    if (!RAZORPAY_PAYMENT_LINK) {
+        alert('Payment link is not configured. Please contact support.');
+        return false;
+    }
+    const paymentWindow = window.open(RAZORPAY_PAYMENT_LINK, '_blank', 'noopener');
+    if (!paymentWindow) {
+        alert('Unable to open payment link. Please allow popups and try again.');
+        return false;
+    }
+    return true;
+}
+
 // Setup Payment Method Listener
 function setupPaymentMethodListener() {
     const paymentMethods = document.querySelectorAll('input[name="paymentMethod"]');
@@ -596,12 +610,12 @@ function setupPaymentMethodListener() {
     paymentMethods.forEach(method => {
         method.addEventListener('change', (e) => {
             const value = e.target.value;
-            if (value === 'Cash') {
-                transactionIdGroup.style.display = 'none';
-                document.getElementById('transactionId').required = false;
-            } else {
+            if (value === 'Bank Transfer') {
                 transactionIdGroup.style.display = 'block';
                 document.getElementById('transactionId').required = true;
+            } else {
+                transactionIdGroup.style.display = 'none';
+                document.getElementById('transactionId').required = false;
             }
         });
     });
@@ -685,6 +699,36 @@ async function submitNewMember() {
             return;
         }
 
+        if (paymentMethod === 'Card' || paymentMethod === 'UPI') {
+            const opened = openRazorpayPaymentLink();
+            if (!opened) {
+                showLoading(false);
+                return;
+            }
+            showLoading(false);
+
+            // Require user to confirm they completed payment before submitting.
+            // window.prompt returns null on Cancel and the entered string on OK.
+            const txnRef = window.prompt(
+                'Your Razorpay payment page has opened in a new tab.\n\n' +
+                'After completing your payment, enter the Razorpay transaction or UTR ' +
+                'reference below (optional — helps the gym verify faster).\n\n' +
+                'Click OK to confirm payment and complete registration, or Cancel to abort.',
+                ''
+            );
+
+            if (txnRef === null) {
+                // User cancelled — do not submit registration
+                return;
+            }
+
+            const txnInput = document.getElementById('transactionId');
+            if (txnInput && txnRef.trim().length > 0) {
+                txnInput.value = txnRef.trim();
+            }
+            showLoading(true);
+        }
+
         const monthlyPlan = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
         const paymentMode = normalizePaymentMode(paymentMethod);
         const finalPrice = resolvePlanFinalPrice(selectedPlan);
@@ -703,6 +747,9 @@ async function submitNewMember() {
             monthlyPlan,
             paymentMode,
             paymentAmount: finalPrice,
+            paymentStatus: (paymentMethod === 'Card' || paymentMethod === 'UPI')
+                ? 'pending_verification'
+                : 'paid',
             membershipPlan: {
                 months: selectedPlan.months,
                 price: selectedPlan.price,
@@ -713,7 +760,7 @@ async function submitNewMember() {
             payment: {
                 method: paymentMode,
                 amount: finalPrice,
-                transactionId: transactionId || null
+                transactionId: document.getElementById('transactionId').value || null
             }
         };
 

@@ -711,6 +711,7 @@ router.get('/transactions', authMiddleware, async (req, res) => {
       amount: membership.paymentAmount || membership.amount || 0,
       paymentMode: membership.paymentMode || 'Cash',
       paymentStatus: membership.paymentStatus || 'pending',
+      transactionId: membership.transactionId || null,
       date: membership.joinDate || membership.createdAt,
       membershipId: membership.membershipId,
       duration: membership.monthlyPlan || membership.validity || '1 Month',
