@@ -708,6 +708,7 @@ async function submitNewMember() {
             showLoading(false);
 
             // Require user to confirm they completed payment before submitting.
+            // window.prompt returns null on Cancel and the entered string on OK.
             const txnRef = window.prompt(
                 'Your Razorpay payment page has opened in a new tab.\n\n' +
                 'After completing your payment, enter the Razorpay transaction or UTR ' +
@@ -717,6 +718,7 @@ async function submitNewMember() {
             );
 
             if (txnRef === null) {
+                // User cancelled — do not submit registration
                 return;
             }
 
