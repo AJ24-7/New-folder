@@ -671,97 +671,6 @@ async function submitPreviousMember() {
     }
 }
 
-// Cash Payment Dialog State
-let _cashTimerInterval = null;
-let _cashPollInterval = null;
-let _cashValidationCode = null;
-
-function showCashPaymentDialog(amount, planLabel) {
-    const finalPrice = Number(amount);
-    document.getElementById('cashDialogAmount').textContent = `₹${finalPrice.toLocaleString('en-IN')}`;
-    document.getElementById('cashDialogPlan').textContent = planLabel || '';
-
-    // Reset timer
-    const timerEl = document.getElementById('cashPaymentTimer');
-    const timerBar = document.getElementById('cashTimerBar');
-    timerEl.classList.remove('expired');
-    timerBar.style.width = '100%';
-    document.getElementById('cashDialogStatus').className = 'cash-status-pending';
-    document.getElementById('cashDialogStatus').innerHTML = '<i class="fas fa-clock"></i><span>Waiting for admin to confirm payment at counter...</span>';
-    document.getElementById('cashCancelBtn').style.display = '';
-
-    document.getElementById('cashPaymentDialog').classList.remove('hidden');
-
-    let secondsLeft = 120;
-    _cashTimerInterval = setInterval(() => {
-        secondsLeft--;
-        const m = Math.floor(secondsLeft / 60);
-        const s = secondsLeft % 60;
-        timerEl.textContent = `${m}:${s.toString().padStart(2, '0')}`;
-        timerBar.style.width = `${(secondsLeft / 120) * 100}%`;
-        if (secondsLeft <= 0) {
-            clearInterval(_cashTimerInterval);
-            _cashTimerInterval = null;
-            timerEl.classList.add('expired');
-            timerEl.textContent = 'Expired';
-            timerBar.style.width = '0%';
-            document.getElementById('cashDialogStatus').className = 'cash-status-expired';
-            document.getElementById('cashDialogStatus').innerHTML = '<i class="fas fa-times-circle"></i><span>Time expired. Please visit the counter again.</span>';
-            stopCashPolling();
-        }
-    }, 1000);
-}
-
-function hideCashPaymentDialog() {
-    document.getElementById('cashPaymentDialog').classList.add('hidden');
-    clearInterval(_cashTimerInterval);
-    _cashTimerInterval = null;
-    stopCashPolling();
-}
-
-function cancelCashPayment() {
-    hideCashPaymentDialog();
-    showLoading(false);
-    _cashValidationCode = null;
-}
-
-function startCashPolling(validationCode) {
-    _cashValidationCode = validationCode;
-    document.getElementById('cashValidationSection').style.display = '';
-    document.getElementById('cashValidationCode').textContent = validationCode;
-
-    _cashPollInterval = setInterval(async () => {
-        try {
-            const response = await fetch(`${API_BASE_URL}/validation-status/${encodeURIComponent(validationCode)}`);
-            if (!response.ok) return;
-            const data = await response.json();
-
-            if (data.status === 'confirmed') {
-                stopCashPolling();
-                clearInterval(_cashTimerInterval);
-                document.getElementById('cashPaymentTimer').textContent = '✓';
-                document.getElementById('cashTimerBar').style.width = '100%';
-                document.getElementById('cashDialogStatus').className = 'cash-status-confirmed';
-                document.getElementById('cashDialogStatus').innerHTML = '<i class="fas fa-check-circle"></i><span>Payment confirmed by gym admin!</span>';
-                document.getElementById('cashCancelBtn').style.display = 'none';
-                setTimeout(() => {
-                    hideCashPaymentDialog();
-                    showSuccess('New Member', data.member || { memberId: validationCode });
-                }, 2000);
-            }
-        } catch (e) {
-            // silent - keep polling
-        }
-    }, 3000);
-}
-
-function stopCashPolling() {
-    if (_cashPollInterval) {
-        clearInterval(_cashPollInterval);
-        _cashPollInterval = null;
-    }
-}
-
 // Submit New Member Registration
 async function submitNewMember() {
     const paymentForm = document.getElementById('paymentForm');
@@ -876,17 +785,6 @@ async function submitNewMember() {
         const result = await response.json();
 
         showLoading(false);
-
-        // Cash payment: show the 2-minute countdown dialog and poll for admin confirmation
-        if (paymentMode === 'Cash') {
-            const planLabel = `${resolvePlanTier(selectedPlan.months)} - ${monthlyPlan}`;
-            showCashPaymentDialog(finalPrice, planLabel);
-            if (result.validationCode) {
-                startCashPolling(result.validationCode);
-            }
-            return;
-        }
-
         showSuccess('New Member', result);
 
     } catch (error) {
