@@ -50,6 +50,7 @@ class FirebaseMessagingService {
   
   bool _initialized = false;
   String? _fcmToken;
+  final List<Map<String, dynamic>> _pendingTappedNotifications = [];
   
   // Stream controllers for notification events
   final StreamController<RemoteMessage> _messageStreamController = StreamController<RemoteMessage>.broadcast();
@@ -59,6 +60,16 @@ class FirebaseMessagingService {
   Stream<String> get onTokenRefresh => _tokenRefreshController.stream;
   
   String? get fcmToken => _fcmToken;
+
+  /// Returns and clears notification taps captured before listeners attached.
+  List<Map<String, dynamic>> takePendingTappedNotifications() {
+    if (_pendingTappedNotifications.isEmpty) {
+      return [];
+    }
+    final pending = List<Map<String, dynamic>>.from(_pendingTappedNotifications);
+    _pendingTappedNotifications.clear();
+    return pending;
+  }
 
   /// Initialize Firebase Messaging and Local Notifications
   Future<void> initialize() async {
@@ -396,12 +407,19 @@ class FirebaseMessagingService {
   /// Handle notification tap
   void _handleNotificationTap(Map<String, dynamic> data) {
     debugPrint('🔔 [FCM] Handling notification tap: $data');
-    
-    // TODO: Navigate to appropriate screen based on notification type
-    // This can be handled by the app through the onMessage stream
+
+    final normalizedData = Map<String, dynamic>.from(data);
+
+    // If no one is listening yet (cold-start timing), queue and replay later.
+    if (!_messageStreamController.hasListener) {
+      _pendingTappedNotifications.add(normalizedData);
+      debugPrint('🔔 [FCM] Tap queued until listeners are ready');
+      return;
+    }
+
     _messageStreamController.add(
       RemoteMessage(
-        data: data,
+        data: normalizedData,
         messageId: DateTime.now().millisecondsSinceEpoch.toString(),
       ),
     );

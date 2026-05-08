@@ -17,6 +17,7 @@ class CashPaymentRequestDialog extends StatefulWidget {
   final String validationCode;
   final String gymId;
   final String memberId;
+  final String expiresAt;
 
   const CashPaymentRequestDialog({
     super.key,
@@ -27,6 +28,7 @@ class CashPaymentRequestDialog extends StatefulWidget {
     required this.validationCode,
     required this.gymId,
     required this.memberId,
+    required this.expiresAt,
   });
 
   /// Show the dialog as an overlay that cannot be dismissed by tapping outside.
@@ -42,6 +44,7 @@ class CashPaymentRequestDialog extends StatefulWidget {
         validationCode: data['validationCode'] ?? '',
         gymId: data['gymId'] ?? '',
         memberId: data['memberId'] ?? '',
+        expiresAt: data['expiresAt'] ?? '',
       ),
     );
   }
@@ -54,6 +57,7 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
     with SingleTickerProviderStateMixin {
   static const int _totalSeconds = 120;
   int _secondsLeft = _totalSeconds;
+  DateTime? _expiresAtTime;
   Timer? _timer;
   bool _isLoading = false;
   String? _resultMessage;
@@ -66,6 +70,7 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
   @override
   void initState() {
     super.initState();
+    _resolveExpiry();
     _startTimer();
 
     _pulseController = AnimationController(
@@ -81,11 +86,27 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
-      setState(() => _secondsLeft--);
+      if (_expiresAtTime != null) {
+        final remaining = _expiresAtTime!.difference(DateTime.now()).inSeconds;
+        setState(() => _secondsLeft = remaining.clamp(0, _totalSeconds));
+      } else {
+        setState(() => _secondsLeft = (_secondsLeft - 1).clamp(0, _totalSeconds));
+      }
       if (_secondsLeft <= 0) {
         t.cancel();
       }
     });
+  }
+
+  void _resolveExpiry() {
+    final raw = widget.expiresAt.trim();
+    if (raw.isEmpty) return;
+
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return;
+
+    _expiresAtTime = parsed.toLocal();
+    _secondsLeft = _expiresAtTime!.difference(DateTime.now()).inSeconds.clamp(0, _totalSeconds);
   }
 
   @override
@@ -116,7 +137,7 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
       final storage = StorageService();
       final token = await storage.getToken();
       final url =
-          '${ApiConfig.baseUrl}/api/confirm-cash-validation/${Uri.encodeComponent(widget.validationCode)}';
+          '${ApiConfig.baseUrl}/api/payments/confirm-cash-validation/${Uri.encodeComponent(widget.validationCode)}';
 
       final response = await http.post(
         Uri.parse(url),
@@ -156,7 +177,7 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
       final storage = StorageService();
       final token = await storage.getToken();
       final url =
-          '${ApiConfig.baseUrl}/api/reject-cash-validation/${Uri.encodeComponent(widget.validationCode)}';
+          '${ApiConfig.baseUrl}/api/payments/reject-cash-validation/${Uri.encodeComponent(widget.validationCode)}';
 
       final response = await http.post(
         Uri.parse(url),
@@ -288,6 +309,9 @@ class _CashPaymentRequestDialogState extends State<CashPaymentRequestDialog>
                       const SizedBox(height: 8),
                       _infoRow(Icons.card_membership_rounded, 'Plan',
                           '${widget.planName} · ${widget.duration}'),
+                      const SizedBox(height: 8),
+                      _infoRow(Icons.badge_rounded, 'Member ID',
+                          widget.memberId.isNotEmpty ? widget.memberId : 'Pending'),
                       const SizedBox(height: 8),
                       _infoRow(Icons.tag_rounded, 'Reference', widget.validationCode,
                           valueColor: const Color(0xFFf59e0b)),

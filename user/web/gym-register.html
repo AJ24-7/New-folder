@@ -102,6 +102,12 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="prevProfileImage"><i class="fas fa-image"></i> Profile Image (Optional)</label>
+                    <input type="file" id="prevProfileImage" name="profileImage" accept="image/*">
+                    <small>Optional: JPG, PNG, or WEBP (max 5MB)</small>
+                </div>
+
+                <div class="form-group">
                     <label><i class="fas fa-heartbeat"></i> Preferred Activities</label>
                     <div id="previousActivities" class="checkbox-group">
                         <div class="loading-inline">
@@ -167,6 +173,12 @@
                         <div class="form-group">
                             <label for="newAddress"><i class="fas fa-map-marker-alt"></i> Address</label>
                             <textarea id="newAddress" name="address" rows="3"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="newProfileImage"><i class="fas fa-image"></i> Profile Image (Optional)</label>
+                            <input type="file" id="newProfileImage" name="profileImage" accept="image/*">
+                            <small>Optional: JPG, PNG, or WEBP (max 5MB)</small>
                         </div>
 
                         <button type="button" class="btn btn-primary" onclick="nextStep(2)">

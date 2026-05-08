@@ -6,6 +6,43 @@ const sendEmail = require('../utils/sendEmail');
 // In-memory store for cash validation requests (in production, use Redis or database)
 const cashValidationStore = new Map();
 
+function generateStandardMembershipId(gymName, planSelected) {
+  const now = new Date();
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const gymShort = (gymName || 'GYM').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  const planShort = (planSelected || 'PLAN').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  return `${gymShort}-${ym}-${planShort}-${random}`;
+}
+
+async function createPaymentNotification(gymId, paymentData) {
+  try {
+    const notification = {
+      user: gymId,
+      title: '💰 Cash Payment Confirmed',
+      message: `₹${Number(paymentData.amount || 0).toLocaleString('en-IN')} received from ${paymentData.memberName || 'Member'} via cash validation`,
+      type: 'payment',
+      priority: 'normal',
+      read: false,
+      isRead: false,
+      metadata: {
+        paymentId: paymentData._id,
+        amount: paymentData.amount,
+        paymentMethod: paymentData.paymentMethod,
+        registrationSource: paymentData.registrationSource,
+        memberName: paymentData.memberName,
+        memberId: paymentData.memberId,
+        category: paymentData.category
+      }
+    };
+
+    const Notification = require('../models/Notification');
+    await new Notification(notification).save();
+  } catch (error) {
+    console.error('❌ Error creating cash payment notification:', error.message);
+  }
+}
+
 // Create a new cash validation request
 const createCashValidation = async (req, res) => {
   try {
@@ -165,33 +202,101 @@ const confirmCashPayment = async (req, res) => {
       });
     }
 
-    // Create member with confirmed payment
-    const memberData = {
-      gym: validation.gymId,
-      memberName: validation.memberName,
-      age: validation.registrationData?.age || 25,
-      gender: validation.registrationData?.gender || 'Other',
-      phone: validation.phone,
-      email: validation.email,
-      paymentMode: 'Cash',
-      paymentAmount: parseFloat(validation.amount),
-      planSelected: validation.planName,
-      monthlyPlan: validation.duration,
-      activityPreference: validation.registrationData?.activityPreference || 'General fitness',
-      address: validation.registrationData?.address || '',
-      joinDate: new Date(),
-      membershipId: `${(gym.gymName || gym.name || 'GYM').substring(0,3).toUpperCase()}${Date.now()}`,
-      paymentStatus: 'paid' // Mark as paid since cash is confirmed
-    };
+    let member = null;
+    const existingMemberId = validation.registrationData?.memberId;
 
-    console.log('💰 Creating confirmed member with data:', memberData);
+    if (existingMemberId) {
+      member = await Member.findOne({
+        _id: existingMemberId,
+        gym: validation.gymId,
+      });
+    }
 
-    const newMember = new Member(memberData);
-    await newMember.save();
+    if (member) {
+      member.memberName = validation.memberName || member.memberName;
+      member.phone = validation.phone || member.phone;
+      member.email = validation.email || member.email;
+      member.planSelected = validation.planName || member.planSelected;
+      member.monthlyPlan = validation.duration || member.monthlyPlan;
+      member.paymentMode = 'Cash';
+      member.paymentAmount = parseFloat(validation.amount) || member.paymentAmount;
+      member.paymentStatus = 'paid';
+      member.activityPreference =
+        validation.registrationData?.activityPreference || member.activityPreference || 'General fitness';
+      member.address = validation.registrationData?.address || member.address || '';
+
+      if (!member.membershipId) {
+        member.membershipId = generateStandardMembershipId(
+          gym.gymName || gym.name || 'GYM',
+          validation.planName || member.planSelected || 'PLAN'
+        );
+      }
+
+      await member.save();
+      console.log(`✅ Confirmed cash payment for existing pending member: ${member._id}`);
+    } else {
+      const memberData = {
+        gym: validation.gymId,
+        memberName: validation.memberName,
+        age: validation.registrationData?.age || 25,
+        gender: validation.registrationData?.gender || 'Other',
+        phone: validation.phone,
+        email: validation.email,
+        paymentMode: 'Cash',
+        paymentAmount: parseFloat(validation.amount),
+        planSelected: validation.planName,
+        monthlyPlan: validation.duration,
+        activityPreference: validation.registrationData?.activityPreference || 'General fitness',
+        address: validation.registrationData?.address || '',
+        joinDate: new Date(),
+        membershipId: generateStandardMembershipId(
+          gym.gymName || gym.name || 'GYM',
+          validation.planName || 'PLAN'
+        ),
+        paymentStatus: 'paid'
+      };
+
+      console.log('💰 Creating confirmed member with data:', memberData);
+
+      member = new Member(memberData);
+      await member.save();
+      console.log(`✅ Created new member during cash confirm fallback: ${member._id}`);
+    }
+
+    const paymentAmount = Number(validation.amount || 0);
+    const resolvedGymId = gym?._id || validation.gymId;
+    const createdBy = (req.admin && (req.admin.id || req.admin._id)) || resolvedGymId;
+
+    // Create payment entry so dashboard stats include this confirmation.
+    let paymentRecord = null;
+    try {
+      paymentRecord = await new Payment({
+        gymId: resolvedGymId,
+        type: 'received',
+        category: 'membership',
+        amount: paymentAmount,
+        description: `Cash validation payment - ${validation.planName || member.planSelected || 'Membership Plan'}`,
+        memberName: member.memberName,
+        memberId: member._id,
+        paymentMethod: 'cash',
+        status: 'completed',
+        registrationSource: 'cash_validation',
+        planSelected: validation.planName || member.planSelected,
+        monthlyPlan: validation.duration || member.monthlyPlan,
+        transactionId: validation.validationCode,
+        paidDate: new Date(),
+        createdBy
+      }).save();
+
+      await createPaymentNotification(resolvedGymId, paymentRecord);
+      console.log('✅ Payment record created for cash confirmation:', paymentRecord._id);
+    } catch (paymentError) {
+      console.error('❌ Failed to create payment record for cash confirmation:', paymentError);
+    }
 
     // Send welcome email
     try {
-      await sendWelcomeEmailForCash(newMember, gym);
+      await sendWelcomeEmailForCash(member, gym);
     } catch (emailError) {
       console.error('Error sending welcome email:', emailError);
       // Don't fail confirmation if email fails
@@ -200,25 +305,25 @@ const confirmCashPayment = async (req, res) => {
     // Mark validation as confirmed
     validation.status = 'confirmed';
     validation.confirmedAt = new Date();
-    validation.memberId = newMember._id;
+    validation.memberId = member._id;
 
     res.json({
       success: true,
-      message: 'NEW CONTROLLER - Cash payment confirmed and member created successfully',
+      message: 'Cash payment confirmed and member updated successfully',
       member: {
-        id: newMember._id,
-        membershipId: newMember.membershipId,
-        name: newMember.memberName,
-        memberName: newMember.memberName,
-        email: newMember.email,
-        phone: newMember.phone,
-        planSelected: newMember.planSelected,
-        membershipPlan: newMember.planSelected, // Map to existing field for compatibility
-        monthlyPlan: newMember.monthlyPlan,
-        duration: newMember.monthlyPlan, // Map to existing field for compatibility
-        paymentAmount: newMember.paymentAmount,
-        paymentStatus: newMember.paymentStatus,
-        joinDate: newMember.joinDate
+        id: member._id,
+        membershipId: member.membershipId,
+        name: member.memberName,
+        memberName: member.memberName,
+        email: member.email,
+        phone: member.phone,
+        planSelected: member.planSelected,
+        membershipPlan: member.planSelected,
+        monthlyPlan: member.monthlyPlan,
+        duration: member.monthlyPlan,
+        paymentAmount: member.paymentAmount,
+        paymentStatus: member.paymentStatus,
+        joinDate: member.joinDate
       },
       gym: {
         name: gym.gymName || gym.name,
@@ -231,7 +336,15 @@ const confirmCashPayment = async (req, res) => {
         amount: validation.amount,
         planName: validation.planName,
         duration: validation.duration
-      }
+      },
+      payment: paymentRecord
+        ? {
+            id: paymentRecord._id,
+            amount: paymentRecord.amount,
+            status: paymentRecord.status,
+            type: paymentRecord.type
+          }
+        : null
     });
 
     console.log(`✅ NEW CONTROLLER - Member created and cash validation confirmed: ${validationCode} for ${validation.memberName}`);

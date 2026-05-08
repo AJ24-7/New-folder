@@ -86,6 +86,18 @@ class NotificationProvider with ChangeNotifier {
         debugPrint('🔔 [NotifProvider] New message received');
         _handleIncomingMessage(message);
       });
+
+      // Handle taps captured before listeners were attached (cold start path).
+      final pendingTapped = _fcmService.takePendingTappedNotifications();
+      for (final data in pendingTapped) {
+        debugPrint('🔔 [NotifProvider] Replaying queued notification tap: $data');
+        _handleIncomingMessage(
+          RemoteMessage(
+            data: data,
+            messageId: DateTime.now().millisecondsSinceEpoch.toString(),
+          ),
+        );
+      }
       
       // Listen to token refresh
       _tokenSubscription = _fcmService.onTokenRefresh.listen((String newToken) {

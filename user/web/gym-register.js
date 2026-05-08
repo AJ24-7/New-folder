@@ -21,6 +21,7 @@ const FALLBACK_ACTIVITIES = [
     'Zumba',
     'Swimming'
 ];
+const MAX_PROFILE_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 // Global State
 let currentStep = 1;
@@ -621,6 +622,26 @@ function setupPaymentMethodListener() {
     });
 }
 
+function getOptionalProfileImage(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input || !input.files || input.files.length === 0) {
+        return undefined;
+    }
+
+    const file = input.files[0];
+    if (!file.type || !file.type.startsWith('image/')) {
+        alert('Please upload a valid image file (JPG, PNG, WEBP).');
+        return false;
+    }
+
+    if (file.size > MAX_PROFILE_IMAGE_SIZE_BYTES) {
+        alert('Profile image must be 5MB or smaller.');
+        return false;
+    }
+
+    return file;
+}
+
 // Submit Previous Member Registration
 async function submitPreviousMember() {
     const form = document.getElementById('prevMemberFormData');
@@ -636,22 +657,26 @@ async function submitPreviousMember() {
         const formData = new FormData(form);
         const activities = Array.from(document.querySelectorAll('input[name="activities"]:checked'))
             .map(cb => cb.value);
-        
-        const data = {
-            gymId: gymId,
-            name: formData.get('name'),
-            phone: formData.get('phone'),
-            email: formData.get('email'),
-            preferredActivities: activities,
-            registrationType: 'previous'
-        };
+        const profileImage = getOptionalProfileImage('prevProfileImage');
+        if (profileImage === false) {
+            showLoading(false);
+            return;
+        }
+
+        const payload = new FormData();
+        payload.append('gymId', gymId);
+        payload.append('name', formData.get('name'));
+        payload.append('phone', formData.get('phone'));
+        payload.append('email', formData.get('email'));
+        payload.append('preferredActivities', JSON.stringify(activities));
+        payload.append('registrationType', 'previous');
+        if (profileImage) {
+            payload.append('profileImage', profileImage);
+        }
         
         const response = await fetch(`${API_BASE_URL}/members/qr-register-previous`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            body: payload
         });
         
         if (!response.ok) {
@@ -732,49 +757,53 @@ async function submitNewMember() {
         const monthlyPlan = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
         const paymentMode = normalizePaymentMode(paymentMethod);
         const finalPrice = resolvePlanFinalPrice(selectedPlan);
+        const profileImage = getOptionalProfileImage('newProfileImage');
+        if (profileImage === false) {
+            showLoading(false);
+            return;
+        }
+        const payload = new FormData();
+        payload.append('gymId', gymId);
+        payload.append('name', memberData.name || '');
+        payload.append('age', String(Number(memberData.age)));
+        payload.append('gender', memberData.gender || '');
+        payload.append('phone', memberData.phone || '');
+        payload.append('email', memberData.email || '');
+        payload.append('address', memberData.address || '');
+        payload.append('preferredActivities', JSON.stringify(activities));
+        payload.append('activityPreference', activities.join(', '));
+        payload.append('planSelected', resolvePlanTier(selectedPlan.months));
+        payload.append('monthlyPlan', monthlyPlan);
+        payload.append('paymentMode', paymentMode);
+        payload.append('paymentAmount', String(finalPrice));
+        payload.append('paymentStatus', (paymentMethod === 'Card' || paymentMethod === 'UPI')
+            ? 'pending_verification'
+            : 'paid');
+        payload.append('membershipPlan', JSON.stringify({
+            months: selectedPlan.months,
+            price: selectedPlan.price,
+            finalPrice,
+            discount: selectedPlan.discount || 0,
+            tier: resolvePlanTier(selectedPlan.months)
+        }));
+        payload.append('payment', JSON.stringify({
+            method: paymentMode,
+            amount: finalPrice,
+            transactionId: document.getElementById('transactionId').value || null
+        }));
 
-        const data = {
-            gymId: gymId,
-            name: memberData.name,
-            age: Number(memberData.age),
-            gender: memberData.gender,
-            phone: memberData.phone,
-            email: memberData.email,
-            address: memberData.address || '',
-            preferredActivities: activities,
-            activityPreference: activities.join(', '),
-            planSelected: resolvePlanTier(selectedPlan.months),
-            monthlyPlan,
-            paymentMode,
-            paymentAmount: finalPrice,
-            paymentStatus: (paymentMethod === 'Card' || paymentMethod === 'UPI')
-                ? 'pending_verification'
-                : 'paid',
-            membershipPlan: {
-                months: selectedPlan.months,
-                price: selectedPlan.price,
-                finalPrice,
-                discount: selectedPlan.discount || 0,
-                tier: resolvePlanTier(selectedPlan.months)
-            },
-            payment: {
-                method: paymentMode,
-                amount: finalPrice,
-                transactionId: document.getElementById('transactionId').value || null
-            }
-        };
+        if (profileImage) {
+            payload.append('profileImage', profileImage);
+        }
 
         if (qrToken) {
-            data.qrToken = qrToken;
-            data.registrationType = 'standard';
+            payload.append('qrToken', qrToken);
+            payload.append('registrationType', 'standard');
         }
 
         const response = await fetch(`${API_BASE_URL}/members/qr-register-new`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            body: payload
         });
 
         if (!response.ok) {

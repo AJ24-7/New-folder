@@ -10,6 +10,119 @@ const fcmService = require('../services/fcmService');
 // Import cash validation functions
 const { createCashValidationRequest } = require('./cashValidationController');
 
+function generateStandardMembershipId(gymName, planSelected) {
+  const now = new Date();
+  const ym = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const random = Math.random().toString(36).substring(2, 8).toUpperCase();
+  const gymShort = (gymName || 'GYM').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  const planShort = (planSelected || 'PLAN').replace(/[^A-Za-z0-9]/g, '').substring(0, 6).toUpperCase();
+  return `${gymShort}-${ym}-${planShort}-${random}`;
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizePhone(phone) {
+  return String(phone || '').replace(/\D/g, '').trim();
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function parseActivityList(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+    } catch (error) {
+      // Not JSON, continue with CSV fallback.
+    }
+
+    return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  return [];
+}
+
+function parseObjectValue(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function resolveProfileImageUrl(req) {
+  if (req.file && req.file.path) {
+    return req.file.path;
+  }
+
+  const bodyProfileImage = String(req.body?.profileImage || '').trim();
+  if (/^https:\/\//i.test(bodyProfileImage)) {
+    return bodyProfileImage;
+  }
+
+  return '';
+}
+
+async function findExistingMemberByIdentity(gymId, phone, email) {
+  const conditions = [];
+
+  if (phone) {
+    conditions.push({ phone });
+  }
+
+  if (email) {
+    conditions.push({ email: new RegExp(`^${escapeRegex(email)}$`, 'i') });
+  }
+
+  if (conditions.length === 0) {
+    return null;
+  }
+
+  return Member.findOne({
+    gym: gymId,
+    $or: conditions
+  });
+}
+
 // Register member via QR code
 const registerMemberViaQR = async (req, res) => {
   try {
@@ -488,7 +601,12 @@ const getGymInfo = async (req, res) => {
  */
 const registerPreviousMember = async (req, res) => {
   try {
-    const { gymId, name, phone, email, preferredActivities } = req.body;
+    const { gymId, preferredActivities } = req.body;
+    const name = String(req.body?.name || '').trim();
+    const phone = normalizePhone(req.body?.phone);
+    const email = normalizeEmail(req.body?.email);
+    const selectedActivities = parseActivityList(preferredActivities);
+    const profileImageUrl = resolveProfileImageUrl(req);
     
     // Validate required fields
     if (!gymId || !name || !phone || !email) {
@@ -516,18 +634,18 @@ const registerPreviousMember = async (req, res) => {
     }
     
     // Check if member already exists with this phone or email
-    const existingMember = await Member.findOne({
-      gym: gymId,
-      $or: [{ phone }, { email }]
-    });
+    const existingMember = await findExistingMemberByIdentity(gymId, phone, email);
     
     if (existingMember) {
       // Update existing member information
       existingMember.memberName = name;
       existingMember.phone = phone;
       existingMember.email = email;
-      if (preferredActivities && preferredActivities.length > 0) {
-        existingMember.activityPreference = preferredActivities.join(', ');
+      if (selectedActivities.length > 0) {
+        existingMember.activityPreference = selectedActivities.join(', ');
+      }
+      if (profileImageUrl) {
+        existingMember.profileImage = profileImageUrl;
       }
       existingMember.updatedAt = new Date();
       
@@ -554,7 +672,7 @@ const registerPreviousMember = async (req, res) => {
       }
       
       return res.status(200).json({
-        message: 'Member information updated successfully',
+        message: 'Member found and updated successfully (existing member flow applied)',
         memberId: existingMember.membershipId,
         name: existingMember.memberName,
         phone: existingMember.phone,
@@ -564,7 +682,7 @@ const registerPreviousMember = async (req, res) => {
     }
     
     // If member doesn't exist, create a pending record with safe defaults required by schema.
-    const newMembershipId = `GW${Date.now()}`;
+    const newMembershipId = generateStandardMembershipId(gym.gymName || gym.name || 'GYM', 'PENDING');
     const newMember = new Member({
       gym: gymId,
       membershipId: newMembershipId,
@@ -573,15 +691,16 @@ const registerPreviousMember = async (req, res) => {
       gender: 'Other',
       phone,
       email,
-      activityPreference: preferredActivities && preferredActivities.length > 0
-        ? preferredActivities.join(', ')
+      activityPreference: selectedActivities.length > 0
+        ? selectedActivities.join(', ')
         : 'General Fitness',
       paymentMode: 'pending',
       paymentAmount: 0,
       planSelected: 'Basic',
       monthlyPlan: '1 Month',
       paymentStatus: 'pending',
-      joinDate: new Date()
+      joinDate: new Date(),
+      profileImage: profileImageUrl || undefined
     });
     
     await newMember.save();
@@ -627,26 +746,28 @@ const registerPreviousMember = async (req, res) => {
  */
 const registerNewMember = async (req, res) => {
   try {
+    const membershipPlan = parseObjectValue(req.body?.membershipPlan) || {};
+    const payment = parseObjectValue(req.body?.payment) || {};
+    const preferredActivities = parseActivityList(req.body?.preferredActivities);
     const {
       gymId,
       name,
       memberName,
-      phone,
-      email,
+      phone: rawPhone,
+      email: rawEmail,
       gender,
       age,
       address,
-      preferredActivities,
       activityPreference,
       planSelected,
       monthlyPlan,
       paymentMode,
-      paymentAmount,
-      membershipPlan,
-      payment
+      paymentAmount
     } = req.body;
 
     const resolvedName = (memberName || name || '').trim();
+    const phone = normalizePhone(rawPhone);
+    const email = normalizeEmail(rawEmail);
     const resolvedAge = Number(age);
     const resolvedMonths = Number(membershipPlan?.months || parseInt(monthlyPlan, 10));
     const resolvedAmount = Number(payment?.amount || paymentAmount || membershipPlan?.price);
@@ -670,6 +791,7 @@ const registerNewMember = async (req, res) => {
       (Array.isArray(preferredActivities) && preferredActivities.length > 0
         ? preferredActivities.join(', ')
         : 'General Fitness');
+    const profileImageUrl = resolveProfileImageUrl(req);
 
     if (!gymId || !resolvedName || !phone || !email || !gender || !Number.isFinite(resolvedAge) || resolvedAge <= 0) {
       return res.status(400).json({
@@ -699,43 +821,47 @@ const registerNewMember = async (req, res) => {
     }
 
     // Check if member already exists
-    const existingMember = await Member.findOne({
-      gym: gymId,
-      $or: [{ phone }, { email }]
-    });
-
-    if (existingMember) {
-      return res.status(400).json({
-        message: 'A member with this phone number or email already exists'
-      });
-    }
+    const existingMember = await findExistingMemberByIdentity(gymId, phone, email);
 
     const membershipEndDate = new Date();
     membershipEndDate.setMonth(membershipEndDate.getMonth() + resolvedMonths);
 
-    const newMembershipId = `GW${Date.now()}`;
-
-    const newMember = new Member({
+    const newMembershipId = generateStandardMembershipId(gym.gymName || gym.name || 'GYM', resolvedPlan);
+    const memberRecord = existingMember || new Member({
       gym: gymId,
       membershipId: newMembershipId,
-      memberName: resolvedName,
-      phone,
-      email,
-      gender,
-      age: resolvedAge,
-      address: address || '',
-      activityPreference: activitiesString,
-      planSelected: resolvedPlan,
-      monthlyPlan: resolvedMonthlyPlan,
-      paymentAmount: resolvedAmount,
-      paymentMode: resolvedPaymentMode,
-      joinDate: new Date(),
-      membershipValidUntil: membershipEndDate.toISOString().split('T')[0],
-      validUntil: membershipEndDate,
-      paymentStatus: resolvedPaymentMode === 'Cash' ? 'pending' : 'paid'
+      joinDate: new Date()
     });
 
-    await newMember.save();
+    memberRecord.memberName = resolvedName;
+    memberRecord.phone = phone;
+    memberRecord.email = email;
+    memberRecord.gender = gender;
+    memberRecord.age = resolvedAge;
+    memberRecord.address = address || '';
+    memberRecord.activityPreference = activitiesString;
+    memberRecord.planSelected = resolvedPlan;
+    memberRecord.monthlyPlan = resolvedMonthlyPlan;
+    memberRecord.paymentAmount = resolvedAmount;
+    memberRecord.paymentMode = resolvedPaymentMode;
+    memberRecord.membershipValidUntil = membershipEndDate.toISOString().split('T')[0];
+    memberRecord.validUntil = membershipEndDate;
+    memberRecord.paymentStatus = resolvedPaymentMode === 'Cash' ? 'pending' : 'paid';
+
+    if (!memberRecord.membershipId) {
+      memberRecord.membershipId = newMembershipId;
+    }
+
+    const transactionId = String(payment?.transactionId || req.body?.transactionId || '').trim();
+    if (transactionId) {
+      memberRecord.transactionId = transactionId;
+    }
+
+    if (profileImageUrl) {
+      memberRecord.profileImage = profileImageUrl;
+    }
+
+    await memberRecord.save();
 
     // Create payment record for non-cash payments (online, UPI, etc.)
     if (resolvedPaymentMode !== 'Cash') {
@@ -747,7 +873,7 @@ const registerNewMember = async (req, res) => {
           amount: resolvedAmount,
           description: `QR Registration - ${resolvedMonthlyPlan} membership for ${resolvedName}`,
           memberName: resolvedName,
-          memberId: newMember._id,
+          memberId: memberRecord._id,
           paymentMethod: resolvedPaymentMode.toLowerCase(),
           status: 'completed',
           registrationSource: 'qr_registration',
@@ -775,7 +901,7 @@ const registerNewMember = async (req, res) => {
             paymentMethod: resolvedPaymentMode,
             registrationSource: 'qr_registration',
             memberName: resolvedName,
-            memberId: newMember._id,
+            memberId: memberRecord._id,
             category: 'membership'
           }
         });
@@ -804,7 +930,7 @@ const registerNewMember = async (req, res) => {
             gender,
             address: address || '',
             activityPreference: activitiesString,
-            memberId: newMember._id
+            memberId: memberRecord._id
           }
         });
 
@@ -819,7 +945,8 @@ const registerNewMember = async (req, res) => {
               duration: resolvedMonthlyPlan,
               validationCode,
               gymId: String(gymId),
-              memberId: String(newMember._id)
+              memberId: String(memberRecord.membershipId || ''),
+              expiresAt: expiresAt.toISOString()
             });
             console.log(`✅ FCM cash payment alert sent to ${adminTokens.length} admin device(s)`);
           }
@@ -831,11 +958,11 @@ const registerNewMember = async (req, res) => {
         // Override the final response to include validationCode
         return res.status(201).json({
           message: 'Registration submitted! Please pay at the counter within 2 minutes.',
-          memberId: newMember.membershipId,
-          name: newMember.memberName,
-          phone: newMember.phone,
-          email: newMember.email,
-          membershipExpiry: newMember.validUntil,
+          memberId: memberRecord.membershipId,
+          name: memberRecord.memberName,
+          phone: memberRecord.phone,
+          email: memberRecord.email,
+          membershipExpiry: memberRecord.validUntil,
           paymentStatus: 'Pending Cash Confirmation',
           requiresCashValidation: true,
           validationCode,
@@ -849,18 +976,21 @@ const registerNewMember = async (req, res) => {
     
     // Send welcome email
     try {
-      await sendWelcomeEmail(newMember, gym, resolvedPaymentMode === 'Cash' ? 'pending' : 'instant');
+      await sendWelcomeEmail(memberRecord, gym, resolvedPaymentMode === 'Cash' ? 'pending' : 'instant');
     } catch (emailError) {
       console.error('Error sending welcome email:', emailError);
     }
-    
-    res.status(201).json({
-      message: 'Registration completed successfully!',
-      memberId: newMember.membershipId,
-      name: newMember.memberName,
-      phone: newMember.phone,
-      email: newMember.email,
-      membershipExpiry: newMember.validUntil,
+
+    res.status(existingMember ? 200 : 201).json({
+      message: existingMember
+        ? 'Existing member found. Membership updated with selected plan and activities.'
+        : 'Registration completed successfully!',
+      memberId: memberRecord.membershipId,
+      name: memberRecord.memberName,
+      phone: memberRecord.phone,
+      email: memberRecord.email,
+      membershipExpiry: memberRecord.validUntil,
+      wasExistingMember: Boolean(existingMember),
       paymentStatus: resolvedPaymentMode === 'Cash' ? 'Pending Verification' : 'Completed'
     });
     

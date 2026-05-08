@@ -242,10 +242,19 @@ class FCMService {
    * Notify gym admin about a pending cash payment from a QR registration.
    * Triggers a popup dialog on the admin app with a 2-minute confirmation window.
    * @param {string[]} adminFcmTokens
-   * @param {object} payload - { memberName, amount, planName, duration, validationCode, gymId, memberId }
+   * @param {object} payload - { memberName, amount, planName, duration, validationCode, gymId, memberId, expiresAt }
    */
   async notifyGymAdminCashPayment(adminFcmTokens, payload) {
-    const { memberName, amount, planName, duration, validationCode, gymId, memberId } = payload;
+    const {
+      memberName,
+      amount,
+      planName,
+      duration,
+      validationCode,
+      gymId,
+      memberId,
+      expiresAt,
+    } = payload;
     const notification = {
       title: '💵 Cash Payment Pending',
       body: `${memberName} wants to pay ₹${amount} for ${planName} — confirm at counter`,
@@ -260,6 +269,7 @@ class FCMService {
       validationCode: String(validationCode || ''),
       gymId: String(gymId || ''),
       memberId: String(memberId || ''),
+      expiresAt: String(expiresAt || ''),
       timestamp: new Date().toISOString(),
       channel: 'high_priority_channel',
     };

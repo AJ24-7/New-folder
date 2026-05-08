@@ -15,20 +15,18 @@ const storage = new CloudinaryStorage({
   }
 });
 
-function fileFilter(req, file, cb) {
-  if (file && file.mimetype && file.mimetype.startsWith('image/')) {
-    cb(null, true);
-    return;
-  }
-  cb(new Error('Only image files are allowed!'), false);
-}
-
-const upload = multer({
+const qrMemberImageUpload = multer({
   storage,
   limits: {
     fileSize: 5 * 1024 * 1024
   },
-  fileFilter
+  fileFilter: (req, file, cb) => {
+    if (file && file.mimetype && file.mimetype.startsWith('image/')) {
+      cb(null, true);
+      return;
+    }
+    cb(new Error('Only image files are allowed'), false);
+  }
 });
 
-module.exports = upload;
+module.exports = qrMemberImageUpload;

@@ -133,9 +133,9 @@ router.patch('/pending-verification/:memberId/approve', gymAdminAuth, async (req
 
 // NEW instant cash validation routes
 router.post('/create-cash-validation', createCashValidation);
-router.get('/pending-validations', getPendingValidations);
+router.get('/pending-validations', gymAdminAuth, getPendingValidations);
 router.get('/validation-status/:validationCode', checkValidationStatus);
-router.post('/confirm-cash-validation/:validationCode', confirmCashPayment);
-router.post('/reject-cash-validation/:validationCode', rejectCashPayment);
+router.post('/confirm-cash-validation/:validationCode', gymAdminAuth, confirmCashPayment);
+router.post('/reject-cash-validation/:validationCode', gymAdminAuth, rejectCashPayment);
 
 module.exports = router;

@@ -13,7 +13,8 @@ exports.registerOnlineMember = async (req, res) => {
     const {
       gymId, memberName, memberEmail, memberPhone, memberAge, memberGender,
       memberAddress, paymentMode, paymentAmount, planSelected, monthlyPlan,
-      activityPreference, paymentStatus, paymentId, registrationType
+      activityPreference, paymentStatus, paymentId, registrationType,
+      memberProfileImage, profileImage
     } = req.body;
 
     // Validate required fields
@@ -81,11 +82,13 @@ exports.registerOnlineMember = async (req, res) => {
     const membershipValidUntil = validUntil.toISOString().split('T')[0];
 
     // Reuse existing user profile image (e.g., Google account picture) if available.
-    let memberProfileImage = null;
+    let resolvedProfileImage =
+      String(memberProfileImage || profileImage || '').trim() || null;
+
     if (memberEmail) {
       const existingUser = await User.findOne({ email: memberEmail.toLowerCase().trim() }).select('profileImage');
-      if (existingUser?.profileImage) {
-        memberProfileImage = existingUser.profileImage;
+      if (!resolvedProfileImage && existingUser?.profileImage) {
+        resolvedProfileImage = existingUser.profileImage;
       }
     }
 
@@ -103,7 +106,7 @@ exports.registerOnlineMember = async (req, res) => {
       planSelected,
       monthlyPlan,
       activityPreference: activityPreference || 'General Fitness',
-      profileImage: memberProfileImage,
+      profileImage: resolvedProfileImage,
       membershipId,
       membershipValidUntil,
       joinDate,

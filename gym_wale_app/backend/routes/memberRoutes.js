@@ -7,6 +7,7 @@ const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMemb
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
 const memberImageUpload = require('../middleware/memberImageUpload');
+const qrMemberImageUpload = require('../middleware/qrMemberImageUpload');
 const Member = require('../models/Member');
 
 const importUpload = multer({
@@ -70,10 +71,10 @@ router.post('/register-qr', registerMemberViaQR);
 
 // New QR Code Registration Endpoints
 // Register previous member with limited fields (no payment)
-router.post('/qr-register-previous', registerPreviousMember);
+router.post('/qr-register-previous', qrMemberImageUpload.single('profileImage'), registerPreviousMember);
 
 // Register new member with full details and payment
-router.post('/qr-register-new', registerNewMember);
+router.post('/qr-register-new', qrMemberImageUpload.single('profileImage'), registerNewMember);
 
 // Get membership pass details
 router.get('/:membershipId/pass', authMiddleware, getMembershipPass);
