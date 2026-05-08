@@ -375,7 +375,11 @@ class _BookingScreenState extends State<BookingScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error: ${e.toString()}'),
+            content: Text(
+              e is Exception
+                  ? 'Booking failed: ${e.toString().replaceFirst('Exception: ', '')}'
+                  : 'Booking failed. Please try again.',
+            ),
             backgroundColor: AppTheme.errorColor,
           ),
         );
@@ -407,16 +411,24 @@ class _BookingScreenState extends State<BookingScreen> {
       return false;
     }
 
-    if (!await canLaunchUrl(uri)) {
-      _showMessage('Unable to open payment link', isError: true);
+    try {
+      final canLaunch = await canLaunchUrl(uri);
+      if (!canLaunch) {
+        _showMessage('Unable to open payment link', isError: true);
+        return false;
+      }
+
+      final launched =
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
+        _showMessage('Unable to open payment link', isError: true);
+      }
+      return launched;
+    } catch (e) {
+      _showMessage('Unable to open payment link. Please try again.',
+          isError: true);
       return false;
     }
-
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (!launched) {
-      _showMessage('Unable to open payment link', isError: true);
-    }
-    return launched;
   }
 
   @override

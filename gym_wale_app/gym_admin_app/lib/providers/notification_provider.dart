@@ -30,6 +30,13 @@ class NotificationProvider with ChangeNotifier {
   int _totalPages = 1;
   final int _itemsPerPage = 50;
 
+  // Stream for cash payment requests that need admin action
+  final StreamController<Map<String, dynamic>> _cashPaymentRequestController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
+  Stream<Map<String, dynamic>> get cashPaymentRequests =>
+      _cashPaymentRequestController.stream;
+
   List<GymNotification> get notifications => _notifications;
   int get unreadCount => _unreadCount;
   bool get isLoading => _isLoading;
@@ -99,13 +106,17 @@ class NotificationProvider with ChangeNotifier {
   /// Handle incoming FCM message
   void _handleIncomingMessage(RemoteMessage message) {
     debugPrint('🔔 [NotifProvider] Handling incoming message: ${message.data}');
+
+    // Cash payment request — broadcast for UI to show popup dialog
+    if (message.data['type'] == 'cash_payment_request') {
+      debugPrint('💵 [NotifProvider] Cash payment request received – broadcasting');
+      _cashPaymentRequestController.add(Map<String, dynamic>.from(message.data));
+      return;
+    }
     
     // Refresh notifications to get the latest from server
     loadNotifications(refresh: true);
     loadUnreadCount();
-    
-    // You can also add the notification directly if it matches the expected format
-    // This would provide instant UI update without waiting for server fetch
   }
 
   /// Unregister FCM token (call on logout)
@@ -191,7 +202,7 @@ class NotificationProvider with ChangeNotifier {
       _unreadCount = count;
       notifyListeners();
     } catch (e) {
-      print('Error loading unread count: $e');
+      debugPrint('Error loading unread count: $e');
     }
   }
 
@@ -201,7 +212,7 @@ class NotificationProvider with ChangeNotifier {
       _stats = await _notificationService.getNotificationStats();
       notifyListeners();
     } catch (e) {
-      print('Error loading notification stats: $e');
+      debugPrint('Error loading notification stats: $e');
     }
   }
 
@@ -291,7 +302,7 @@ class NotificationProvider with ChangeNotifier {
       };
     } catch (e) {
       _error = e.toString();
-      print('❌ Error in sendToMembers: $e');
+      debugPrint('Error in sendToMembers: $e');
       return {
         'success': false,
         'message': e.toString(),
@@ -407,6 +418,7 @@ class NotificationProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _cashPaymentRequestController.close();
     _messageSubscription?.cancel();
     _tokenSubscription?.cancel();
     _fcmService.dispose();

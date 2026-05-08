@@ -3,15 +3,8 @@ const sendEmail = require('../utils/sendEmail');
 
 class EmailService {
     constructor() {
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-            port: process.env.SMTP_PORT || 465,
-            secure: process.env.SMTP_SECURE === 'true' || Number(process.env.SMTP_PORT || 465) === 465,
-            auth: {
-                user: process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || 'Support@gym-wale.com',
-                pass: process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS || 'your-email-password'
-            }
-        });
+        // All sending goes through utils/sendEmail which creates a fresh
+        // Hostinger transporter per call — no cached transporter needed here.
     }
 
     async send2FACode(email, name, code) {

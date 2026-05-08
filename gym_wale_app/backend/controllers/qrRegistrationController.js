@@ -4,6 +4,8 @@ const Gym = require('../models/gym');
 const Payment = require('../models/Payment');
 const Notification = require('../models/Notification');
 const sendEmail = require('../utils/sendEmail');
+const gymNotificationService = require('../services/gymNotificationService');
+const fcmService = require('../services/fcmService');
 
 // Import cash validation functions
 const { createCashValidationRequest } = require('./cashValidationController');
@@ -789,17 +791,56 @@ const registerNewMember = async (req, res) => {
     // Create cash validation request if payment is cash
     if (resolvedPaymentMode === 'Cash') {
       try {
-        await createCashValidationRequest({
-          body: {
-            gymId,
-            memberId: newMember._id,
-            memberName: resolvedName,
-            amount: resolvedAmount,
-            transactionType: 'Membership Fee',
-            notes: `QR Code Registration - ${resolvedMonthlyPlan} membership`
+        const { validationCode, expiresAt } = createCashValidationRequest({
+          memberName: resolvedName,
+          email,
+          phone,
+          planName: resolvedPlan,
+          duration: resolvedMonthlyPlan,
+          amount: resolvedAmount,
+          gymId,
+          registrationData: {
+            age: resolvedAge,
+            gender,
+            address: address || '',
+            activityPreference: activitiesString,
+            memberId: newMember._id
           }
-        }, {
-          status: () => ({ json: () => {} })
+        });
+
+        // Send FCM push notification to gym admin app
+        try {
+          const adminTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
+          if (adminTokens.length > 0) {
+            await fcmService.notifyGymAdminCashPayment(adminTokens, {
+              memberName: resolvedName,
+              amount: resolvedAmount,
+              planName: resolvedPlan,
+              duration: resolvedMonthlyPlan,
+              validationCode,
+              gymId: String(gymId),
+              memberId: String(newMember._id)
+            });
+            console.log(`✅ FCM cash payment alert sent to ${adminTokens.length} admin device(s)`);
+          }
+        } catch (fcmErr) {
+          console.error('❌ Error sending FCM cash payment notification:', fcmErr.message);
+          // Non-fatal – registration still succeeds
+        }
+
+        // Override the final response to include validationCode
+        return res.status(201).json({
+          message: 'Registration submitted! Please pay at the counter within 2 minutes.',
+          memberId: newMember.membershipId,
+          name: newMember.memberName,
+          phone: newMember.phone,
+          email: newMember.email,
+          membershipExpiry: newMember.validUntil,
+          paymentStatus: 'Pending Cash Confirmation',
+          requiresCashValidation: true,
+          validationCode,
+          expiresAt: expiresAt.toISOString(),
+          timeLeft: 120
         });
       } catch (cashError) {
         console.error('Error creating cash validation request:', cashError);

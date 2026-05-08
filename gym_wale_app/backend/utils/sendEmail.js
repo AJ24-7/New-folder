@@ -1,26 +1,47 @@
 const nodemailer = require('nodemailer');
 const { wrapEmail, DEFAULT_BRAND } = require('./emailTemplate');
 
-const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
-const smtpPort = Number(process.env.SMTP_PORT || 465);
-const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
-const smtpUser = process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
-const smtpPass = process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
-const senderEmail = process.env.MAIL_FORCE_FROM || process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || smtpUser;
+// Build transporter fresh each time so env-var updates (e.g. on Render) are
+// picked up without a server restart and never fall back to a Gmail session
+// that was cached at module-load time.
+function createTransporter() {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
+  const smtpPort = Number(process.env.SMTP_PORT || 465);
+  const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+  const smtpUser =
+    process.env.SMTP_AUTH_USER ||
+    process.env.SUPPORT_EMAIL ||
+    process.env.SMTP_USER ||
+    process.env.EMAIL_USER ||
+    'Support@gym-wale.com';
+  const smtpPass =
+    process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
-// Create transporter only once
-const transporter = nodemailer.createTransport({
-  host: smtpHost,
-  port: smtpPort,
-  secure: smtpSecure,
-  connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
-  greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
-  socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000),
-  auth: {
-    user: smtpUser,
-    pass: smtpPass
-  }
-});
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000),
+    auth: { user: smtpUser, pass: smtpPass }
+  });
+}
+
+function getSenderEmail() {
+  const smtpUser =
+    process.env.SMTP_AUTH_USER ||
+    process.env.SUPPORT_EMAIL ||
+    process.env.SMTP_USER ||
+    process.env.EMAIL_USER ||
+    'Support@gym-wale.com';
+  return (
+    process.env.MAIL_FORCE_FROM ||
+    process.env.SUPPORT_EMAIL ||
+    process.env.FROM_EMAIL ||
+    smtpUser
+  );
+}
 
 // Generate simple text version of email content
 function generateTextVersion(options) {
@@ -101,8 +122,12 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
     brand
   });
 
+  const senderEmail = getSenderEmail();
+  const transporter = createTransporter();
+
   console.log('[SendEmail] Prepared email', { to, subject, wrapped: !skipWrap });
-  console.log('[SendEmail] Sender configured:', !!senderEmail);
+  console.log('[SendEmail] Sender configured:', senderEmail);
+  console.log('[SendEmail] SMTP host:', process.env.SMTP_HOST || 'smtp.hostinger.com');
   
   // Debug: Log the HTML content length
   console.log('[SendEmail] HTML content length:', finalHtml.length);
@@ -121,9 +146,7 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   const textContent = generateTextVersion(options);
 
   try {
-    const fromAddress = senderEmail
-      ? `${process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name} <${senderEmail}>`
-      : process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name;
+    const fromAddress = `${process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name} <${senderEmail}>`;
 
     const mailOptions = {
       from: fromAddress,

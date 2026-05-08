@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const path = require('path');
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '.env'), override: true });
 
 // Initialize Firebase Admin SDK (non-blocking — graceful if creds not set)
 const { initializeFirebase } = require('./config/firebase');

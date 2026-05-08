@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -29,6 +30,7 @@ import 'services/passcode_service.dart';
 import 'services/firebase_messaging_service.dart';
 import 'services/setup_guide_service.dart';
 import 'widgets/passcode_dialog.dart';
+import 'widgets/cash_payment_request_dialog.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -147,11 +149,33 @@ class _AuthWrapperState extends State<AuthWrapper> {
   final SetupGuideService _setupGuideService = SetupGuideService();
   final StorageService _storageService = StorageService();
 
+  StreamSubscription<Map<String, dynamic>>? _cashPaymentSubscription;
+
   @override
   void initState() {
     super.initState();
     _checkOnboardingStatus();
+    // Subscribe to cash payment requests after first frame so context is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) => _subscribeToCashPayments());
   }
+
+  void _subscribeToCashPayments() {
+    final notifProvider =
+        Provider.of<NotificationProvider>(context, listen: false);
+    _cashPaymentSubscription =
+        notifProvider.cashPaymentRequests.listen((data) {
+      if (mounted) {
+        CashPaymentRequestDialog.show(context, data);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _cashPaymentSubscription?.cancel();
+    super.dispose();
+  }
+
 
   Future<void> _checkOnboardingStatus() async {
     final prefs = await SharedPreferences.getInstance();

@@ -239,7 +239,39 @@ class FCMService {
   }
 
   /**
-   * Send push notification to user app members
+   * Notify gym admin about a pending cash payment from a QR registration.
+   * Triggers a popup dialog on the admin app with a 2-minute confirmation window.
+   * @param {string[]} adminFcmTokens
+   * @param {object} payload - { memberName, amount, planName, duration, validationCode, gymId, memberId }
+   */
+  async notifyGymAdminCashPayment(adminFcmTokens, payload) {
+    const { memberName, amount, planName, duration, validationCode, gymId, memberId } = payload;
+    const notification = {
+      title: '💵 Cash Payment Pending',
+      body: `${memberName} wants to pay ₹${amount} for ${planName} — confirm at counter`,
+    };
+    const data = {
+      type: 'cash_payment_request',
+      priority: 'high',
+      memberName: String(memberName || ''),
+      amount: String(amount || ''),
+      planName: String(planName || ''),
+      duration: String(duration || ''),
+      validationCode: String(validationCode || ''),
+      gymId: String(gymId || ''),
+      memberId: String(memberId || ''),
+      timestamp: new Date().toISOString(),
+      channel: 'high_priority_channel',
+    };
+    const options = {
+      android: { priority: 'high', channelId: 'high_priority_channel' },
+      apns: { aps: { sound: 'default', badge: 1, contentAvailable: true } },
+    };
+    return this.sendToMultipleDevices(adminFcmTokens, notification, data, options);
+  }
+
+  /**
+   * Send a generic notification to a user.
    * @param {string[]} userFcmTokens
    * @param {string} title
    * @param {string} body
