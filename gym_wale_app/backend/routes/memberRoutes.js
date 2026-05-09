@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { addMember, importMembers, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, removeSingleMember, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
 const { registerOnlineMember } = require('../controllers/onlineMembershipController');
-const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember } = require('../controllers/qrRegistrationController');
+const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember, lookupMemberForQR } = require('../controllers/qrRegistrationController');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
 const memberImageUpload = require('../middleware/memberImageUpload');
@@ -70,6 +70,9 @@ router.post('/:memberId/extend', gymadminAuth, extendMembership);
 router.post('/register-qr', registerMemberViaQR);
 
 // New QR Code Registration Endpoints
+// Public lookup: check if a member with given phone/email already exists (for duplicate detection)
+router.get('/qr-lookup', lookupMemberForQR);
+
 // Register previous member with limited fields (no payment)
 router.post('/qr-register-previous', qrMemberImageUpload.single('profileImage'), registerPreviousMember);
 

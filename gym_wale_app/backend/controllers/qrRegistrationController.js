@@ -1000,10 +1000,56 @@ const registerNewMember = async (req, res) => {
   }
 };
 
+/**
+ * Public member lookup for QR registration duplicate check
+ * GET /api/members/qr-lookup?gymId=XXX&phone=YYY&email=ZZZ
+ * Returns minimal membership info if a matching member already exists.
+ */
+const lookupMemberForQR = async (req, res) => {
+  try {
+    const gymId = String(req.query.gymId || '').trim();
+    const phone = normalizePhone(req.query.phone || '');
+    const email = normalizeEmail(req.query.email || '');
+
+    if (!gymId) {
+      return res.status(400).json({ found: false, message: 'gymId is required' });
+    }
+    if (!phone && !email) {
+      return res.json({ found: false });
+    }
+
+    const existing = await findExistingMemberByIdentity(gymId, phone || null, email || null);
+
+    if (!existing) {
+      return res.json({ found: false });
+    }
+
+    const now = new Date();
+    const isActive = !!(existing.validUntil && new Date(existing.validUntil) > now && existing.paymentStatus === 'paid');
+
+    return res.json({
+      found: true,
+      member: {
+        name: existing.memberName,
+        membershipId: existing.membershipId,
+        planSelected: existing.planSelected,
+        monthlyPlan: existing.monthlyPlan,
+        paymentStatus: existing.paymentStatus,
+        validUntil: existing.validUntil,
+        isActive
+      }
+    });
+  } catch (error) {
+    console.error('Error in QR member lookup:', error);
+    return res.status(500).json({ found: false });
+  }
+};
+
 module.exports = {
   registerMemberViaQR,
   sendWelcomeEmail,
   getGymInfo,
   registerPreviousMember,
-  registerNewMember
+  registerNewMember,
+  lookupMemberForQR
 };
