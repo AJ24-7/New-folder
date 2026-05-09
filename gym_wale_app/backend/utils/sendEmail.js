@@ -6,7 +6,10 @@ const { wrapEmail, DEFAULT_BRAND } = require('./emailTemplate');
 // that was cached at module-load time.
 function createTransporter() {
   const smtpHost = process.env.SMTP_HOST || 'smtp.hostinger.com';
-  const smtpPort = Number(process.env.SMTP_PORT || 465);
+  // Default to port 587 (STARTTLS) — port 465 (SSL) is frequently blocked on
+  // cloud hosting platforms such as Render, causing ETIMEDOUT on CONN.
+  const smtpPort = Number(process.env.SMTP_PORT || 587);
+  // Port 465 uses implicit TLS (secure=true); port 587 uses STARTTLS (secure=false).
   const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
   const smtpUser =
     process.env.SMTP_AUTH_USER ||
@@ -21,6 +24,8 @@ function createTransporter() {
     host: smtpHost,
     port: smtpPort,
     secure: smtpSecure,
+    // Require STARTTLS upgrade for non-secure (port 587) connections.
+    requireTLS: smtpPort === 587,
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
     greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000),

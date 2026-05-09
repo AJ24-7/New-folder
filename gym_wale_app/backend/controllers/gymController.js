@@ -83,7 +83,10 @@ const generateOTP = () => {
 
 const getEmailTransportConfig = () => {
   const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
-  const port = Number(process.env.SMTP_PORT || 465);
+  // Default to port 587 (STARTTLS) — port 465 (SSL) is frequently blocked on
+  // cloud hosting platforms such as Render, causing ETIMEDOUT on CONN.
+  const port = Number(process.env.SMTP_PORT || 587);
+  // Port 465 uses implicit TLS (secure=true); port 587 uses STARTTLS (secure=false).
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
   const user = process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'support@gym-wale.com';
   const pass = process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
@@ -92,6 +95,8 @@ const getEmailTransportConfig = () => {
     host,
     port,
     secure,
+    // Require STARTTLS upgrade for non-secure (port 587) connections.
+    requireTLS: port === 587,
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
     greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 10000),
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 15000),
