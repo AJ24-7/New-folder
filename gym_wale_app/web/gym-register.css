@@ -370,6 +370,109 @@ body {
     font-size: 0.875rem;
 }
 
+/* Optional label badge */
+.optional-label {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #6c757d;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+/* Profile Photo Upload */
+.photo-upload-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.photo-preview-box {
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    border: 2px dashed var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #f8f9fa;
+    transition: border-color 0.2s;
+}
+
+.photo-preview-box:hover {
+    border-color: var(--primary-color);
+}
+
+.photo-preview-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+}
+
+.photo-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    color: #94a3b8;
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 8px;
+}
+
+.photo-placeholder i {
+    font-size: 2.5rem;
+    color: #cbd5e1;
+}
+
+.photo-upload-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.photo-upload-btn {
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+}
+
+.photo-remove-btn {
+    font-size: 0.85rem;
+}
+
+.photo-upload-hint {
+    color: #6c757d;
+    font-size: 0.8rem;
+    margin-top: 0;
+}
+
+.btn-sm {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.82rem;
+}
+
+.btn-danger {
+    background: var(--error-color);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-danger:hover {
+    background: #d63650;
+}
+
 /* Checkbox Group */
 .checkbox-group {
     display: grid;
@@ -847,6 +950,9 @@ body {
     display: inline-block;
     margin-bottom: 2rem;
     min-width: 230px;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 .cash-code-label {
@@ -865,6 +971,7 @@ body {
     font-family: 'Courier New', monospace;
     line-height: 1;
     margin-bottom: 0.5rem;
+    word-break: break-all;
 }
 
 .cash-code-hint {
@@ -1016,5 +1123,30 @@ body {
 
     .step::before {
         top: 12px;
+    }
+
+    /* Cash pending screen — prevent code from overflowing narrow screens */
+    .cash-pending-section {
+        padding: 2rem 1rem 1.5rem;
+    }
+
+    .cash-code-box {
+        display: block;
+        min-width: unset;
+        width: 100%;
+        padding: 1.25rem 1rem;
+    }
+
+    .cash-code {
+        font-size: 2rem;
+        letter-spacing: 0.18em;
+    }
+
+    .cash-pending-section h2 {
+        font-size: 1.3rem;
+    }
+
+    .cash-pending-sub {
+        font-size: 0.88rem;
     }
 }

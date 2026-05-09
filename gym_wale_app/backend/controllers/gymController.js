@@ -85,7 +85,7 @@ const getEmailTransportConfig = () => {
   const host = process.env.SMTP_HOST || 'smtp.hostinger.com';
   const port = Number(process.env.SMTP_PORT || 465);
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-  const user = process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
+  const user = process.env.SMTP_AUTH_USER || process.env.SUPPORT_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'support@gym-wale.com';
   const pass = process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
   return {
@@ -100,7 +100,7 @@ const getEmailTransportConfig = () => {
 };
 
 const getFromAddress = () =>
-  process.env.MAIL_FORCE_FROM || process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'Support@gym-wale.com';
+  process.env.MAIL_FORCE_FROM || process.env.SUPPORT_EMAIL || process.env.FROM_EMAIL || process.env.SMTP_USER || process.env.EMAIL_USER || 'support@gym-wale.com';
 
 // Send OTP via email with enhanced HTML template
 const sendOTPEmail = async (email, otp, gymName = 'Gym Admin') => {

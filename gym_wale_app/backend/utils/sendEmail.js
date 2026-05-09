@@ -13,7 +13,7 @@ function createTransporter() {
     process.env.SUPPORT_EMAIL ||
     process.env.SMTP_USER ||
     process.env.EMAIL_USER ||
-    'Support@gym-wale.com';
+    'support@gym-wale.com';
   const smtpPass =
     process.env.SMTP_AUTH_PASS || process.env.SMTP_PASS || process.env.EMAIL_PASS;
 
@@ -34,7 +34,7 @@ function getSenderEmail() {
     process.env.SUPPORT_EMAIL ||
     process.env.SMTP_USER ||
     process.env.EMAIL_USER ||
-    'Support@gym-wale.com';
+    'support@gym-wale.com';
   return (
     process.env.MAIL_FORCE_FROM ||
     process.env.SUPPORT_EMAIL ||
@@ -78,7 +78,7 @@ function generateTextVersion(options) {
   }
 
   textContent += `\nBest regards,\nGym-Wale Team\n\n`;
-  textContent += `© 2025 Gym-Wale. All rights reserved.`;
+  textContent += `© 2026 Gym-Wale. All rights reserved.`;
 
   return textContent;
 }
@@ -99,6 +99,7 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   const {
     to,
     subject,
+    from: fromOverride,
     title = options.title || subject || DEFAULT_BRAND.name,
     preheader = options.preheader || '',
     bodyHtml = options.bodyHtml || options.html || '',
@@ -122,7 +123,7 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
     brand
   });
 
-  const senderEmail = getSenderEmail();
+  const senderEmail = fromOverride || getSenderEmail();
   const transporter = createTransporter();
 
   console.log('[SendEmail] Prepared email', { to, subject, wrapped: !skipWrap });

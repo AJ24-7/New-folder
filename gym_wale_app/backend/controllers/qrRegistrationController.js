@@ -843,7 +843,8 @@ const registerNewMember = async (req, res) => {
             address: address || '',
             activityPreference: activitiesString,
             // Pass existing member _id so confirmCashPayment updates rather than duplicates
-            memberId: existingMember ? existingMember._id : undefined
+            memberId: existingMember ? existingMember._id : undefined,
+            profileImageUrl: profileImageUrl || undefined
           }
         });
 

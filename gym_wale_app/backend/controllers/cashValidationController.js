@@ -224,6 +224,9 @@ const confirmCashPayment = async (req, res) => {
       member.activityPreference =
         validation.registrationData?.activityPreference || member.activityPreference || 'General fitness';
       member.address = validation.registrationData?.address || member.address || '';
+      if (validation.registrationData?.profileImageUrl) {
+        member.profileImage = validation.registrationData.profileImageUrl;
+      }
 
       if (!member.membershipId) {
         member.membershipId = generateStandardMembershipId(
@@ -248,6 +251,7 @@ const confirmCashPayment = async (req, res) => {
         monthlyPlan: validation.duration,
         activityPreference: validation.registrationData?.activityPreference || 'General fitness',
         address: validation.registrationData?.address || '',
+        profileImage: validation.registrationData?.profileImageUrl || '',
         joinDate: new Date(),
         membershipId: generateStandardMembershipId(
           gym.gymName || gym.name || 'GYM',
@@ -361,49 +365,67 @@ const confirmCashPayment = async (req, res) => {
 // Send welcome email for cash payment confirmation
 const sendWelcomeEmailForCash = async (member, gym) => {
   try {
-    const subject = `Welcome to ${gym.name}! Your Cash Payment is Confirmed`;
-    
+    const gymName = gym.gymName || gym.name || 'Gym Wale';
+    const memberName = member.memberName || 'Member';
+    const membershipId = member.membershipId || '';
+    const planSelected = member.planSelected || '';
+    const monthlyPlan = member.monthlyPlan || '';
+    const membershipValidUntil = member.membershipValidUntil
+      ? new Date(member.membershipValidUntil).toLocaleDateString()
+      : 'N/A';
+    const joinDate = member.joinDate
+      ? new Date(member.joinDate).toLocaleDateString()
+      : new Date().toLocaleDateString();
+
     await sendEmail({
       to: member.email,
-      subject,
-      title: `Welcome to ${gym.name}!`,
-      preheader: 'Your cash payment has been confirmed and membership is active',
+      from: 'support@gym-wale.com',
+      subject: `Welcome to ${gymName} - Membership Created`,
+      title: `Welcome to ${gymName}!`,
+      preheader: 'Your membership has been successfully activated',
       bodyHtml: `
-        <p>Hello ${member.memberName},</p>
-        <p>Great news! Your cash payment has been successfully processed and your gym membership is now <strong style="color:#10b981;">active</strong>.</p>
-        
+        <p>Hi <strong style="color:#10b981;">${memberName}</strong>,</p>
+        <p>🎉 Welcome to <strong>${gymName}</strong>! Your cash payment has been confirmed and your membership is now <strong style="color:#10b981;">active</strong>.</p>
+
         <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-          <h3 style="margin:0 0 12px;color:#e2e8f0;">Your Membership Details:</h3>
           <table style="width:100%;font-size:13px;">
-            <tr><td style="padding:4px 0;color:#94a3b8;width:120px;"><strong>Member ID:</strong></td><td style="padding:4px 0;">${member.membershipId}</td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Name:</strong></td><td style="padding:4px 0;">${member.memberName}</td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Plan:</strong></td><td style="padding:4px 0;">${member.planSelected}</td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Duration:</strong></td><td style="padding:4px 0;">${member.monthlyPlan} Month(s)</td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Payment:</strong></td><td style="padding:4px 0;">₹${member.paymentAmount} (Cash)</td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Status:</strong></td><td style="padding:4px 0;"><span style="background:#10b981;color:#ffffff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">ACTIVE</span></td></tr>
-            <tr><td style="padding:4px 0;color:#94a3b8;"><strong>Join Date:</strong></td><td style="padding:4px 0;">${new Date(member.joinDate).toLocaleDateString()}</td></tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;width:140px;"><strong>Membership ID:</strong></td>
+              <td style="padding:6px 0;"><span style="background:#0d4d89;color:#ffffff;padding:4px 10px;border-radius:6px;font-weight:600;letter-spacing:1px;">${membershipId}</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;"><strong>Plan:</strong></td>
+              <td style="padding:6px 0;">${planSelected} (${monthlyPlan})</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;"><strong>Payment:</strong></td>
+              <td style="padding:6px 0;">₹${member.paymentAmount} (Cash) <span style="color:#10b981;">✓ Confirmed</span></td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;"><strong>Valid Until:</strong></td>
+              <td style="padding:6px 0;">${membershipValidUntil}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;"><strong>Join Date:</strong></td>
+              <td style="padding:6px 0;">${joinDate}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#94a3b8;"><strong>Status:</strong></td>
+              <td style="padding:6px 0;"><span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">ACTIVE</span></td>
+            </tr>
           </table>
         </div>
-        
-        <h3 style="margin:20px 0 8px;">Next Steps:</h3>
-        <ul style="margin:0 0 18px 20px;padding:0;">
-          <li>Visit the gym with a valid ID</li>
-          <li>Your Member ID: <strong>${member.membershipId}</strong></li>
-          <li>Start your fitness journey today!</li>
-        </ul>
-        
-        <p style="margin-top:20px;font-size:13px;color:#94a3b8;"><strong>${gym.name}</strong><br/>
-        ${gym.address}<br/>
-        Contact: ${gym.contact}</p>
-        <p>Welcome to your fitness family! 💪</p>
+
+        <p style="color:#cbd5e1;font-size:14px;text-align:center;margin-top:20px;">
+          We look forward to seeing you reach your fitness goals! 💪
+        </p>
       `,
       action: {
         label: 'Contact Gym',
-        url: `tel:${gym.contact}` 
+        url: gym.contact ? `tel:${gym.contact}` : '#'
       }
     });
     console.log(`✅ Welcome email sent to ${member.email}`);
-    
   } catch (error) {
     console.error('Error sending welcome email:', error);
     throw error;
