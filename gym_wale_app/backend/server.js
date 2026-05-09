@@ -159,6 +159,7 @@ const equipmentRoutes = require('./routes/equipmentRoutes');
 const chatRoutes = require('./routes/chatRoutes');
 const memberLocationStatusRoutes = require('./routes/memberLocationStatus');
 const qrCodeRoutes = require('./routes/qrCodeRoutes');
+const cashValidationRoutes = require('./routes/cashValidationRoutes');
 
 // API Routes
 app.use('/api/admin', adminRoutes);
@@ -187,6 +188,7 @@ app.use('/api/equipment', equipmentRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/member', memberLocationStatusRoutes);
 app.use('/api/qr-codes', qrCodeRoutes);
+app.use('/api/cash-validation', cashValidationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -662,7 +662,12 @@ async function submitPreviousMember() {
         const result = await response.json();
         
         showLoading(false);
-        showSuccess('Previous Member', result);
+
+        if (result.wasExistingMember) {
+            showSuccess('Existing Member', result, true);
+        } else {
+            showSuccess('Previous Member', result);
+        }
         
     } catch (error) {
         console.error('Error submitting registration:', error);
@@ -785,7 +790,12 @@ async function submitNewMember() {
         const result = await response.json();
 
         showLoading(false);
-        showSuccess('New Member', result);
+
+        if (result.requiresCashValidation) {
+            showCashWaiting(result);
+        } else {
+            showSuccess('New Member', result);
+        }
 
     } catch (error) {
         console.error('Error submitting registration:', error);
@@ -805,13 +815,18 @@ function showLoading(show) {
 }
 
 // Show Success Message
-function showSuccess(type, result) {
+function showSuccess(type, result, isExistingMember = false) {
     // Hide all other sections
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
     
     // Update success message
-    document.getElementById('successText').textContent = 
-        `Your registration as a ${type} has been completed successfully!`;
+    if (isExistingMember) {
+        document.getElementById('successText').textContent =
+            'Welcome back! Your existing membership record has been updated with your new plan.';
+    } else {
+        document.getElementById('successText').textContent = 
+            `Your registration as a ${type} has been completed successfully!`;
+    }
     
     // Build success details
     let detailsHTML = '';
@@ -853,6 +868,94 @@ function showSuccess(type, result) {
     // Show success section
     document.getElementById('successMessage').classList.add('active');
     updateStepIndicator(3);
+}
+
+// ── Cash payment waiting screen ──────────────────────────────────────────────
+
+let _cashCountdownTimer = null;
+let _cashPollingTimer = null;
+
+function showCashWaiting(result) {
+    // Stop any prior timers
+    clearInterval(_cashCountdownTimer);
+    clearInterval(_cashPollingTimer);
+
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+
+    // Summary details
+    let detailsHTML = '';
+    if (result.name) {
+        detailsHTML += `<div class="detail-row"><span>Name:</span><strong>${result.name}</strong></div>`;
+    }
+    if (result.memberId) {
+        detailsHTML += `<div class="detail-row"><span>Member ID:</span><strong>${result.memberId}</strong></div>`;
+    }
+    document.getElementById('cashWaitingDetails').innerHTML = detailsHTML;
+    document.getElementById('cashWaitingSection').classList.add('active');
+    updateStepIndicator(3);
+
+    // Countdown
+    const totalSeconds = result.timeLeft || 120;
+    let secondsLeft = totalSeconds;
+
+    function updateCountdown() {
+        const m = Math.floor(secondsLeft / 60);
+        const s = secondsLeft % 60;
+        document.getElementById('cashCountdownDisplay').textContent =
+            `${m}:${s.toString().padStart(2, '0')}`;
+        const pct = (secondsLeft / totalSeconds) * 100;
+        document.getElementById('cashCountdownBar').style.width = pct + '%';
+        const bar = document.getElementById('cashCountdownBar');
+        if (pct > 60) bar.style.background = '#22c55e';
+        else if (pct > 30) bar.style.background = '#f59e0b';
+        else bar.style.background = '#ef4444';
+    }
+
+    updateCountdown();
+
+    _cashCountdownTimer = setInterval(() => {
+        secondsLeft = Math.max(0, secondsLeft - 1);
+        updateCountdown();
+        if (secondsLeft <= 0) clearInterval(_cashCountdownTimer);
+    }, 1000);
+
+    // Status polling
+    const validationCode = result.validationCode;
+    if (!validationCode) return;
+
+    _cashPollingTimer = setInterval(async () => {
+        try {
+            const resp = await fetch(
+                `${API_BASE_URL}/payments/validation-status/${encodeURIComponent(validationCode)}`
+            );
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const status = data.status;
+
+            if (status === 'confirmed') {
+                clearInterval(_cashCountdownTimer);
+                clearInterval(_cashPollingTimer);
+                document.getElementById('cashStatusMessage').innerHTML =
+                    '<i class="fas fa-check-circle" style="color:#22c55e"></i> Payment confirmed by gym admin!';
+                setTimeout(() => showSuccess('New Member', result), 1500);
+            } else if (status === 'rejected') {
+                clearInterval(_cashCountdownTimer);
+                clearInterval(_cashPollingTimer);
+                showError('Your cash payment request was rejected. Please contact the gym.');
+            } else if (status === 'expired') {
+                clearInterval(_cashCountdownTimer);
+                clearInterval(_cashPollingTimer);
+                showError('The payment window expired. Please re-register or contact the gym.');
+            } else {
+                // still pending – update time left from server
+                if (Number.isFinite(data.timeLeft)) {
+                    secondsLeft = data.timeLeft;
+                }
+            }
+        } catch (e) {
+            // network hiccup – keep retrying
+        }
+    }, 3000);
 }
 
 // Show Error Message

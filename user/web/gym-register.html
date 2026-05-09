@@ -289,6 +289,31 @@
             </div>
         </div>
 
+        <!-- Cash Payment Waiting Screen -->
+        <div id="cashWaitingSection" class="section">
+            <div class="success-icon" style="color: #f59e0b;">
+                <i class="fas fa-clock"></i>
+            </div>
+            <h2>Waiting for Cash Confirmation</h2>
+            <p id="cashWaitingText">Please proceed to the counter and pay in cash. The gym admin will confirm your payment.</p>
+
+            <div style="margin: 1.5rem auto; max-width: 300px;">
+                <div style="text-align: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 2.5rem; font-weight: 700; color: #f59e0b;" id="cashCountdownDisplay">2:00</span>
+                    <p style="margin: 0; font-size: 0.85rem; color: #94a3b8;">time remaining</p>
+                </div>
+                <div style="background: #1e293b; border-radius: 999px; height: 8px; overflow: hidden;">
+                    <div id="cashCountdownBar" style="height: 100%; background: #f59e0b; transition: width 1s linear; width: 100%;"></div>
+                </div>
+            </div>
+
+            <div class="success-details" id="cashWaitingDetails"></div>
+
+            <p id="cashStatusMessage" style="margin-top: 1rem; font-size: 0.9rem; color: #94a3b8;">
+                <i class="fas fa-spinner fa-spin"></i> Checking payment status...
+            </p>
+        </div>
+
         <!-- Success Message -->
         <div id="successMessage" class="section success-section">
             <div class="success-icon">

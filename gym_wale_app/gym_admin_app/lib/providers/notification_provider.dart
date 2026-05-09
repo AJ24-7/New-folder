@@ -1,10 +1,14 @@
 // lib/providers/notification_provider.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import '../models/notification.dart';
 import '../services/notification_service.dart';
 import '../services/firebase_messaging_service.dart';
+import '../services/storage_service.dart';
 
 class NotificationProvider with ChangeNotifier {
   final NotificationService _notificationService = NotificationService();
@@ -33,6 +37,10 @@ class NotificationProvider with ChangeNotifier {
   // Stream for cash payment requests that need admin action
   final StreamController<Map<String, dynamic>> _cashPaymentRequestController =
       StreamController<Map<String, dynamic>>.broadcast();
+
+  // Polling fallback for when FCM is not delivered
+  Timer? _cashValidationPoller;
+  final Set<String> _knownValidationCodes = {};
 
   Stream<Map<String, dynamic>> get cashPaymentRequests =>
       _cashPaymentRequestController.stream;
@@ -107,6 +115,10 @@ class NotificationProvider with ChangeNotifier {
       
       _fcmInitialized = true;
       debugPrint('✅ [NotifProvider] FCM initialized successfully');
+
+      // Start polling fallback for cash validations (in case FCM is not delivered)
+      _startCashValidationPolling();
+
       notifyListeners();
     } catch (e) {
       debugPrint('❌ [NotifProvider] Error initializing FCM: $e');
@@ -121,8 +133,12 @@ class NotificationProvider with ChangeNotifier {
 
     // Cash payment request — broadcast for UI to show popup dialog
     if (message.data['type'] == 'cash_payment_request') {
-      debugPrint('💵 [NotifProvider] Cash payment request received – broadcasting');
-      _cashPaymentRequestController.add(Map<String, dynamic>.from(message.data));
+      final code = message.data['validationCode'] as String?;
+      if (code != null && !_knownValidationCodes.contains(code)) {
+        _knownValidationCodes.add(code);
+        debugPrint('💵 [NotifProvider] Cash payment request received – broadcasting');
+        _cashPaymentRequestController.add(Map<String, dynamic>.from(message.data));
+      }
       return;
     }
     
@@ -131,12 +147,59 @@ class NotificationProvider with ChangeNotifier {
     loadUnreadCount();
   }
 
+  /// Poll backend for pending cash validations (fallback when FCM is not received)
+  void _startCashValidationPolling() {
+    _cashValidationPoller?.cancel();
+    _cashValidationPoller = Timer.periodic(const Duration(seconds: 6), (_) {
+      _pollPendingCashValidations();
+    });
+  }
+
+  Future<void> _pollPendingCashValidations() async {
+    try {
+      final token = await StorageService().getToken();
+      if (token == null) return;
+
+      final uri = Uri.parse('${ApiConfig.baseUrl}/api/payments/pending-validations');
+      final response = await http.get(
+        uri,
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode != 200) return;
+
+      final List<dynamic> validations = jsonDecode(response.body) as List<dynamic>;
+      for (final v in validations) {
+        final code = v['validationCode'] as String?;
+        if (code == null || _knownValidationCodes.contains(code)) continue;
+        _knownValidationCodes.add(code);
+        debugPrint('💵 [NotifProvider] Polled new cash validation: $code – broadcasting');
+        _cashPaymentRequestController.add({
+          'type': 'cash_payment_request',
+          'memberName': v['memberName']?.toString() ?? '',
+          'amount': v['amount']?.toString() ?? '0',
+          'planName': v['planName']?.toString() ?? '',
+          'duration': v['duration']?.toString() ?? '',
+          'validationCode': code,
+          'gymId': v['gymId']?.toString() ?? '',
+          'memberId': (v['registrationData']?['memberId'])?.toString() ?? '',
+          'expiresAt': v['expiresAt']?.toString() ?? '',
+        });
+      }
+    } catch (e) {
+      debugPrint('❌ [NotifProvider] Cash validation poll error: $e');
+    }
+  }
+
   /// Unregister FCM token (call on logout)
   Future<void> unregisterFCM() async {
     try {
       await _notificationService.unregisterFCMToken();
       await _messageSubscription?.cancel();
       await _tokenSubscription?.cancel();
+      _cashValidationPoller?.cancel();
+      _cashValidationPoller = null;
+      _knownValidationCodes.clear();
       _fcmInitialized = false;
       debugPrint('✅ [NotifProvider] FCM unregistered');
     } catch (e) {
@@ -433,6 +496,7 @@ class NotificationProvider with ChangeNotifier {
     _cashPaymentRequestController.close();
     _messageSubscription?.cancel();
     _tokenSubscription?.cancel();
+    _cashValidationPoller?.cancel();
     _fcmService.dispose();
     super.dispose();
   }
