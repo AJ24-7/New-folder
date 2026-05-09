@@ -45,6 +45,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupPaymentMethodListener();
 
+    // Lookup existing member whenever phone or email loses focus
+    document.getElementById('newPhone').addEventListener('blur', scheduleMemberLookup);
+    document.getElementById('newEmail').addEventListener('blur', scheduleMemberLookup);
+
     if (qrToken) {
         loadQRCodeContext();
     } else {
@@ -514,15 +518,27 @@ function selectPlan(index) {
 }
 
 // Form Navigation
-function nextStep(step) {
+async function nextStep(step) {
     if (step === 2) {
-        // Validate personal details
+        // Validate personal details first
         const form = document.getElementById('personalDetails');
         if (!form.checkValidity()) {
             form.reportValidity();
             return;
         }
-        
+
+        // Block if an unresolved duplicate exists
+        if (document.getElementById('existingMemberBanner') &&
+            !document.getElementById('existingMemberBanner').classList.contains('hidden') &&
+            !_memberBannerDismissed) {
+            document.getElementById('existingMemberBanner').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
+        // Run a fresh lookup in case the user didn't blur both fields
+        const blocked = await checkForDuplicateAndBlock();
+        if (blocked) return;
+
         // Store personal details
         const formData = new FormData(form);
         memberData = Object.fromEntries(formData.entries());
@@ -785,6 +801,11 @@ async function submitNewMember() {
         const result = await response.json();
 
         showLoading(false);
+        // Cash payments: show pending screen and poll for admin confirmation
+        if (result.requiresCashValidation) {
+            showCashPending(result);
+            return;
+        }
         showSuccess('New Member', result);
 
     } catch (error) {
@@ -864,6 +885,178 @@ function showError(message) {
 // Hide Error Message
 function hideError() {
     document.getElementById('errorMessage').classList.add('hidden');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Existing Member Lookup & Duplicate Block
+// ─────────────────────────────────────────────────────────────
+
+let _lookupTimer = null;
+let _memberBannerDismissed = false;
+
+function scheduleMemberLookup() {
+    clearTimeout(_lookupTimer);
+    _lookupTimer = setTimeout(runMemberLookup, 500);
+}
+
+async function runMemberLookup() {
+    if (!gymId) return;
+    const rawPhone = (document.getElementById('newPhone').value || '').replace(/\D/g, '');
+    const rawEmail = (document.getElementById('newEmail').value || '').trim().toLowerCase();
+    const phoneOk = /^[0-9]{10}$/.test(rawPhone);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
+    if (!phoneOk && !emailOk) { hideMemberBanner(); return; }
+
+    try {
+        const params = new URLSearchParams({ gymId });
+        if (phoneOk) params.set('phone', rawPhone);
+        if (emailOk) params.set('email', rawEmail);
+        const res = await fetch(`${API_BASE_URL}/members/qr-lookup?${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.found && data.member) {
+            _memberBannerDismissed = false;
+            showMemberBanner(data.member);
+        } else {
+            hideMemberBanner();
+        }
+    } catch (_) { /* silently ignore – don't block the user for a network glitch */ }
+}
+
+// Call this before navigating to step 2; returns true if the user should be blocked.
+async function checkForDuplicateAndBlock() {
+    if (!gymId) return false;
+    const rawPhone = (document.getElementById('newPhone').value || '').replace(/\D/g, '');
+    const rawEmail = (document.getElementById('newEmail').value || '').trim().toLowerCase();
+    const phoneOk = /^[0-9]{10}$/.test(rawPhone);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
+    if (!phoneOk && !emailOk) return false;
+
+    try {
+        const params = new URLSearchParams({ gymId });
+        if (phoneOk) params.set('phone', rawPhone);
+        if (emailOk) params.set('email', rawEmail);
+        const res = await fetch(`${API_BASE_URL}/members/qr-lookup?${params}`);
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (data.found && data.member && !_memberBannerDismissed) {
+            showMemberBanner(data.member);
+            document.getElementById('existingMemberBanner').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return true; // blocked
+        }
+    } catch (_) { /* ignore */ }
+    return false;
+}
+
+function showMemberBanner(member) {
+    let details = `<p class="em-name">${escapeHtml(member.name || 'Unknown')}</p>`;
+    if (member.planSelected) details += `<span class="em-badge em-plan">${escapeHtml(member.planSelected)}</span>`;
+    if (member.isActive) {
+        details += `<span class="em-badge em-active">Active</span>`;
+        if (member.validUntil) details += `<span class="em-valid"> Valid until <strong>${new Date(member.validUntil).toLocaleDateString()}</strong></span>`;
+    } else {
+        details += `<span class="em-badge em-expired">Expired / Inactive</span>`;
+    }
+    document.getElementById('emBannerDetails').innerHTML = details;
+    document.getElementById('existingMemberBanner').classList.remove('hidden');
+}
+
+function hideMemberBanner() {
+    document.getElementById('existingMemberBanner').classList.add('hidden');
+}
+
+function dismissMemberBanner() {
+    _memberBannerDismissed = true;
+    hideMemberBanner();
+}
+
+function switchToPreviousMemberFlow() {
+    const name  = (document.getElementById('newName').value  || '').trim();
+    const phone = (document.getElementById('newPhone').value || '').trim();
+    const email = (document.getElementById('newEmail').value || '').trim();
+    goBack();
+    selectType('previous');
+    if (name)  document.getElementById('prevName').value  = name;
+    if (phone) document.getElementById('prevPhone').value = phone;
+    if (email) document.getElementById('prevEmail').value = email;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Cash Payment Pending Screen + Status Polling
+// ─────────────────────────────────────────────────────────────
+
+let _cashCountdownTimer = null;
+let _cashPollingTimer   = null;
+
+function showCashPending(result) {
+    clearInterval(_cashCountdownTimer);
+    clearInterval(_cashPollingTimer);
+
+    // Hide all sections, show pending
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('cashPendingSection').classList.add('active');
+    updateStepIndicator(3);
+
+    document.getElementById('cashValidationCode').textContent = result.validationCode || '----';
+    document.getElementById('cashExpiredBox').classList.add('hidden');
+    document.getElementById('cashStatusMsg').textContent = '';
+
+    // Member detail rows
+    let details = '';
+    if (result.name)  details += `<div class="detail-row"><span>Name:</span><strong>${escapeHtml(result.name)}</strong></div>`;
+    if (result.phone) details += `<div class="detail-row"><span>Phone:</span><strong>${escapeHtml(result.phone)}</strong></div>`;
+    document.getElementById('cashPendingDetails').innerHTML = details;
+
+    // Countdown
+    let timeLeft = Number(result.timeLeft) || 120;
+    const countdownEl = document.getElementById('cashCountdown');
+    const ringEl      = document.getElementById('cashCountdownRing');
+
+    function renderCountdown(s) {
+        const m = Math.floor(s / 60);
+        return `${m}:${String(s % 60).padStart(2, '0')}`;
+    }
+    countdownEl.textContent = renderCountdown(timeLeft);
+
+    _cashCountdownTimer = setInterval(() => {
+        timeLeft = Math.max(0, timeLeft - 1);
+        countdownEl.textContent = renderCountdown(timeLeft);
+        if (timeLeft <= 30) ringEl.classList.add('urgent');
+        if (timeLeft === 0) {
+            clearInterval(_cashCountdownTimer);
+            clearInterval(_cashPollingTimer);
+            document.getElementById('cashExpiredBox').classList.remove('hidden');
+        }
+    }, 1000);
+
+    // Poll for admin decision every 4 seconds
+    const code = result.validationCode;
+    _cashPollingTimer = setInterval(async () => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/cash-validation/validation-status/${encodeURIComponent(code)}`);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.status === 'confirmed') {
+                clearInterval(_cashCountdownTimer);
+                clearInterval(_cashPollingTimer);
+                document.getElementById('cashStatusMsg').innerHTML =
+                    '<span class="cash-confirmed">✅ Payment confirmed by gym admin! Your membership is now active.</span>';
+                // Show success after a short delay so the user reads the message
+                setTimeout(() => showSuccess('New Member', {
+                    name: result.name,
+                    phone: result.phone,
+                    memberId: data.member?.membershipId || data.membershipId || null,
+                    membershipExpiry: data.member?.validUntil || null
+                }), 2500);
+            } else if (data.status === 'rejected') {
+                clearInterval(_cashCountdownTimer);
+                clearInterval(_cashPollingTimer);
+                document.getElementById('cashStatusMsg').innerHTML =
+                    '<span class="cash-rejected">❌ Cash payment was rejected by the gym admin. Please visit the counter for assistance.</span>';
+                document.getElementById('cashExpiredBox').classList.remove('hidden');
+            }
+        } catch (_) { /* ignore transient network errors */ }
+    }, 4000);
 }
 
 // Utility Functions

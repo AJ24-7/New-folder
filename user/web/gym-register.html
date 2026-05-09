@@ -157,6 +157,24 @@
                             </div>
                         </div>
 
+                        <!-- Existing member blocked banner -->
+                        <div id="existingMemberBanner" class="existing-member-banner hidden">
+                            <div class="em-banner-icon"><i class="fas fa-user-shield"></i></div>
+                            <div class="em-banner-body">
+                                <strong id="emBannerTitle">Existing member found at this gym</strong>
+                                <div id="emBannerDetails" class="em-banner-details"></div>
+                                <p class="em-banner-hint">You already have a record here. Use the <em>Previous Member</em> flow to update your details or renew your membership instead.</p>
+                                <div class="em-banner-actions">
+                                    <button type="button" class="btn btn-warning btn-sm" onclick="switchToPreviousMemberFlow()">
+                                        <i class="fas fa-user-check"></i> Switch to Previous Member
+                                    </button>
+                                    <button type="button" class="btn btn-secondary btn-sm" onclick="dismissMemberBanner()">
+                                        Continue Anyway
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="newAge"><i class="fas fa-calendar"></i> Age *</label>
@@ -312,6 +330,36 @@
             <button class="btn btn-primary" onclick="hideError()">
                 Try Again
             </button>
+        </div>
+
+        <!-- Cash Payment Pending Confirmation -->
+        <div id="cashPendingSection" class="section cash-pending-section">
+            <div class="cash-pending-icon"><i class="fas fa-hand-holding-usd"></i></div>
+            <h2>Awaiting Cash Payment Confirmation</h2>
+            <p class="cash-pending-sub">Please walk to the counter and give your cash to the gym staff. Show them the code below — your membership is activated <strong>only after</strong> the admin confirms.</p>
+
+            <div class="cash-code-box">
+                <p class="cash-code-label">Your Validation Code</p>
+                <div class="cash-code" id="cashValidationCode">----</div>
+                <p class="cash-code-hint">Tell or show this code to the gym admin at the counter.</p>
+            </div>
+
+            <div class="cash-countdown-wrap">
+                <div class="cash-countdown-ring" id="cashCountdownRing">
+                    <span id="cashCountdown">2:00</span>
+                </div>
+                <p class="cash-countdown-label">Admin must confirm within this time</p>
+            </div>
+
+            <div id="cashPendingDetails" class="cash-pending-details"></div>
+
+            <div id="cashStatusMsg" class="cash-status-msg"></div>
+
+            <div id="cashExpiredBox" class="cash-expired-box hidden">
+                <i class="fas fa-clock"></i>
+                <p>Time expired. Please visit the counter and ask the admin to register you directly.</p>
+                <button class="btn btn-primary" onclick="location.reload()">Start Over</button>
+            </div>
         </div>
     </div>
 

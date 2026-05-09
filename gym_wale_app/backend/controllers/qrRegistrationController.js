@@ -823,6 +823,68 @@ const registerNewMember = async (req, res) => {
     // Check if member already exists
     const existingMember = await findExistingMemberByIdentity(gymId, phone, email);
 
+    // ── CASH PAYMENT: do NOT create a member record yet ────────────────────
+    // The member is only saved to the database AFTER the gym admin confirms
+    // the cash payment. This prevents phantom members appearing in the member
+    // list when a validation is rejected or times out.
+    if (resolvedPaymentMode === 'Cash') {
+      try {
+        const { validationCode, expiresAt } = createCashValidationRequest({
+          memberName: resolvedName,
+          email,
+          phone,
+          planName: resolvedPlan,
+          duration: resolvedMonthlyPlan,
+          amount: resolvedAmount,
+          gymId,
+          registrationData: {
+            age: resolvedAge,
+            gender,
+            address: address || '',
+            activityPreference: activitiesString,
+            // Pass existing member _id so confirmCashPayment updates rather than duplicates
+            memberId: existingMember ? existingMember._id : undefined
+          }
+        });
+
+        // Send FCM push notification to gym admin app
+        try {
+          const adminTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
+          if (adminTokens.length > 0) {
+            await fcmService.notifyGymAdminCashPayment(adminTokens, {
+              memberName: resolvedName,
+              amount: resolvedAmount,
+              planName: resolvedPlan,
+              duration: resolvedMonthlyPlan,
+              validationCode,
+              gymId: String(gymId),
+              memberId: '',
+              expiresAt: expiresAt.toISOString()
+            });
+            console.log(`✅ FCM cash payment alert sent to ${adminTokens.length} admin device(s)`);
+          }
+        } catch (fcmErr) {
+          console.error('❌ Error sending FCM cash payment notification:', fcmErr.message);
+        }
+
+        return res.status(202).json({
+          message: 'Registration submitted! Please pay at the counter — your membership will be activated after the admin confirms your cash payment.',
+          name: resolvedName,
+          phone,
+          email,
+          paymentStatus: 'Pending Cash Confirmation',
+          requiresCashValidation: true,
+          validationCode,
+          expiresAt: expiresAt.toISOString(),
+          timeLeft: 120
+        });
+      } catch (cashError) {
+        console.error('Error creating cash validation request:', cashError);
+        return res.status(500).json({ message: 'Failed to create cash validation request. Please try again.' });
+      }
+    }
+
+    // ── NON-CASH PAYMENT: save member record immediately ───────────────────
     const membershipEndDate = new Date();
     membershipEndDate.setMonth(membershipEndDate.getMonth() + resolvedMonths);
 
@@ -846,7 +908,7 @@ const registerNewMember = async (req, res) => {
     memberRecord.paymentMode = resolvedPaymentMode;
     memberRecord.membershipValidUntil = membershipEndDate.toISOString().split('T')[0];
     memberRecord.validUntil = membershipEndDate;
-    memberRecord.paymentStatus = resolvedPaymentMode === 'Cash' ? 'pending' : 'paid';
+    memberRecord.paymentStatus = 'paid';
 
     if (!memberRecord.membershipId) {
       memberRecord.membershipId = newMembershipId;
@@ -863,127 +925,60 @@ const registerNewMember = async (req, res) => {
 
     await memberRecord.save();
 
-    // Create payment record for non-cash payments (online, UPI, etc.)
-    if (resolvedPaymentMode !== 'Cash') {
-      try {
-        const paymentRecord = new Payment({
-          gymId,
-          type: 'received',
-          category: 'membership',
+    // Create payment record
+    try {
+      const paymentRecord = new Payment({
+        gymId,
+        type: 'received',
+        category: 'membership',
+        amount: resolvedAmount,
+        description: `QR Registration - ${resolvedMonthlyPlan} membership for ${resolvedName}`,
+        memberName: resolvedName,
+        memberId: memberRecord._id,
+        paymentMethod: resolvedPaymentMode.toLowerCase(),
+        status: 'completed',
+        registrationSource: 'qr_registration',
+        planSelected: resolvedPlan,
+        monthlyPlan: resolvedMonthlyPlan,
+        paidDate: new Date(),
+        createdBy: gymId
+      });
+      await paymentRecord.save();
+
+      const notification = new Notification({
+        user: gymId,
+        title: '💰 New QR Registration Payment',
+        message: `₹${resolvedAmount.toLocaleString('en-IN')} received from ${resolvedName} via QR code registration`,
+        type: 'payment',
+        priority: 'normal',
+        read: false,
+        isRead: false,
+        metadata: {
+          paymentId: paymentRecord._id,
           amount: resolvedAmount,
-          description: `QR Registration - ${resolvedMonthlyPlan} membership for ${resolvedName}`,
+          paymentMethod: resolvedPaymentMode,
+          registrationSource: 'qr_registration',
           memberName: resolvedName,
           memberId: memberRecord._id,
-          paymentMethod: resolvedPaymentMode.toLowerCase(),
-          status: 'completed',
-          registrationSource: 'qr_registration',
-          planSelected: resolvedPlan,
-          monthlyPlan: resolvedMonthlyPlan,
-          paidDate: new Date(),
-          createdBy: gymId
-        });
-        
-        await paymentRecord.save();
-        console.log('✅ Payment record created for QR registration');
-        
-        // Create notification for gym admin
-        const notification = new Notification({
-          user: gymId,
-          title: '💰 New QR Registration Payment',
-          message: `₹${resolvedAmount.toLocaleString('en-IN')} received from ${resolvedName} via QR code registration`,
-          type: 'payment',
-          priority: 'normal',
-          read: false,
-          isRead: false,
-          metadata: {
-            paymentId: paymentRecord._id,
-            amount: resolvedAmount,
-            paymentMethod: resolvedPaymentMode,
-            registrationSource: 'qr_registration',
-            memberName: resolvedName,
-            memberId: memberRecord._id,
-            category: 'membership'
-          }
-        });
-        
-        await notification.save();
-        console.log('✅ Notification created for QR registration');
-      } catch (paymentError) {
-        console.error('❌ Error creating payment record:', paymentError);
-        // Don't fail registration if payment record creation fails
-      }
-    }
-    
-    // Create cash validation request if payment is cash
-    if (resolvedPaymentMode === 'Cash') {
-      try {
-        const { validationCode, expiresAt } = createCashValidationRequest({
-          memberName: resolvedName,
-          email,
-          phone,
-          planName: resolvedPlan,
-          duration: resolvedMonthlyPlan,
-          amount: resolvedAmount,
-          gymId,
-          registrationData: {
-            age: resolvedAge,
-            gender,
-            address: address || '',
-            activityPreference: activitiesString,
-            memberId: memberRecord._id
-          }
-        });
-
-        // Send FCM push notification to gym admin app
-        try {
-          const adminTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
-          if (adminTokens.length > 0) {
-            await fcmService.notifyGymAdminCashPayment(adminTokens, {
-              memberName: resolvedName,
-              amount: resolvedAmount,
-              planName: resolvedPlan,
-              duration: resolvedMonthlyPlan,
-              validationCode,
-              gymId: String(gymId),
-              memberId: String(memberRecord.membershipId || ''),
-              expiresAt: expiresAt.toISOString()
-            });
-            console.log(`✅ FCM cash payment alert sent to ${adminTokens.length} admin device(s)`);
-          }
-        } catch (fcmErr) {
-          console.error('❌ Error sending FCM cash payment notification:', fcmErr.message);
-          // Non-fatal – registration still succeeds
+          category: 'membership'
         }
-
-        // Override the final response to include validationCode
-        return res.status(201).json({
-          message: 'Registration submitted! Please pay at the counter within 2 minutes.',
-          memberId: memberRecord.membershipId,
-          name: memberRecord.memberName,
-          phone: memberRecord.phone,
-          email: memberRecord.email,
-          membershipExpiry: memberRecord.validUntil,
-          paymentStatus: 'Pending Cash Confirmation',
-          requiresCashValidation: true,
-          validationCode,
-          expiresAt: expiresAt.toISOString(),
-          timeLeft: 120
-        });
-      } catch (cashError) {
-        console.error('Error creating cash validation request:', cashError);
-      }
+      });
+      await notification.save();
+      console.log('✅ Payment record and notification created for QR registration');
+    } catch (paymentError) {
+      console.error('❌ Error creating payment record:', paymentError);
     }
-    
+
     // Send welcome email
     try {
-      await sendWelcomeEmail(memberRecord, gym, resolvedPaymentMode === 'Cash' ? 'pending' : 'instant');
+      await sendWelcomeEmail(memberRecord, gym, 'instant');
     } catch (emailError) {
       console.error('Error sending welcome email:', emailError);
     }
 
     res.status(existingMember ? 200 : 201).json({
       message: existingMember
-        ? 'Existing member found. Membership updated with selected plan and activities.'
+        ? 'Existing member updated with new plan and activities.'
         : 'Registration completed successfully!',
       memberId: memberRecord.membershipId,
       name: memberRecord.memberName,
@@ -991,7 +986,7 @@ const registerNewMember = async (req, res) => {
       email: memberRecord.email,
       membershipExpiry: memberRecord.validUntil,
       wasExistingMember: Boolean(existingMember),
-      paymentStatus: resolvedPaymentMode === 'Cash' ? 'Pending Verification' : 'Completed'
+      paymentStatus: 'Completed'
     });
     
   } catch (error) {
