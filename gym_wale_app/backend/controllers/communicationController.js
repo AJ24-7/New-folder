@@ -125,6 +125,12 @@ class CommunicationController {
                 filter.userType = userTypeMap[userType] || userType;
             }
 
+            // Exclude user-to-gym chat messages from the users support tab
+            // (those are internal chats between members and gyms, not support tickets)
+            if (userType === 'users') {
+                filter.category = { $ne: 'chat' };
+            }
+
             if (status !== 'all') filter.status = status;
             if (priority !== 'all') filter.priority = priority;
             if (category !== 'all') filter.category = category;

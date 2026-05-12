@@ -156,10 +156,14 @@ router.get('/grievances/gym/:gymId', gymadminAuth, async (req, res) => {
       return res.status(403).json({ success: false, message: 'Unauthorized gym access' });
     }
 
+    // Fetch both grievances and bug reports sent to super admin by this gym
     const filter = {
       gymId,
       userType: 'Gym',
-      'metadata.isGrievance': true
+      $or: [
+        { 'metadata.isGrievance': true },
+        { 'metadata.fromGymAdminBugReport': true }
+      ]
     };
 
     const grievances = await Support.find(filter).sort({ createdAt: -1 }).lean();
