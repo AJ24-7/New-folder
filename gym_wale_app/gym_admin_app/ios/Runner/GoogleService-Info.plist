@@ -25,7 +25,7 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:12577918948:ios:REPLACE_WITH_YOUR_IOS_APP_ID</string>
+	<string>1:12577918948:ios:YOUR_IOS_APP_ID_FROM_FIREBASE_CONSOLE</string>
 	<key>DATABASE_URL</key>
 	<string></string>
 </dict>

@@ -113,7 +113,7 @@ exports.submitMemberProblemReport = async (req, res) => {
             category,
             memberName: activeMember.memberName,
             membershipId: activeMember.membershipId,
-            channel: 'high_importance_channel',
+            channel: 'high_priority_channel',
           }
         );
         console.log(`📲 FCM push sent to ${adminFcmTokens.length} gym admin device(s)`);

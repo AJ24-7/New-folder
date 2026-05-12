@@ -128,12 +128,21 @@ class GeofencingService extends ChangeNotifier {
     }
   }
 
-  /// Register a geofence for a gym
+  /// Register a geofence for a gym.
+  ///
+  /// Saves circular geofence prefs and starts the foreground service.
+  /// Call [configureFromSettings] instead when polygon or full settings
+  /// data is available — it saves the complete prefs then calls this to
+  /// start the service without overwriting them.
   Future<bool> registerGymGeofence({
     required String gymId,
     required double latitude,
     required double longitude,
     required double radius,
+    /// When true the caller has already written all geofence prefs
+    /// (including polygon) via _saveFullGeofenceToPreferences — skip the
+    /// internal _saveGeofenceToPreferences so we don't overwrite them.
+    bool prefsAlreadySaved = false,
   }) async {
     try {
       // Check permissions first
@@ -143,24 +152,35 @@ class GeofencingService extends ChangeNotifier {
         return false;
       }
 
-      // Remove existing geofences
-      await removeAllGeofences();
+      // Stop the existing service without clearing prefs or setting
+      // membership = false.  removeAllGeofences() must NOT be called here
+      // because:
+      //   • It sets geofence_has_active_membership = false, creating a
+      //     race window where the background isolate kills itself before
+      //     we re-enable membership below.
+      //   • It clears geofence_polygon_coordinates, breaking polygon mode
+      //     when called from configureFromSettings (which already saved
+      //     the full prefs).
+      //   • It fires notifyListeners() twice (stopped → running), causing
+      //     a UI flicker.
+      _currentGymId = null;
+      _isServiceRunning = false;
+      // Stop the background isolate so it picks up the new prefs cleanly
+      // on the next startService() call.
+      await _fgTaskService.stopService();
 
       _currentGymId = gymId;
 
-      // Save to preferences for persistence
-      await _saveGeofenceToPreferences(gymId, latitude, longitude, radius);
-
-      // Start the persistent foreground service
-      try {
-        // Persist auto-mark flags so the background isolate can read them.
+      if (!prefsAlreadySaved) {
+        // Caller has not pre-saved prefs — write circular geofence data.
+        await _saveGeofenceToPreferences(gymId, latitude, longitude, radius);
+        // Persist auto-mark flags and schedule from current settings.
         await ForegroundTaskService.persistAutoMarkFlags(
           autoMarkEntry: shouldAutoMarkEntry(),
           autoMarkExit:  shouldAutoMarkExit(),
         );
-        // Persist operating schedule so the background isolate can gate events.
         if (_attendanceSettings != null) {
-          final gs = _attendanceSettings!.geofenceSettings;
+          final gs    = _attendanceSettings!.geofenceSettings;
           final hours = _attendanceSettings!.operatingHours;
           await ForegroundTaskService.persistOperatingSchedule(
             morningOpening: gs?.morningShift?.opening ?? hours?.morning?.opening,
@@ -170,10 +190,13 @@ class GeofencingService extends ChangeNotifier {
             activeDays: gs?.activeDays ?? _attendanceSettings!.activeDays,
           );
         }
+      }
+
+      // Start the persistent Android foreground service (survives force-kill).
+      try {
         // Mark active membership so the background isolate is allowed to
         // poll GPS and call the backend.
         await ForegroundTaskService.persistActiveMembership(true);
-        // Start the persistent Android foreground service (survives force-kill).
         await _fgTaskService.startService();
 
         _isServiceRunning = true;
@@ -471,17 +494,24 @@ class GeofencingService extends ChangeNotifier {
       // For both circular and polygon, the backend provides pre-computed
       // centroid lat/lng and bounding-circle radius.  The background isolate
       // does its own containment check (polygon ray-casting or circular
-      // distance).  For polygon, the exact containment also re-verified on
+      // distance).  For polygon, the exact containment is also re-verified on
       // the backend when the attendance API is called.
+      //
+      // IMPORTANT: pass prefsAlreadySaved = true so registerGymGeofence does
+      // NOT call _saveGeofenceToPreferences (circular-only) and overwrite the
+      // full polygon prefs we just persisted above.  This was the root cause
+      // of polygon geofences silently falling back to circular.
       final success = await registerGymGeofence(
         gymId: gymId,
         latitude: geofenceSettings.latitude!,
         longitude: geofenceSettings.longitude!,
         radius: geofenceSettings.radius!,
+        prefsAlreadySaved: true,
       );
 
       if (success) {
         debugPrint('[GEOFENCE] Configured successfully from attendance settings');
+        debugPrint('[GEOFENCE] Type: ${geofenceSettings.type}');
         debugPrint('[GEOFENCE] Auto-mark entry: ${geofenceSettings.autoMarkEntry}');
         debugPrint('[GEOFENCE] Auto-mark exit: ${geofenceSettings.autoMarkExit}');
       }

@@ -81,11 +81,20 @@ gymNotificationSchema.methods.markAsRead = function() {
 };
 
 gymNotificationSchema.statics.createGrievanceReply = async function(data) {
+  const notifType = data.type || 'grievance-reply';
+  const titleMap = {
+    'grievance-reply': 'Admin Reply to Your Grievance',
+    'support-reply':   'Admin Reply to Your Report'
+  };
+  const messageMap = {
+    'grievance-reply': `Admin has responded to your grievance ticket #${data.ticketId}`,
+    'support-reply':   `Admin has responded to your report ticket #${data.ticketId}`
+  };
   const notification = new this({
     gymId: data.gymId,
-    type: 'grievance-reply',
-    title: 'Admin Reply to Your Grievance',
-    message: `Admin has responded to your grievance ticket #${data.ticketId}`,
+    type: notifType,
+    title: titleMap[notifType] || titleMap['grievance-reply'],
+    message: messageMap[notifType] || messageMap['grievance-reply'],
     priority: data.priority || 'high',
     metadata: {
       ticketId: data.ticketId,

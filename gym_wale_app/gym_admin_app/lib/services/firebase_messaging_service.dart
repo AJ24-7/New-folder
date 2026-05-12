@@ -347,6 +347,11 @@ class FirebaseMessagingService {
     }
     
     switch (type) {
+      case 'grievance':
+      case 'problem-report':
+      case 'chat-message':
+      case 'chat':
+        return 'high_priority_channel';
       case 'check-in':
       case 'payment':
       case 'renewal':
@@ -392,6 +397,14 @@ class FirebaseMessagingService {
   /// Get importance level
   Importance _getImportance(Map<String, dynamic> data) {
     final priority = data['priority'] ?? '';
+    final type = data['type'] ?? '';
+
+    // Treat grievance/problem reports and chat messages as high importance
+    // regardless of the priority field so they always appear as heads-up popups.
+    if (type == 'grievance' || type == 'problem-report' ||
+        type == 'chat-message' || type == 'chat') {
+      return Importance.high;
+    }
     
     switch (priority) {
       case 'high':

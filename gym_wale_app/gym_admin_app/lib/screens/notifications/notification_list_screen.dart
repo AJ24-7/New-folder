@@ -323,6 +323,11 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         iconData = Icons.report_problem;
         iconColor = Colors.deepOrange;
         break;
+      case 'grievance-reply':
+      case 'support-reply':
+        iconData = Icons.support_agent;
+        iconColor = Colors.indigo;
+        break;
       case 'attendance':
         iconData = Icons.checklist;
         iconColor = Colors.teal;
@@ -364,6 +369,34 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
               Text(notification.message),
               const SizedBox(height: 16),
               
+              // Show admin reply details for grievance-reply / support-reply notifications
+              if ((notification.type == 'grievance-reply' || notification.type == 'support-reply') &&
+                  notification.metadata != null) ...
+              [
+                const Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Admin Reply Details',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.indigo,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (notification.metadata!['ticketId'] != null)
+                  _buildDetailRow('Ticket ID', notification.metadata!['ticketId'].toString()),
+                if (notification.metadata!['ticketSubject'] != null)
+                  _buildDetailRow('Subject', notification.metadata!['ticketSubject'].toString()),
+                if (notification.metadata!['adminMessage'] != null)
+                  _buildDetailRow('Reply', notification.metadata!['adminMessage'].toString()),
+                if (notification.metadata!['ticketStatus'] != null)
+                  _buildDetailRow('Status', notification.metadata!['ticketStatus'].toString()),
+                if (notification.metadata!['ticketPriority'] != null)
+                  _buildDetailRow('Priority', notification.metadata!['ticketPriority'].toString()),
+                const SizedBox(height: 16),
+              ],
+
               // Show additional details for membership-freeze notifications
               if (notification.type == 'membership-freeze' && notification.metadata != null) ...[
                 const Divider(),

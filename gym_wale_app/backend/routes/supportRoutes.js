@@ -403,7 +403,14 @@ router.get('/tickets', adminAuth, async (req, res) => {
     const filter = {};
     
     if (userType && userType !== 'all') {
-      filter.userType = userType.charAt(0).toUpperCase() + userType.slice(1);
+      // Map frontend userType param values to DB enum values
+      const userTypeMap = {
+        'users': 'User',
+        'gym-admins': 'Gym',
+        'gyms': 'Gym',
+        'trainers': 'Trainer'
+      };
+      filter.userType = userTypeMap[userType] || (userType.charAt(0).toUpperCase() + userType.slice(1));
     }
     
     if (status && status !== 'all') {
@@ -725,8 +732,10 @@ router.post('/tickets/:ticketId/reply', adminAuth, async (req, res) => {
       message,
       status,
       priority,
-      channels = ['notification'] // email, notification, whatsapp
+      channels: _channels,
+      sendVia // accept sendVia as alias for channels (frontend compatibility)
     } = req.body;
+    const channels = (_channels && _channels.length > 0 ? _channels : null) || (sendVia && sendVia.length > 0 ? sendVia : null) || ['notification'];
 
     const ticket = await Support.findOne({ ticketId: req.params.ticketId });
     
@@ -792,23 +801,17 @@ router.post('/tickets/:ticketId/reply', adminAuth, async (req, res) => {
 
     if (channels.includes('notification')) {
       
-      // If this is a grievance from a gym user, also notify the gym admin
-      
+      // If this is a ticket from a gym admin, notify them of the reply in-app
       if (ticket.userType === 'Gym') {
-        
-        // Check for grievance keywords in both description and subject
-        const grievanceKeywords = ['grievance', 'complaint', 'issue', 'problem', 'dissatisfied', 'unhappy', 'poor service', 'bad experience'];
-        const textToCheck = (ticket.description + ' ' + ticket.subject).toLowerCase();
-        const isGrievance = grievanceKeywords.some(keyword => textToCheck.includes(keyword));
-        
-        
-        if (isGrievance) {
-          try {
-            // For gym tickets, userId is already the gym ID
-            const gymId = ticket.userId;
-            
-            // Create notification for gym admin
-            const notification = await GymNotification.createGrievanceReply({
+        try {
+          // For gym tickets, userId holds the gym's ID
+          const gymId = ticket.userId;
+          if (gymId) {
+            // Determine notification type based on ticket metadata
+            const reportType = ticket.metadata?.reportType || 'support';
+            const notifType = (reportType === 'bug-report' || reportType === 'feature-request') ? 'support-reply' : 'grievance-reply';
+
+            await GymNotification.createGrievanceReply({
               gymId: gymId,
               ticketId: ticket.ticketId,
               adminMessage: message,
@@ -816,23 +819,16 @@ router.post('/tickets/:ticketId/reply', adminAuth, async (req, res) => {
               ticketStatus: ticket.status,
               ticketPriority: ticket.priority,
               adminId: req.admin.id,
-              priority: ticket.priority === 'high' || ticket.priority === 'urgent' ? 'urgent' : ticket.priority
+              priority: ticket.priority === 'high' || ticket.priority === 'urgent' ? 'urgent' : (ticket.priority || 'normal'),
+              type: notifType
             });
-            
-            
-            // Find gym details for logging
-            const gym = await Gym.findById(gymId);
-            if (gym) {
-            }
-          } catch (notificationError) {
+
+            console.log(`✅ GymNotification created for gym ${gymId} (ticket ${ticket.ticketId}, type: ${notifType})`);
           }
-        } else {
+        } catch (notificationError) {
+          console.error('Error creating GymNotification for gym reply:', notificationError);
         }
-      } else {
       }
-      
-      // TODO: Implement user notification system for ticket replies
-      // This should send a notification to the user's dashboard/app
     }
 
     if (channels.includes('whatsapp') && ticket.userPhone) {

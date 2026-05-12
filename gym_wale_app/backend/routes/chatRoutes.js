@@ -8,6 +8,7 @@ const Notification = require('../models/Notification');
 const authMiddleware = require('../middleware/authMiddleware');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const fcmService = require('../services/fcmService');
+const gymNotificationService = require('../services/gymNotificationService');
 
 console.log('💬 Chat Routes loading...');
 
@@ -134,6 +135,37 @@ router.post('/send', authMiddleware, async (req, res) => {
 
             await notification.save();
             console.log('✅ Gym notification created for chat message:', notification._id);
+
+            // Send FCM push notification to gym admin devices
+            try {
+                const adminFcmTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
+                if (adminFcmTokens.length > 0) {
+                    const fcmResult = await fcmService.notifyGymAdmin(
+                        adminFcmTokens,
+                        `💬 New message from ${userName}`,
+                        message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+                        {
+                            type: 'chat-message',
+                            priority: 'medium',
+                            notificationId: notification._id.toString(),
+                            gymId: gymId.toString(),
+                            chatId: chatTicket._id.toString(),
+                            ticketId: chatTicket.ticketId,
+                            userId: userId.toString(),
+                            userName: userName,
+                            channel: 'high_priority_channel',
+                        }
+                    );
+                    console.log(`📲 FCM push sent to ${adminFcmTokens.length} gym admin device(s) for chat message`);
+                    if (fcmResult?.invalidTokens?.length) {
+                        await gymNotificationService.removeStaleGymToken(gymId, fcmResult.invalidTokens);
+                    }
+                } else {
+                    console.log('⚠️ No FCM tokens found for gym admin – chat push skipped');
+                }
+            } catch (fcmErr) {
+                console.error('⚠️ FCM push failed for chat message to gym admin:', fcmErr.message);
+            }
         } catch (notificationError) {
             console.error('❌ Error creating gym notification:', notificationError);
             console.error('❌ Notification error details:', notificationError.message);
@@ -474,17 +506,27 @@ router.post('/gym/reply/:chatId', gymadminAuth, async (req, res) => {
                     .select('fcmToken').lean();
                 const userFcmToken = userDoc?.fcmToken?.token;
                 if (userFcmToken) {
+                    // Fetch gym name for notification display
+                    const gymDoc = await Gym.findById(gymId).select('gymName').lean();
+                    const gymName = gymDoc?.gymName || 'Your Gym';
                     await fcmService.sendToDevice(
                         userFcmToken,
-                        { title: 'New message from gym', body: message.substring(0, 100) },
+                        { title: `New message from ${gymName}`, body: message.substring(0, 100) },
                         {
                             type: 'chat-message',
                             chatId: chatTicket._id.toString(),
                             ticketId: chatTicket.ticketId,
                             gymId: gymId?.toString() || '',
+                            gymName: gymName,
+                        },
+                        {
+                            android: { priority: 'high', channelId: 'gym_wale_chat' },
+                            apns: { aps: { sound: 'default', badge: 1, contentAvailable: true } },
                         }
                     );
                     console.log('📲 FCM push sent to user for chat reply');
+                } else {
+                    console.log('⚠️ No FCM token found for user – chat reply push skipped');
                 }
             } catch (fcmErr) {
                 console.error('⚠️ FCM push failed for chat reply:', fcmErr.message);

@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/attendance_settings.dart';
-import '../providers/attendance_provider.dart';
 import 'package:geolocator/geolocator.dart';
 import '../l10n/app_localizations.dart';
 import '../services/api_service.dart';
 import '../widgets/location_warning_dialog.dart';
 import '../screens/attendance_history_screen.dart';
 
-/// Stateful wrapper for AttendanceWidget that connects to AttendanceProvider
+/// Stateful attendance widget. Maintains per-instance state so multiple
+/// instances (one per gym membership) never cross-contaminate each other.
 class AttendanceWidget extends StatefulWidget {
   final String gymId;
   final String? gymName;
@@ -36,6 +35,14 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
   // evaluate their own gym's schedule rather than sharing the provider value.
   AttendanceSettings? _localSettings;
 
+  // ── Per-instance attendance state ────────────────────────────────────────
+  // Stored locally so multiple AttendanceWidget instances (one per gym
+  // membership) never overwrite each other via the shared provider.
+  bool _ownIsLoading = true;
+  Map<String, dynamic>? _ownTodayAttendance;
+  Map<String, dynamic> _ownStats = {};
+  String? _ownErrorMessage;
+
   @override
   void initState() {
     super.initState();
@@ -51,22 +58,73 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
   }
 
   Future<void> _loadAttendanceData() async {
-    final provider = Provider.of<AttendanceProvider>(context, listen: false);
-    // Reload settings when the provider doesn't yet hold data for this gym.
-    // Avoids cross-contamination when multiple AttendanceWidgets are rendered
-    // for different gyms on the same screen (subscriptions screen).
-    if (provider.attendanceSettings == null ||
-        provider.attendanceSettings!.gymId != widget.gymId) {
-      await provider.loadAttendanceSettings(widget.gymId);
+    if (!mounted) return;
+    setState(() {
+      _ownIsLoading = true;
+      _ownErrorMessage = null;
+    });
+
+    try {
+      // ── 1. Ensure settings are loaded so we can check off-days early ──
+      if (_localSettings == null) {
+        final response = await ApiService.getGymAttendanceSettings(widget.gymId);
+        if (!mounted) return;
+        if (response['success'] == true && response['settings'] != null) {
+          final parsed = AttendanceSettings.fromJson(response['settings'] as Map<String, dynamic>);
+          if (mounted) setState(() => _localSettings = parsed);
+        }
+      }
+
+      // ── 2. Skip API calls when today is a gym off-day ─────────────────
+      if (_localSettings != null && !_isActiveDayToday(_localSettings)) {
+        if (mounted) setState(() => _ownIsLoading = false);
+        return;
+      }
+
+      // ── 3. Fetch attendance data directly (avoids shared-provider churn) ──
+      final todayRes = await ApiService.getTodayAttendance(widget.gymId);
+      if (!mounted) return;
+
+      Map<String, dynamic>? todayAttendance;
+      if (todayRes['success'] == true && todayRes['attendance'] != null) {
+        todayAttendance = Map<String, dynamic>.from(todayRes['attendance'] as Map);
+      }
+
+      final statsRes = await ApiService.getAttendanceStats(
+        widget.gymId,
+        month: DateTime.now().month,
+        year: DateTime.now().year,
+      );
+      if (!mounted) return;
+
+      Map<String, dynamic> stats = {};
+      if (statsRes['success'] == true && statsRes['stats'] != null) {
+        final s = statsRes['stats'] as Map;
+        stats = {
+          'presentDays':    s['presentDays']    ?? 0,
+          'totalDays':      s['totalDays']      ?? 0,
+          'attendanceRate': (s['attendanceRate'] ?? 0.0) / 100.0,
+          'avgDuration':    s['averageDurationMinutes'] ?? 0,
+          'geofenceDays':   s['geofenceDays']   ?? 0,
+        };
+      }
+
+      if (mounted) {
+        setState(() {
+          _ownTodayAttendance = todayAttendance;
+          _ownStats = stats;
+          _ownIsLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('[AttendanceWidget] Error loading attendance data for ${widget.gymId}: $e');
+      if (mounted) {
+        setState(() {
+          _ownErrorMessage = 'Error loading attendance data';
+          _ownIsLoading = false;
+        });
+      }
     }
-    if (!mounted) return;
-    await provider.fetchTodayAttendance(widget.gymId);
-    if (!mounted) return;
-    await provider.fetchAttendanceStats(
-      widget.gymId,
-      month: DateTime.now().month,
-      year: DateTime.now().year,
-    );
   }
 
   /// Check if geofence is enabled and verify location setup
@@ -170,32 +228,28 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    return Consumer<AttendanceProvider>(
-      builder: (context, provider, _) {
-        if (provider.isLoading) {
-          return _buildLoadingState(l10n);
-        }
+    if (_ownIsLoading) {
+      return _buildLoadingState(l10n);
+    }
 
-        if (provider.errorMessage != null) {
-          return _buildErrorState(l10n, provider.errorMessage!);
-        }
+    if (_ownErrorMessage != null) {
+      return _buildErrorState(l10n, _ownErrorMessage!);
+    }
 
-        // Use _localSettings (per-instance) so every gym membership card
-        // evaluates its own opening hours / active days, not a shared value.
-        final scheduleBanner = _buildScheduleBanner(_localSettings);
-        return Column(
-          children: [
-            // Show "off day" / "outside operating hours" banner
-            if (scheduleBanner != null) scheduleBanner,
-            // Show location warning banner if geofence is enabled but location is not set up
-            // On web, show info message if geofence is enabled
-            // On mobile, show warning if location requirements not met
-            if (_geofenceEnabled && _showLocationWarning)
-              _buildLocationWarningBanner(),
-            _buildContent(l10n, provider),
-          ],
-        );
-      },
+    // Use _localSettings (per-instance) so every gym membership card
+    // evaluates its own opening hours / active days, not a shared value.
+    final scheduleBanner = _buildScheduleBanner(_localSettings);
+    return Column(
+      children: [
+        // Show "off day" / "outside operating hours" banner
+        if (scheduleBanner != null) scheduleBanner,
+        // Show location warning banner if geofence is enabled but location is not set up
+        // On web, show info message if geofence is enabled
+        // On mobile, show warning if location requirements not met
+        if (_geofenceEnabled && _showLocationWarning)
+          _buildLocationWarningBanner(),
+        _buildContent(l10n),
+      ],
     );
   }
 
@@ -475,9 +529,9 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
     );
   }
 
-  Widget _buildContent(AppLocalizations l10n, AttendanceProvider provider) {
-    final todayAttendance = provider.todayAttendance;
-    final stats = provider.attendanceStats ?? {};
+  Widget _buildContent(AppLocalizations l10n) {
+    final todayAttendance = _ownTodayAttendance;
+    final stats = _ownStats;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 16),

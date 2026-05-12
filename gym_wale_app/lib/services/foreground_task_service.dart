@@ -1,4 +1,4 @@
-// lib/services/foreground_task_service.dart
+﻿// lib/services/foreground_task_service.dart
 //
 // Keeps geofence-based auto-attendance running even when the app is
 // force-killed from the task switcher.
@@ -225,6 +225,10 @@ class _GeofenceTaskHandler extends TaskHandler {
         _lastExitTime = null;
         _savedEnterTimeAcrossExit = null;
         _lastBackendErrorMsg = null;
+        // Write the new date key FIRST so any concurrent app-side read of
+        // bg_task_last_date immediately sees today's value rather than
+        // yesterday's during the prefs-removal window below.
+        await prefs.setString('bg_task_last_date', today);
         await prefs.remove('bg_task_entry_marked');
         await prefs.remove('bg_task_entry_blocked_today');
         await prefs.remove('bg_task_exit_marked');
@@ -237,6 +241,13 @@ class _GeofenceTaskHandler extends TaskHandler {
         await prefs.remove('bg_task_last_exit_time');
         await prefs.remove('bg_task_saved_enter_time');
         debugPrint('[BGTask] Daily state fully reset for $today');
+        // Update the persistent notification immediately so the user does not
+        // see "Tracking resumes tomorrow" from the previous day.
+        _updateFgNotif(
+          title: 'Gym Attendance Tracking',
+          text: 'Monitoring your location…',
+          icon: _iconLocation,
+        );
       }
 
       // ── Cross-system sync ────────────────────────────────────────────────
@@ -282,16 +293,18 @@ class _GeofenceTaskHandler extends TaskHandler {
 
       // ── Guard: attendance fully done for today ───────────────────────────
       // Once entry is marked AND exit is either already marked or not needed,
-      // stop the service immediately — no GPS polling needed until tomorrow.
-      // This is checked BEFORE acquiring GPS to avoid unnecessary battery drain.
+      // keep the service alive but skip GPS polling until tomorrow.
+      // Stopping the service here would prevent auto-attendance from resuming
+      // the next day without a device reboot or the user opening the app.
       final autoMarkExitEnabled = prefs.getBool('geofence_auto_mark_exit') ?? true;
       if (_entryMarkedToday && (_exitMarkedToday || !autoMarkExitEnabled)) {
-        debugPrint('[BGTask] Attendance complete for today — stopping foreground service');
-        try {
-          FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
-        } catch (_) {}
-        await FlutterForegroundTask.stopService();
-        return;
+        debugPrint('[BGTask] Attendance complete for today — service stays alive for next day');
+        _updateFgNotif(
+          title: 'Attendance Marked',
+          text: 'Tracking resumes tomorrow.',
+          icon: _iconCheck,
+        );
+        return; // Skip GPS polling — wait for daily reset at midnight
       }
 
       // ── get current GPS position ─────────────────────────────────────────
@@ -302,6 +315,20 @@ class _GeofenceTaskHandler extends TaskHandler {
         ).timeout(const Duration(seconds: 15));
       } catch (e) {
         debugPrint('[BGTask] Location timeout: $e');
+        return;
+      }
+
+      // ── GPS accuracy guard ───────────────────────────────────────────────
+      // A reading worse than 150 m is too imprecise to make a reliable
+      // ENTER / DWELL / EXIT decision.  Skip this tick to avoid false
+      // attendance marks or phantom exits caused by GPS drift.
+      if (position.accuracy > 150) {
+        debugPrint('[BGTask] GPS accuracy too low (${position.accuracy.toStringAsFixed(0)} m) — skipping tick');
+        _updateFgNotif(
+          title: 'Gym Attendance Tracking',
+          text: 'Waiting for accurate GPS signal…',
+          icon: _iconLocation,
+        );
         return;
       }
 
@@ -465,7 +492,7 @@ class _GeofenceTaskHandler extends TaskHandler {
             _enterTime = null;
             _dwellMarkAttempts = 0;
             await _saveDailyState();
-            debugPrint('[BGTask] Exit marked at ${_fmtTime(actualExitTime)} — stopping foreground service');
+            debugPrint('[BGTask] Exit marked at ${_fmtTime(actualExitTime)} — service stays alive for next day');
             await _showLocalNotif(
               id: 3003,
               title: 'Exit Recorded',
@@ -478,9 +505,15 @@ class _GeofenceTaskHandler extends TaskHandler {
                 'gymId': gymId,
                 'timestamp': DateTime.now().toIso8601String(),
               });
-              FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
             } catch (_) {}
-            await FlutterForegroundTask.stopService();
+            // Do NOT stop the service — keep it alive so attendance tracking
+            // resumes automatically next day without requiring a device reboot
+            // or the user to manually open the app.
+            _updateFgNotif(
+              title: 'Exit Recorded',
+              text: 'Tracking resumes tomorrow.',
+              icon: _iconCheck,
+            );
             return;
           }
         }
@@ -551,16 +584,18 @@ class _GeofenceTaskHandler extends TaskHandler {
                   });
                   // If exit auto-mark is disabled, attendance is fully done —
                   // send the stop event in the same try block.
-                  if (!autoMarkExitEnabled) {
-                    FlutterForegroundTask.sendDataToMain({'event': 'service_stopped'});
-                  }
+                  // No service-stopped event needed — service stays alive
                 } catch (_) {}
 
-                // If exit auto-mark is disabled, attendance is fully done —
-                // stop the service immediately to save battery.
+                // If exit auto-mark is disabled, attendance is fully done for today.
+                // Keep the service alive so tracking resumes the next day.
                 if (!autoMarkExitEnabled) {
-                  debugPrint('[BGTask] Entry marked & autoMarkExit disabled — stopping foreground service');
-                  await FlutterForegroundTask.stopService();
+                  debugPrint('[BGTask] Entry marked & autoMarkExit disabled — service stays alive for next day');
+                  _updateFgNotif(
+                    title: 'Attendance Marked',
+                    text: 'Tracking resumes tomorrow.',
+                    icon: _iconCheck,
+                  );
                   return;
                 }
 
@@ -1010,9 +1045,20 @@ class _GeofenceTaskHandler extends TaskHandler {
           if (wasInside && enterTimeStr != null) {
             final restored = DateTime.tryParse(enterTimeStr);
             if (restored != null) {
-              _wasInsideGeofence = true;
-              _enterTime = restored;
-              debugPrint('[BGTask] Restored enter time from prefs: $restored');
+              // Only restore the timer if it is recent enough to still be
+              // meaningful.  An enter-time from more than 8 hours ago almost
+              // certainly means the user left the gym while the service was
+              // dead — discarding it prevents a phantom DWELL fire on restart.
+              final ageHours = DateTime.now().difference(restored).inHours;
+              if (ageHours <= 8) {
+                _wasInsideGeofence = true;
+                _enterTime = restored;
+                debugPrint('[BGTask] Restored enter time from prefs: $restored (${ageHours}h old)');
+              } else {
+                debugPrint('[BGTask] Discarding stale enter time ($ageHours h old) — forcing fresh GPS detection');
+                await prefs.remove('bg_task_was_inside');
+                await prefs.remove('bg_task_enter_time');
+              }
             }
           }
           // Restore short-exit tolerance state

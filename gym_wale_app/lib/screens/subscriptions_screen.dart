@@ -1311,6 +1311,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen>
             // Attendance tracking is mobile-only.
             if (!kIsWeb) ...[
               AttendanceWidget(
+                key: ValueKey('attendance_${_extractGymId(membership)}'),
                 gymId: _extractGymId(membership) ?? '',
                 gymName: gymName,
               ),

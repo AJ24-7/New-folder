@@ -47,6 +47,14 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Camera & Photos Permission Descriptions -->
+	<key>NSCameraUsageDescription</key>
+	<string>Gym Admin needs camera access to scan member QR codes and capture profile photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Gym Admin needs photo library access to select and upload gym profile images and member photos.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Gym Admin needs permission to save images to your photo library.</string>
+
 	<!-- Location Permission Descriptions -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Gym Admin needs your location to set up geofencing for member attendance tracking. This ensures members can only check in when they are physically at the gym.</string>
@@ -65,5 +73,9 @@
 	<!-- Notification Settings -->
 	<key>FirebaseMessagingAutoInitEnabled</key>
 	<true/>
+
+	<!-- App Store: app does not use non-exempt encryption (no custom crypto beyond HTTPS/TLS) -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
