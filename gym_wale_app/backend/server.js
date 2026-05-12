@@ -160,6 +160,7 @@ const chatRoutes = require('./routes/chatRoutes');
 const memberLocationStatusRoutes = require('./routes/memberLocationStatus');
 const qrCodeRoutes = require('./routes/qrCodeRoutes');
 const cashValidationRoutes = require('./routes/cashValidationRoutes');
+const communicationRoutes = require('./routes/communicationRoutes');
 
 // API Routes
 app.use('/api/admin', adminRoutes);
@@ -176,6 +177,7 @@ app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/support', supportRoutes);
+app.use('/api/support', communicationRoutes);
 app.use('/api/grievances', supportRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/member-problems', memberProblemReportRoutes);
