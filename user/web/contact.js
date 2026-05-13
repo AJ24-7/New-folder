@@ -48,7 +48,7 @@
     async function loadQuickMessages() {
         const grid = document.getElementById('quickMessagesGrid');
         try {
-            const res = await fetch(`${API_BASE}/admin/communication/contact/quick-messages`);
+            const res = await fetch(`${API_BASE}/support/contact/quick-messages`);
             if (!res.ok) throw new Error('Non-200 response');
             const result = await res.json();
             const messages = result.data || [];
@@ -224,7 +224,7 @@
             const token   = getToken();
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            const res = await fetch(`${API_BASE}/admin/communication/public/contact`, {
+            const res = await fetch(`${API_BASE}/support/public/contact`, {
                 method:  'POST',
                 headers: headers,
                 body:    JSON.stringify(payload)
