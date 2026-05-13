@@ -187,6 +187,29 @@
                             <textarea id="newAddress" name="address" rows="3"></textarea>
                         </div>
 
+                        <div class="form-group">
+                            <label><i class="fas fa-camera"></i> Profile Photo <span class="optional-label">(Optional)</span></label>
+                            <div class="photo-upload-wrapper">
+                                <div class="photo-preview-box" id="photoPreviewBox">
+                                    <img id="photoPreview" src="" alt="Preview" class="photo-preview-img hidden">
+                                    <div id="photoPlaceholder" class="photo-placeholder">
+                                        <i class="fas fa-user-circle"></i>
+                                        <span>No photo selected</span>
+                                    </div>
+                                </div>
+                                <div class="photo-upload-actions">
+                                    <label for="profileImageInput" class="btn btn-secondary btn-sm photo-upload-btn">
+                                        <i class="fas fa-upload"></i> Choose Photo
+                                    </label>
+                                    <button type="button" class="btn btn-danger btn-sm photo-remove-btn hidden" id="photoRemoveBtn" onclick="removeProfilePhoto()">
+                                        <i class="fas fa-times"></i> Remove
+                                    </button>
+                                    <input type="file" id="profileImageInput" name="profileImage" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handlePhotoChange(this)">
+                                </div>
+                                <small class="photo-upload-hint">JPG, PNG or WEBP &bull; max 5 MB</small>
+                            </div>
+                        </div>
+
                         <button type="button" class="btn btn-primary" onclick="nextStep(2)">
                             Next: Membership Plan <i class="fas fa-arrow-right"></i>
                         </button>

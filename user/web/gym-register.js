@@ -688,6 +688,51 @@ async function submitPreviousMember() {
 }
 
 // Submit New Member Registration
+// ─────────────────────────────────────────────────────────────
+// Profile Photo Upload
+// ─────────────────────────────────────────────────────────────
+
+function handlePhotoChange(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    // Validate type and size (max 5 MB)
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        alert('Only JPG, PNG or WEBP images are allowed.');
+        input.value = '';
+        return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+        alert('Image must be smaller than 5 MB.');
+        input.value = '';
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const preview = document.getElementById('photoPreview');
+        const placeholder = document.getElementById('photoPlaceholder');
+        const removeBtn = document.getElementById('photoRemoveBtn');
+        preview.src = e.target.result;
+        preview.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        removeBtn.classList.remove('hidden');
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeProfilePhoto() {
+    const input = document.getElementById('profileImageInput');
+    const preview = document.getElementById('photoPreview');
+    const placeholder = document.getElementById('photoPlaceholder');
+    const removeBtn = document.getElementById('photoRemoveBtn');
+    input.value = '';
+    preview.src = '';
+    preview.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    removeBtn.classList.add('hidden');
+}
+
 async function submitNewMember() {
     const paymentForm = document.getElementById('paymentForm');
     
@@ -785,12 +830,34 @@ async function submitNewMember() {
             data.registrationType = 'standard';
         }
 
+        // Build FormData so the profile photo file can be included
+        const formData = new FormData();
+        const profileImageInput = document.getElementById('profileImageInput');
+        if (profileImageInput && profileImageInput.files && profileImageInput.files[0]) {
+            formData.append('profileImage', profileImageInput.files[0]);
+        }
+        // Append all scalar fields
+        const scalarFields = [
+            'gymId', 'name', 'age', 'gender', 'phone', 'email', 'address',
+            'activityPreference', 'planSelected', 'monthlyPlan', 'paymentMode',
+            'paymentAmount', 'paymentStatus', 'qrToken', 'registrationType'
+        ];
+        scalarFields.forEach((key) => {
+            if (data[key] !== undefined && data[key] !== null) {
+                formData.append(key, data[key]);
+            }
+        });
+        // Stringify arrays and nested objects
+        if (data.preferredActivities) {
+            formData.append('preferredActivities', JSON.stringify(data.preferredActivities));
+        }
+        formData.append('membershipPlan', JSON.stringify(data.membershipPlan));
+        formData.append('payment', JSON.stringify(data.payment));
+
         const response = await fetch(`${API_BASE_URL}/members/qr-register-new`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            body: formData
+            // Note: do NOT set Content-Type — the browser sets multipart/form-data with the boundary automatically
         });
 
         if (!response.ok) {
