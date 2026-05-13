@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -2348,6 +2349,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           );
 
+    final contactAction = isCompact
+        ? InkWell(
+            onTap: _openContactPage,
+            borderRadius: BorderRadius.circular(10),
+            child: _buildWebNavIcon(icon: Icons.headset_mic_outlined),
+          )
+        : TextButton.icon(
+            onPressed: _openContactPage,
+            icon: const Icon(Icons.headset_mic_outlined, color: Colors.white),
+            label: Text(
+              _webText('Contact Us', 'संपर्क करें'),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+            ),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.white.withOpacity(0.12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(color: Colors.white.withOpacity(0.2)),
+              ),
+            ),
+          );
+
     final accountAction = authProvider.isAuthenticated
         ? PopupMenuButton<String>(
             tooltip: _webText('Account', 'खाता'),
@@ -2517,6 +2541,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             children: [
               languageAction,
               const SizedBox(width: 8),
+              contactAction,
+              const SizedBox(width: 8),
               installAction,
               const SizedBox(width: 8),
               accountAction,
@@ -2529,6 +2555,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               languageAction,
+              contactAction,
               installAction,
               accountAction,
             ],
@@ -3715,6 +3742,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _openContactPage() async {
+    if (!kIsWeb) return;
+    try {
+      final contactUrl = Uri.base.resolve('contact.html');
+      await launchUrl(contactUrl, mode: LaunchMode.platformDefault);
+    } catch (_) {}
+  }
+
   void _showWebInstallDialog() {
     showDialog(
       context: context,
@@ -4187,6 +4222,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       context,
                       MaterialPageRoute(builder: (_) => const ProfileScreen()),
                     );
+                  },
+                ),
+                _buildQuickMenuItem(
+                  icon: Icons.headset_mic_outlined,
+                  label: _webText('Contact Us', 'संपर्क करें'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _openContactPage();
                   },
                 ),
                     ],

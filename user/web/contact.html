@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Support - Gym Wale</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="contact.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal-overlay" id="successModal">
+        <div class="modal-box">
+            <button class="modal-close-btn" id="closeSuccessModal" aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="modal-icon success">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h3>Message Sent Successfully!</h3>
+            <p id="successModalMessage">Thank you for reaching out. We'll get back to you as soon as possible.</p>
+            <div class="modal-details" id="successDetails">
+                <div class="modal-detail-row">
+                    <span class="label"><i class="fas fa-ticket-alt"></i> Ticket ID</span>
+                    <span class="value" id="ticketIdDisplay">—</span>
+                </div>
+                <div class="modal-detail-row">
+                    <span class="label"><i class="fas fa-envelope"></i> Confirmation sent to</span>
+                    <span class="value" id="emailDisplay">—</span>
+                </div>
+                <div class="modal-detail-row">
+                    <span class="label"><i class="fas fa-clock"></i> Response time</span>
+                    <span class="value">Within 24 hours</span>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-primary" id="okSuccessModal">
+                    <i class="fas fa-check"></i> Done
+                </button>
+                <button class="btn btn-secondary" onclick="window.history.back()">
+                    <i class="fas fa-arrow-left"></i> Go Back
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Modal -->
+    <div class="modal-overlay" id="errorModal">
+        <div class="modal-box">
+            <button class="modal-close-btn" id="closeErrorModal" aria-label="Close">
+                <i class="fas fa-times"></i>
+            </button>
+            <div class="modal-icon error">
+                <i class="fas fa-exclamation-circle"></i>
+            </div>
+            <h3>Something Went Wrong</h3>
+            <p id="errorModalMessage">We couldn't send your message. Please try again.</p>
+            <div class="modal-actions">
+                <button class="btn btn-danger" id="retryErrorModal">
+                    <i class="fas fa-redo"></i> Try Again
+                </button>
+                <button class="btn btn-secondary" id="okErrorModal">
+                    <i class="fas fa-times"></i> Dismiss
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-top-row">
+                <a href="index.html" class="back-home-link" title="Back to App">
+                    <i class="fas fa-arrow-left"></i>
+                    <span>Home</span>
+                </a>
+            </div>
+            <div class="brand">
+                <img src="icons/Icon-192.png" alt="Gym Wale" class="brand-logo">
+                <div>
+                    <h1>Gym Wale</h1>
+                </div>
+            </div>
+            <p class="brand-tagline">Powered by Gym Wale Services</p>
+            <p class="header-subtitle">
+                <i class="fas fa-headset"></i>
+                &nbsp;Contact &amp; Support
+            </p>
+        </header>
+
+        <!-- Page Content -->
+        <div class="page-content">
+
+            <!-- Page Title -->
+            <div class="section-title">
+                <i class="fas fa-envelope-open-text"></i>
+                Get In Touch
+            </div>
+            <p class="section-subtitle">
+                Have a question about memberships, services, or need technical help? We're here to assist you.
+            </p>
+
+            <!-- Contact Info Strip -->
+            <div class="contact-info-strip">
+                <div class="info-card">
+                    <div class="icon"><i class="fas fa-envelope"></i></div>
+                    <div class="info-text">
+                        <h4>Email</h4>
+                        <p><a href="mailto:support@gymwale.com">support@gymwale.com</a></p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="icon"><i class="fas fa-phone-alt"></i></div>
+                    <div class="info-text">
+                        <h4>Phone</h4>
+                        <p><a href="tel:+911234567890">+91 12345 67890</a></p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="icon"><i class="fas fa-clock"></i></div>
+                    <div class="info-text">
+                        <h4>Working Hours</h4>
+                        <p>Mon–Fri: 6AM – 10PM</p>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <div class="icon"><i class="fas fa-map-marker-alt"></i></div>
+                    <div class="info-text">
+                        <h4>Address</h4>
+                        <p>123 Fitness Street, Faridabad</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Login Hint (shown when not logged in) -->
+            <div class="login-hint" id="loginHint" style="display:none;">
+                <i class="fas fa-info-circle"></i>
+                <span>
+                    <a href="index.html" id="loginLink">Log in</a> to auto-fill your details and track your support tickets.
+                </span>
+            </div>
+
+            <!-- Quick Messages -->
+            <div class="quick-messages-section">
+                <h3><i class="fas fa-bolt" style="color:var(--primary-color);margin-right:0.4rem;"></i>Quick Message Options</h3>
+                <p>Select a common inquiry to auto-fill the form, or write your own message below.</p>
+                <div class="quick-messages-grid" id="quickMessagesGrid">
+                    <div class="qm-loading">
+                        <div class="spinner" style="width:18px;height:18px;border-width:2px;"></div>
+                        Loading options...
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Contact Form -->
+            <form id="contactForm" novalidate>
+
+                <!-- Name + Email -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="name">
+                            <i class="fas fa-user"></i> Full Name <span class="required">*</span>
+                        </label>
+                        <input type="text" id="name" name="name" placeholder="Your full name" required autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label for="email">
+                            <i class="fas fa-envelope"></i> Email Address <span class="required">*</span>
+                        </label>
+                        <input type="email" id="email" name="email" placeholder="you@example.com" required autocomplete="email">
+                    </div>
+                </div>
+
+                <!-- Phone + Category -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="phone">
+                            <i class="fas fa-phone"></i> Phone Number
+                        </label>
+                        <input type="tel" id="phone" name="phone" placeholder="10-digit mobile number" autocomplete="tel">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">
+                            <i class="fas fa-tag"></i> Category <span class="required">*</span>
+                        </label>
+                        <select id="category" name="category" required>
+                            <option value="" disabled selected>Select a category</option>
+                            <option value="general">General Inquiry</option>
+                            <option value="membership">Membership</option>
+                            <option value="service">Services &amp; Classes</option>
+                            <option value="technical">Technical Support</option>
+                            <option value="complaint">Complaint / Feedback</option>
+                            <option value="partnership">Business Partnership</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Subject -->
+                <div class="form-group">
+                    <label for="subject">
+                        <i class="fas fa-heading"></i> Subject <span class="required">*</span>
+                    </label>
+                    <input type="text" id="subject" name="subject" placeholder="Brief subject of your inquiry" required>
+                </div>
+
+                <!-- Message -->
+                <div class="form-group">
+                    <label for="message">
+                        <i class="fas fa-comment-dots"></i> Your Message <span class="required">*</span>
+                    </label>
+                    <textarea id="message" name="message" rows="5" placeholder="Describe your inquiry or concern in detail..." required></textarea>
+                </div>
+
+                <!-- Activities Section (conditional) -->
+                <div class="activities-section" id="activitiesSection">
+                    <label><i class="fas fa-running" style="color:var(--primary-color);margin-right:0.4rem;"></i> Interested Activities <span style="font-weight:400;color:#6c757d;">(Optional)</span></label>
+                    <div class="activities-grid">
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Strength"> Strength
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Cardio"> Cardio
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Yoga"> Yoga
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="CrossFit"> CrossFit
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Zumba"> Zumba
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Swimming"> Swimming
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Pilates"> Pilates
+                        </label>
+                        <label class="activity-checkbox">
+                            <input type="checkbox" name="activities" value="Meditation"> Meditation
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Submit -->
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span class="btn-text"><i class="fas fa-paper-plane"></i> Send Message</span>
+                    <span class="btn-loading" id="btnLoading">
+                        <span class="btn-spinner"></span>
+                        Sending...
+                    </span>
+                </button>
+
+            </form>
+        </div>
+        <!-- /page-content -->
+    </div>
+    <!-- /container -->
+
+    <script src="contact.js"></script>
+</body>
+</html>
