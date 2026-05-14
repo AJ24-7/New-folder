@@ -1021,7 +1021,13 @@ const lookupMemberForQR = async (req, res) => {
     }
 
     const now = new Date();
-    const isActive = !!(existing.validUntil && new Date(existing.validUntil) > now && existing.paymentStatus === 'paid');
+    const validUntilDate = existing.validUntil ? new Date(existing.validUntil) : null;
+    const allowanceDate = existing.allowanceExpiryDate ? new Date(existing.allowanceExpiryDate) : null;
+    const isFrozen = !!existing.currentlyFrozen;
+    const isActive = !isFrozen && (
+      (validUntilDate && validUntilDate > now) ||
+      (allowanceDate && allowanceDate > now)
+    );
 
     return res.json({
       found: true,

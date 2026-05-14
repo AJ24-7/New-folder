@@ -208,6 +208,7 @@ function selectType(type) {
     if (type === 'previous') {
         document.getElementById('previousMemberForm').classList.add('active');
         updateStepIndicator(2);
+        loadMembershipPlans(); // pre-fetch plans so renewal section has data
     } else {
         document.getElementById('newMemberForm').classList.add('active');
         updateStepIndicator(2);
@@ -257,19 +258,23 @@ async function loadMembershipPlans() {
         displayMembershipPlans();
     } catch (error) {
         console.error('Error loading membership plans:', error);
-        document.getElementById('membershipPlans').innerHTML = `
-            <div class="error-message">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>Failed to load membership plans. Please contact the gym.</p>
-            </div>
-        `;
+        const container = document.getElementById('membershipPlans');
+        if (container) {
+            container.innerHTML = `
+                <div class="error-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load membership plans. Please contact the gym.</p>
+                </div>
+            `;
+        }
     }
 }
 
 // Display Membership Plans
 function displayMembershipPlans() {
     const container = document.getElementById('membershipPlans');
-    
+    if (!container) return; // not in new-member view — plans are cached for later use
+
     if (!membershipPlans || membershipPlans.length === 0) {
         container.innerHTML = `
             <div class="error-message">
