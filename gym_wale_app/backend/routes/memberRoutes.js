@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const { addMember, importMembers, getMembers, updateMember, removeMembersByIds, removeExpiredMembers, removeSingleMember, renewMembership, updateMemberPaymentStatus, getMembersWithPendingPayments, getExpiringMembers, grantSevenDayAllowance, markPaymentAsPaid, addMembershipPlan, checkUserMembership, freezeMembership, getMembershipPass, extendMembership } = require('../controllers/memberController');
 const { registerOnlineMember } = require('../controllers/onlineMembershipController');
-const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember, lookupMemberForQR } = require('../controllers/qrRegistrationController');
+const { registerMemberViaQR, getGymInfo, registerPreviousMember, registerNewMember, lookupMemberForQR, renewMemberViaQR } = require('../controllers/qrRegistrationController');
 const gymadminAuth = require('../middleware/gymadminAuth');
 const authMiddleware = require('../middleware/authMiddleware');
 const memberImageUpload = require('../middleware/memberImageUpload');
@@ -78,6 +78,9 @@ router.post('/qr-register-previous', qrMemberImageUpload.single('profileImage'),
 
 // Register new member with full details and payment
 router.post('/qr-register-new', qrMemberImageUpload.single('profileImage'), registerNewMember);
+
+// Renew existing member membership via QR code (public)
+router.post('/qr-renew', qrMemberImageUpload.single('profileImage'), renewMemberViaQR);
 
 // Get membership pass details
 router.get('/:membershipId/pass', authMiddleware, getMembershipPass);

@@ -33,6 +33,12 @@ let membershipPlans = [];
 let selectedPlan = null;
 let memberData = {};
 
+// Previous member lookup state
+let _prevLookupTimer = null;
+let _prevFoundMember = null;
+let _prevRenewalMode = false;
+let _prevSelectedRenewalPlan = null;
+
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', () => {
     gymId = urlParams.get('gymId') || urlParams.get('gym') || '';
@@ -45,9 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setupPaymentMethodListener();
 
-    // Lookup existing member whenever phone or email loses focus
+    // Lookup existing member whenever phone or email loses focus (new member form)
     document.getElementById('newPhone').addEventListener('blur', scheduleMemberLookup);
     document.getElementById('newEmail').addEventListener('blur', scheduleMemberLookup);
+
+    // Lookup previous member record whenever phone or email loses focus (prev member form)
+    document.getElementById('prevPhone').addEventListener('blur', schedulePreviousMemberLookup);
+    document.getElementById('prevEmail').addEventListener('blur', schedulePreviousMemberLookup);
+
+    setupPrevPaymentMethodListener();
 
     if (qrToken) {
         loadQRCodeContext();
@@ -539,6 +551,14 @@ async function nextStep(step) {
         const blocked = await checkForDuplicateAndBlock();
         if (blocked) return;
 
+        // Validate profile photo (required for new member)
+        const profileImageInput = document.getElementById('profileImageInput');
+        if (!profileImageInput || !profileImageInput.files || !profileImageInput.files[0]) {
+            alert('Please upload a profile photo to continue.');
+            document.getElementById('photoUploadCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+
         // Store personal details
         const formData = new FormData(form);
         memberData = Object.fromEntries(formData.entries());
@@ -645,29 +665,55 @@ async function submitPreviousMember() {
         form.reportValidity();
         return;
     }
-    
+
+    // ── Renewal mode ──────────────────────────────────────────────────────────
+    if (_prevRenewalMode) {
+        if (!_prevSelectedRenewalPlan) {
+            alert('Please select a membership plan to renew.');
+            document.getElementById('prevMembershipPlans').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        const prevPaymentMethodEl = document.querySelector('input[name="prevPaymentMethod"]:checked');
+        if (!prevPaymentMethodEl) {
+            alert('Please select a payment method.');
+            document.getElementById('prevRenewalSection').scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        const method = prevPaymentMethodEl.value;
+        if ((method === 'Card' || method === 'UPI' || method === 'Bank Transfer') &&
+            !document.getElementById('prevTransactionId').value.trim()) {
+            alert('Please enter the transaction ID for your payment.');
+            document.getElementById('prevTransactionId').focus();
+            return;
+        }
+        await submitRenewal(form, method);
+        return;
+    }
+
+    // ── Basic registration mode ───────────────────────────────────────────────
     showLoading(true);
     
     try {
         const formData = new FormData(form);
         const activities = Array.from(document.querySelectorAll('input[name="activities"]:checked'))
             .map(cb => cb.value);
-        
-        const data = {
-            gymId: gymId,
-            name: formData.get('name'),
-            phone: formData.get('phone'),
-            email: formData.get('email'),
-            preferredActivities: activities,
-            registrationType: 'previous'
-        };
-        
+
+        const submission = new FormData();
+        submission.append('gymId', gymId);
+        submission.append('name', formData.get('name'));
+        submission.append('phone', formData.get('phone'));
+        submission.append('email', formData.get('email'));
+        submission.append('preferredActivities', JSON.stringify(activities));
+        submission.append('registrationType', 'previous');
+
+        const prevImageInput = document.getElementById('prevProfileImageInput');
+        if (prevImageInput && prevImageInput.files && prevImageInput.files[0]) {
+            submission.append('profileImage', prevImageInput.files[0]);
+        }
+
         const response = await fetch(`${API_BASE_URL}/members/qr-register-previous`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data)
+            body: submission
         });
         
         if (!response.ok) {
@@ -687,12 +733,283 @@ async function submitPreviousMember() {
     }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Previous Member Lookup
+// ─────────────────────────────────────────────────────────────
+
+function schedulePreviousMemberLookup() {
+    clearTimeout(_prevLookupTimer);
+    _prevLookupTimer = setTimeout(runPreviousMemberLookup, 600);
+}
+
+async function runPreviousMemberLookup() {
+    if (!gymId) return;
+
+    const rawPhone = (document.getElementById('prevPhone').value || '').replace(/\D/g, '');
+    const rawEmail = (document.getElementById('prevEmail').value || '').trim().toLowerCase();
+    const phoneOk = /^[0-9]{10}$/.test(rawPhone);
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail);
+
+    if (!phoneOk && !emailOk) return;
+
+    try {
+        const params = new URLSearchParams({ gymId });
+        if (phoneOk) params.set('phone', rawPhone);
+        if (emailOk) params.set('email', rawEmail);
+
+        const resp = await fetch(`${API_BASE_URL}/members/qr-lookup?${params.toString()}`);
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (data.found) {
+            _prevFoundMember = data.member;
+            showPrevMemberStatus(data.member);
+        } else {
+            _prevFoundMember = null;
+            resetPrevMemberStatus(false); // valid identifiers but no record
+        }
+    } catch (_) {
+        // silently ignore network errors during lookup
+    }
+}
+
+function showPrevMemberStatus(member) {
+    const card = document.getElementById('prevMemberStatusCard');
+    const renewalSection = document.getElementById('prevRenewalSection');
+    const submitBtn = document.getElementById('prevSubmitBtn');
+
+    const isActive = member.isActive;
+    const expiry = member.validUntil ? new Date(member.validUntil).toLocaleDateString('en-IN') : null;
+    const name = escapeHtml(member.name || '');
+    const plan = escapeHtml(member.planSelected || '');
+
+    card.style.display = 'block';
+
+    if (isActive) {
+        _prevRenewalMode = false;
+        card.className = 'prev-member-status-card prev-member-active';
+        card.innerHTML = `
+            <div class="pms-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="pms-body">
+                <strong>Welcome back, ${name}!</strong>
+                <p>Your membership is <span class="pms-badge pms-active">Active</span></p>
+                ${expiry ? `<p class="pms-detail">Valid until <strong>${expiry}</strong></p>` : ''}
+                ${plan ? `<p class="pms-detail">Current plan: <strong>${plan}</strong></p>` : ''}
+                <p class="pms-hint">You can update your contact details and preferred activities below.</p>
+            </div>
+        `;
+        renewalSection.style.display = 'none';
+        submitBtn.innerHTML = 'Update Details <i class="fas fa-save"></i>';
+    } else {
+        _prevRenewalMode = true;
+        card.className = 'prev-member-status-card prev-member-expired';
+        card.innerHTML = `
+            <div class="pms-icon"><i class="fas fa-clock"></i></div>
+            <div class="pms-body">
+                <strong>Welcome back, ${name}!</strong>
+                <p>Your membership has <span class="pms-badge pms-expired">Expired</span></p>
+                ${expiry ? `<p class="pms-detail">Last valid until <strong>${expiry}</strong></p>` : ''}
+                ${plan ? `<p class="pms-detail">Previous plan: <strong>${plan}</strong></p>` : ''}
+                <p class="pms-hint">Choose a plan below to renew your membership.</p>
+            </div>
+        `;
+        renewalSection.style.display = 'block';
+        renderPrevMembershipPlans();
+        submitBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Renew Membership';
+    }
+}
+
+function resetPrevMemberStatus(notFound) {
+    _prevRenewalMode = false;
+    _prevFoundMember = null;
+    _prevSelectedRenewalPlan = null;
+
+    const card = document.getElementById('prevMemberStatusCard');
+    const renewalSection = document.getElementById('prevRenewalSection');
+    const submitBtn = document.getElementById('prevSubmitBtn');
+
+    renewalSection.style.display = 'none';
+
+    if (notFound === false) {
+        card.style.display = 'block';
+        card.className = 'prev-member-status-card prev-member-not-found';
+        card.innerHTML = `
+            <div class="pms-icon"><i class="fas fa-user-plus"></i></div>
+            <div class="pms-body">
+                <strong>No record found</strong>
+                <p class="pms-hint">You're not yet in this gym's database. Fill in your details below to register your basic information and the gym staff will set up your membership.</p>
+            </div>
+        `;
+    } else {
+        card.style.display = 'none';
+    }
+
+    submitBtn.innerHTML = 'Submit Registration <i class="fas fa-arrow-right"></i>';
+}
+
+function renderPrevMembershipPlans() {
+    const container = document.getElementById('prevMembershipPlans');
+    if (!membershipPlans || membershipPlans.length === 0) {
+        container.innerHTML = `
+            <div class="error-message">
+                <i class="fas fa-info-circle"></i>
+                <p>No membership plans available. Please contact the gym.</p>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = membershipPlans.map((plan, index) => {
+        const discount = normalizeDiscount(plan.discount);
+        const finalPrice = resolvePlanFinalPrice(plan);
+        const originalPrice = Number.isFinite(plan.originalPrice) && plan.originalPrice > finalPrice
+            ? plan.originalPrice
+            : (discount > 0 ? plan.price : null);
+        const tierName = plan.tierName ? `<div class="plan-tier">${escapeHtml(plan.tierName)}</div>` : '';
+        const popularBadge = plan.isPopular ? '<div class="plan-popular-tag">Most Popular</div>' : '';
+
+        return `
+            <div class="plan-card ${plan.isPopular ? 'popular' : ''}" onclick="selectRenewalPlan(${index})">
+                ${popularBadge}
+                ${tierName}
+                <div class="plan-duration">${plan.months} Month${plan.months > 1 ? 's' : ''}</div>
+                <div class="plan-price">
+                    ₹${finalPrice.toLocaleString('en-IN')}
+                    ${originalPrice ? `<span class="plan-original-price">₹${originalPrice.toLocaleString('en-IN')}</span>` : ''}
+                </div>
+                ${discount > 0 ? `<div class="plan-discount">Save ${discount}%</div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+function selectRenewalPlan(index) {
+    _prevSelectedRenewalPlan = membershipPlans[index];
+    document.querySelectorAll('#prevMembershipPlans .plan-card').forEach((card, i) => {
+        card.classList.toggle('selected', i === index);
+    });
+    updatePrevRenewalSummary();
+}
+
+function updatePrevRenewalSummary() {
+    const summaryEl = document.getElementById('prevRenewalSummary');
+    if (!_prevSelectedRenewalPlan) {
+        summaryEl.style.display = 'none';
+        return;
+    }
+    const finalPrice = resolvePlanFinalPrice(_prevSelectedRenewalPlan);
+    document.getElementById('prevSummaryPlan').textContent = resolvePlanTier(_prevSelectedRenewalPlan.months);
+    document.getElementById('prevSummaryDuration').textContent =
+        `${_prevSelectedRenewalPlan.months} Month${_prevSelectedRenewalPlan.months > 1 ? 's' : ''}`;
+    document.getElementById('prevSummaryAmount').textContent = `₹${finalPrice.toLocaleString('en-IN')}`;
+    summaryEl.style.display = 'block';
+}
+
+function setupPrevPaymentMethodListener() {
+    document.querySelectorAll('input[name="prevPaymentMethod"]').forEach(method => {
+        method.addEventListener('change', () => {
+            const txnGroup = document.getElementById('prevTransactionIdGroup');
+            const val = document.querySelector('input[name="prevPaymentMethod"]:checked')?.value;
+            if (val === 'Card' || val === 'UPI' || val === 'Bank Transfer') {
+                txnGroup.style.display = 'block';
+            } else {
+                txnGroup.style.display = 'none';
+            }
+            updatePrevRenewalSummary();
+        });
+    });
+}
+
+async function submitRenewal(form, paymentMethod) {
+    showLoading(true);
+    try {
+        const formData = new FormData(form);
+        const finalPrice = resolvePlanFinalPrice(_prevSelectedRenewalPlan);
+
+        // For Card/UPI, open Razorpay then ask for transaction ID
+        if (paymentMethod === 'Card' || paymentMethod === 'UPI') {
+            showLoading(false);
+            const opened = openRazorpayPaymentLink();
+            if (!opened) return;
+            const txnRef = window.prompt(
+                'Your Razorpay payment page has opened in a new tab.\n\nAfter completing payment, enter the transaction reference below.',
+                ''
+            );
+            if (txnRef === null) return; // user cancelled
+            if (txnRef.trim()) document.getElementById('prevTransactionId').value = txnRef.trim();
+            showLoading(true);
+        }
+
+        const submission = new FormData();
+        submission.append('gymId', gymId);
+        submission.append('name', formData.get('name'));
+        submission.append('phone', formData.get('phone'));
+        submission.append('email', formData.get('email'));
+        submission.append('planSelected', resolvePlanTier(_prevSelectedRenewalPlan.months));
+        submission.append('months', _prevSelectedRenewalPlan.months);
+        submission.append('paymentMode', paymentMethod);
+        submission.append('paymentAmount', finalPrice);
+
+        const txnId = document.getElementById('prevTransactionId').value.trim();
+        if (txnId) submission.append('transactionId', txnId);
+
+        const prevImageInput = document.getElementById('prevProfileImageInput');
+        if (prevImageInput && prevImageInput.files && prevImageInput.files[0]) {
+            submission.append('profileImage', prevImageInput.files[0]);
+        }
+
+        const response = await fetch(`${API_BASE_URL}/members/qr-renew`, {
+            method: 'POST',
+            body: submission
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.message || 'Renewal failed');
+        }
+
+        const result = await response.json();
+        showLoading(false);
+
+        if (result.requiresCashValidation) {
+            showCashPending(result, 'Renewed Member');
+            return;
+        }
+
+        showSuccess('Renewed Member', result);
+
+    } catch (error) {
+        console.error('Error renewing membership:', error);
+        showLoading(false);
+        showError(error.message || 'Renewal failed. Please try again.');
+    }
+}
+
 // Submit New Member Registration
 // ─────────────────────────────────────────────────────────────
 // Profile Photo Upload
 // ─────────────────────────────────────────────────────────────
 
-function handlePhotoChange(input) {
+function getPhotoIds(context) {
+    if (context === 'prev') {
+        return {
+            input: 'prevProfileImageInput',
+            preview: 'prevPhotoPreview',
+            placeholder: 'prevPhotoPlaceholder',
+            removeBtn: 'prevPhotoRemoveBtn',
+            fileName: 'prevPhotoFileName'
+        };
+    }
+    return {
+        input: 'profileImageInput',
+        preview: 'photoPreview',
+        placeholder: 'photoPlaceholder',
+        removeBtn: 'photoRemoveBtn',
+        fileName: 'photoFileName'
+    };
+}
+
+function handlePhotoChange(input, context) {
     const file = input.files && input.files[0];
     if (!file) return;
 
@@ -708,29 +1025,35 @@ function handlePhotoChange(input) {
         return;
     }
 
+    const ids = getPhotoIds(context);
     const reader = new FileReader();
     reader.onload = (e) => {
-        const preview = document.getElementById('photoPreview');
-        const placeholder = document.getElementById('photoPlaceholder');
-        const removeBtn = document.getElementById('photoRemoveBtn');
+        const preview = document.getElementById(ids.preview);
+        const placeholder = document.getElementById(ids.placeholder);
+        const removeBtn = document.getElementById(ids.removeBtn);
+        const fileName = document.getElementById(ids.fileName);
         preview.src = e.target.result;
-        preview.classList.remove('hidden');
-        placeholder.classList.add('hidden');
-        removeBtn.classList.remove('hidden');
+        preview.style.display = 'block';
+        placeholder.style.display = 'none';
+        removeBtn.style.display = '';
+        if (fileName) fileName.textContent = file.name;
     };
     reader.readAsDataURL(file);
 }
 
-function removeProfilePhoto() {
-    const input = document.getElementById('profileImageInput');
-    const preview = document.getElementById('photoPreview');
-    const placeholder = document.getElementById('photoPlaceholder');
-    const removeBtn = document.getElementById('photoRemoveBtn');
+function removeProfilePhoto(context) {
+    const ids = getPhotoIds(context);
+    const input = document.getElementById(ids.input);
+    const preview = document.getElementById(ids.preview);
+    const placeholder = document.getElementById(ids.placeholder);
+    const removeBtn = document.getElementById(ids.removeBtn);
+    const fileName = document.getElementById(ids.fileName);
     input.value = '';
     preview.src = '';
-    preview.classList.add('hidden');
-    placeholder.classList.remove('hidden');
-    removeBtn.classList.add('hidden');
+    preview.style.display = 'none';
+    placeholder.style.display = '';
+    removeBtn.style.display = 'none';
+    if (fileName) fileName.textContent = 'No photo selected';
 }
 
 async function submitNewMember() {
@@ -1055,7 +1378,7 @@ function switchToPreviousMemberFlow() {
 let _cashCountdownTimer = null;
 let _cashPollingTimer   = null;
 
-function showCashPending(result) {
+function showCashPending(result, successType) {
     clearInterval(_cashCountdownTimer);
     clearInterval(_cashPollingTimer);
 
@@ -1109,7 +1432,7 @@ function showCashPending(result) {
                 document.getElementById('cashStatusMsg').innerHTML =
                     '<span class="cash-confirmed">✅ Payment confirmed by gym admin! Your membership is now active.</span>';
                 // Show success after a short delay so the user reads the message
-                setTimeout(() => showSuccess('New Member', {
+                setTimeout(() => showSuccess(successType || 'New Member', {
                     name: result.name,
                     phone: result.phone,
                     memberId: data.member?.membershipId || data.membershipId || null,

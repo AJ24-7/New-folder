@@ -85,6 +85,33 @@
                 Previous Member Registration
             </h2>
             <form id="prevMemberFormData" class="form">
+                <div class="form-group photo-field-group">
+                    <label><i class="fas fa-camera"></i> Profile Photo <span class="optional-label">(Optional)</span></label>
+                    <div class="photo-upload-card">
+                        <label for="prevProfileImageInput" class="photo-avatar-label">
+                            <img id="prevPhotoPreview" src="" alt="Preview" class="photo-preview-img" style="display:none">
+                            <div id="prevPhotoPlaceholder" class="photo-placeholder-inner">
+                                <i class="fas fa-user-circle"></i>
+                                <span>Tap to add</span>
+                            </div>
+                            <div class="photo-avatar-overlay"><i class="fas fa-camera"></i></div>
+                        </label>
+                        <div class="photo-upload-controls">
+                            <p class="photo-upload-name" id="prevPhotoFileName">No photo selected</p>
+                            <div class="photo-upload-actions">
+                                <label for="prevProfileImageInput" class="btn btn-secondary btn-sm photo-upload-btn">
+                                    <i class="fas fa-upload"></i> Choose Photo
+                                </label>
+                                <button type="button" class="btn btn-danger btn-sm" id="prevPhotoRemoveBtn" style="display:none" onclick="removeProfilePhoto('prev')">
+                                    <i class="fas fa-times"></i> Remove
+                                </button>
+                            </div>
+                            <small class="photo-upload-hint">JPG, PNG or WEBP &bull; max 5 MB</small>
+                        </div>
+                        <input type="file" id="prevProfileImageInput" name="profileImage" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handlePhotoChange(this, 'prev')">
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label for="prevName"><i class="fas fa-user"></i> Full Name *</label>
                     <input type="text" id="prevName" name="name" required>
@@ -101,6 +128,9 @@
                     <input type="email" id="prevEmail" name="email" required>
                 </div>
 
+                <!-- Member lookup status card (shown after phone/email blur) -->
+                <div id="prevMemberStatusCard" style="display:none"></div>
+
                 <div class="form-group">
                     <label><i class="fas fa-heartbeat"></i> Preferred Activities</label>
                     <div id="previousActivities" class="checkbox-group">
@@ -111,7 +141,85 @@
                     </div>
                 </div>
 
-                <button type="button" class="btn btn-primary" onclick="submitPreviousMember()">
+                <!-- Renewal section — visible only when expired membership found -->
+                <div id="prevRenewalSection" style="display:none">
+                    <div class="prev-renewal-header">
+                        <i class="fas fa-sync-alt"></i>
+                        <h3>Renew Your Membership</h3>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="step-title" style="font-size:1.05rem;margin-bottom:0.75rem;display:block;">
+                            <i class="fas fa-crown"></i> Choose a Membership Plan *
+                        </label>
+                        <div id="prevMembershipPlans" class="membership-plans">
+                            <div class="loading-inline">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <span>Loading plans...</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label><i class="fas fa-credit-card"></i> Payment Method *</label>
+                        <div class="payment-methods">
+                            <label class="payment-method">
+                                <input type="radio" name="prevPaymentMethod" value="Cash">
+                                <div class="method-card">
+                                    <i class="fas fa-money-bill-wave"></i>
+                                    <span>Cash</span>
+                                </div>
+                            </label>
+                            <label class="payment-method">
+                                <input type="radio" name="prevPaymentMethod" value="Card">
+                                <div class="method-card">
+                                    <i class="fas fa-credit-card"></i>
+                                    <span>Card</span>
+                                </div>
+                            </label>
+                            <label class="payment-method">
+                                <input type="radio" name="prevPaymentMethod" value="UPI">
+                                <div class="method-card">
+                                    <i class="fas fa-mobile-alt"></i>
+                                    <span>UPI</span>
+                                </div>
+                            </label>
+                            <label class="payment-method">
+                                <input type="radio" name="prevPaymentMethod" value="Bank Transfer">
+                                <div class="method-card">
+                                    <i class="fas fa-university"></i>
+                                    <span>Bank Transfer</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="prevTransactionIdGroup" style="display:none">
+                        <label for="prevTransactionId">
+                            <i class="fas fa-receipt"></i> Transaction ID / Reference Number *
+                        </label>
+                        <input type="text" id="prevTransactionId" placeholder="Enter transaction reference">
+                        <small>Required for Card / UPI / Bank Transfer payments</small>
+                    </div>
+
+                    <div class="payment-summary" id="prevRenewalSummary" style="display:none">
+                        <h4><i class="fas fa-file-invoice-dollar"></i> Renewal Summary</h4>
+                        <div class="summary-item">
+                            <span>Plan</span>
+                            <strong id="prevSummaryPlan">—</strong>
+                        </div>
+                        <div class="summary-item">
+                            <span>Duration</span>
+                            <strong id="prevSummaryDuration">—</strong>
+                        </div>
+                        <div class="summary-item total">
+                            <span>Total Amount</span>
+                            <strong id="prevSummaryAmount">₹0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" class="btn btn-primary" id="prevSubmitBtn" onclick="submitPreviousMember()">
                     Submit Registration <i class="fas fa-arrow-right"></i>
                 </button>
             </form>
@@ -130,6 +238,33 @@
                 <div id="step1" class="form-step active">
                     <h3 class="step-title">Personal Information</h3>
                     <form id="personalDetails" class="form">
+                        <div class="form-group photo-field-group">
+                            <label><i class="fas fa-camera"></i> Profile Photo *</label>
+                            <div class="photo-upload-card" id="photoUploadCard">
+                                <label for="profileImageInput" class="photo-avatar-label">
+                                    <img id="photoPreview" src="" alt="Preview" class="photo-preview-img" style="display:none">
+                                    <div id="photoPlaceholder" class="photo-placeholder-inner">
+                                        <i class="fas fa-user-circle"></i>
+                                        <span>Tap to add</span>
+                                    </div>
+                                    <div class="photo-avatar-overlay"><i class="fas fa-camera"></i></div>
+                                </label>
+                                <div class="photo-upload-controls">
+                                    <p class="photo-upload-name" id="photoFileName">No photo selected</p>
+                                    <div class="photo-upload-actions">
+                                        <label for="profileImageInput" class="btn btn-secondary btn-sm photo-upload-btn">
+                                            <i class="fas fa-upload"></i> Choose Photo
+                                        </label>
+                                        <button type="button" class="btn btn-danger btn-sm" id="photoRemoveBtn" style="display:none" onclick="removeProfilePhoto('new')">
+                                            <i class="fas fa-times"></i> Remove
+                                        </button>
+                                    </div>
+                                    <small class="photo-upload-hint">JPG, PNG or WEBP &bull; max 5 MB</small>
+                                </div>
+                                <input type="file" id="profileImageInput" name="profileImage" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="handlePhotoChange(this, 'new')">
+                            </div>
+                        </div>
+
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="newName"><i class="fas fa-user"></i> Full Name *</label>
@@ -187,30 +322,7 @@
                             <textarea id="newAddress" name="address" rows="3"></textarea>
                         </div>
 
-                        <div class="form-group">
-                            <label><i class="fas fa-camera"></i> Profile Photo <span class="optional-label">(Optional)</span></label>
-                            <div class="photo-upload-wrapper">
-                                <div class="photo-preview-box" id="photoPreviewBox">
-                                    <img id="photoPreview" src="" alt="Preview" class="photo-preview-img hidden">
-                                    <div id="photoPlaceholder" class="photo-placeholder">
-                                        <i class="fas fa-user-circle"></i>
-                                        <span>No photo selected</span>
-                                    </div>
-                                </div>
-                                <div class="photo-upload-actions">
-                                    <label for="profileImageInput" class="btn btn-secondary btn-sm photo-upload-btn">
-                                        <i class="fas fa-upload"></i> Choose Photo
-                                    </label>
-                                    <button type="button" class="btn btn-danger btn-sm photo-remove-btn hidden" id="photoRemoveBtn" onclick="removeProfilePhoto()">
-                                        <i class="fas fa-times"></i> Remove
-                                    </button>
-                                    <input type="file" id="profileImageInput" name="profileImage" accept="image/jpeg,image/png,image/webp" class="hidden" onchange="handlePhotoChange(this)">
-                                </div>
-                                <small class="photo-upload-hint">JPG, PNG or WEBP &bull; max 5 MB</small>
-                            </div>
-                        </div>
-
-                        <button type="button" class="btn btn-primary" onclick="nextStep(2)">
+                        <button type="button" class="btn btn-primary" onclick="nextStep(2)">  
                             Next: Membership Plan <i class="fas fa-arrow-right"></i>
                         </button>
                     </form>

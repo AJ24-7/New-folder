@@ -1041,11 +1041,133 @@ const lookupMemberForQR = async (req, res) => {
   }
 };
 
+/**
+ * Renew membership for an existing member via QR code (public endpoint)
+ * POST /api/members/qr-renew
+ */
+const renewMemberViaQR = async (req, res) => {
+  try {
+    const { gymId, planSelected, months, paymentMode, paymentAmount, transactionId } = req.body;
+    const phone = normalizePhone(req.body?.phone);
+    const email = normalizeEmail(req.body?.email);
+    const name = String(req.body?.name || '').trim();
+
+    if (!gymId || (!phone && !email)) {
+      return res.status(400).json({ message: 'Missing required fields: gymId, and phone or email' });
+    }
+    if (!planSelected || !months || !paymentMode || paymentAmount === undefined) {
+      return res.status(400).json({ message: 'Missing renewal fields: planSelected, months, paymentMode, paymentAmount' });
+    }
+
+    const gym = await Gym.findById(gymId);
+    if (!gym) return res.status(404).json({ message: 'Gym not found' });
+
+    const existingMember = await findExistingMemberByIdentity(gymId, phone || null, email || null);
+    if (!existingMember) {
+      return res.status(404).json({ message: 'Member not found in this gym. Please use the New Member flow.' });
+    }
+
+    const gymName = gym.gymName || gym.name || 'Gym';
+    const monthsNum = Number(months);
+    const amount = Number(paymentAmount);
+
+    // Cash payment → create cash validation request
+    if (paymentMode === 'Cash') {
+      const validationData = {
+        memberName: existingMember.memberName || name,
+        email: existingMember.email || email,
+        phone: existingMember.phone || phone,
+        planName: planSelected,
+        duration: `${monthsNum} Month${monthsNum > 1 ? 's' : ''}`,
+        amount,
+        gymId,
+        registrationData: {
+          memberId: existingMember._id.toString(),
+          renewalFlow: true,
+          months: monthsNum,
+          planSelected
+        }
+      };
+      const { validationCode, expiresAt } = createCashValidationRequest(validationData);
+      return res.status(202).json({
+        success: true,
+        requiresCashValidation: true,
+        validationCode,
+        message: 'Cash validation request created. Please ask gym admin to confirm payment.',
+        expiresAt: expiresAt.toISOString(),
+        timeLeft: 120,
+        name: existingMember.memberName,
+        phone: existingMember.phone
+      });
+    }
+
+    // Non-cash: extend membership directly
+    const now = new Date();
+    const baseDate = existingMember.validUntil && new Date(existingMember.validUntil) > now
+      ? new Date(existingMember.validUntil)
+      : now;
+    const newValidUntil = new Date(baseDate);
+    newValidUntil.setMonth(newValidUntil.getMonth() + monthsNum);
+
+    existingMember.planSelected = planSelected;
+    existingMember.monthlyPlan = `${monthsNum} Month${monthsNum > 1 ? 's' : ''}`;
+    existingMember.paymentMode = paymentMode;
+    existingMember.paymentAmount = amount;
+    existingMember.paymentStatus = 'paid';
+    existingMember.validUntil = newValidUntil;
+    if (name && !existingMember.memberName) existingMember.memberName = name;
+    existingMember.updatedAt = now;
+
+    await existingMember.save();
+
+    // Send renewal confirmation email
+    try {
+      await sendEmail({
+        to: existingMember.email,
+        subject: `${gymName} – Membership Renewed Successfully`,
+        template: 'gym-wale',
+        heading: 'Membership Renewed',
+        bodyHtml: `
+          <p>Hi <strong style="color:#10b981;">${existingMember.memberName}</strong>,</p>
+          <p>Great news! Your membership at <strong>${gymName}</strong> has been renewed.</p>
+          <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
+            <table style="width:100%;font-size:13px;color:#cbd5e1;">
+              <tr><td style="padding:6px 0;width:140px;"><strong>Plan:</strong></td><td>${planSelected}</td></tr>
+              <tr><td style="padding:6px 0;"><strong>Duration:</strong></td><td>${monthsNum} Month${monthsNum > 1 ? 's' : ''}</td></tr>
+              <tr><td style="padding:6px 0;"><strong>Valid Until:</strong></td><td>${newValidUntil.toLocaleDateString('en-IN')}</td></tr>
+              <tr><td style="padding:6px 0;"><strong>Amount Paid:</strong></td><td>₹${amount.toLocaleString('en-IN')}</td></tr>
+            </table>
+          </div>
+          <p style="color:#10b981;text-align:center;">✅ Your membership is now active. Start your fitness journey!</p>
+        `,
+        footerNote: `This email was sent because you renewed your membership via QR code at ${gymName}`
+      });
+    } catch (emailError) {
+      console.error('Error sending renewal email:', emailError);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Membership renewed successfully',
+      memberId: existingMember.membershipId,
+      name: existingMember.memberName,
+      phone: existingMember.phone,
+      email: existingMember.email,
+      membershipExpiry: newValidUntil
+    });
+
+  } catch (error) {
+    console.error('Error in QR membership renewal:', error);
+    res.status(500).json({ message: 'Renewal failed. Please try again.', error: error.message });
+  }
+};
+
 module.exports = {
   registerMemberViaQR,
   sendWelcomeEmail,
   getGymInfo,
   registerPreviousMember,
   registerNewMember,
-  lookupMemberForQR
+  lookupMemberForQR,
+  renewMemberViaQR
 };
