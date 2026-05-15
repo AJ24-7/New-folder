@@ -202,6 +202,43 @@
                         <small>Required for Card / UPI / Bank Transfer payments</small>
                     </div>
 
+                    <!-- ── Coupon Code (Renewal) ── -->
+                    <div class="coupon-section" id="prevCouponSection">
+                        <div class="coupon-section-header">
+                            <i class="fas fa-tag"></i>
+                            <span>Have a Coupon Code?</span>
+                            <button type="button" class="coupon-toggle-btn" id="prevCouponToggleBtn" onclick="togglePrevCouponInput()">
+                                Apply
+                            </button>
+                        </div>
+                        <div class="coupon-input-wrap hidden" id="prevCouponInputWrap">
+                            <div class="coupon-input-row">
+                                <input type="text"
+                                       id="prevCouponCodeInput"
+                                       placeholder="e.g. FLEX-IRON3-428-GYM-BURN5"
+                                       autocomplete="off"
+                                       autocapitalize="characters"
+                                       oninput="this.value=this.value.toUpperCase()"
+                                       onkeydown="if(event.key==='Enter'){event.preventDefault();applyPrevCoupon();}">
+                                <button type="button" class="btn btn-primary btn-sm" onclick="applyPrevCoupon()">
+                                    <i class="fas fa-check"></i> Apply
+                                </button>
+                            </div>
+                            <div class="coupon-feedback" id="prevCouponFeedback"></div>
+                            <div class="coupon-applied-card hidden" id="prevCouponAppliedCard">
+                                <div class="ca-icon"><i class="fas fa-check-circle"></i></div>
+                                <div class="ca-body">
+                                    <strong id="prevCaTitle">Coupon Applied!</strong>
+                                    <p id="prevCaDesc"></p>
+                                    <p class="ca-savings">You save <span id="prevCaSavings">₹0</span></p>
+                                </div>
+                                <button type="button" class="ca-remove" onclick="removePrevCoupon()" title="Remove coupon">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="payment-summary" id="prevRenewalSummary" style="display:none">
                         <h4><i class="fas fa-file-invoice-dollar"></i> Renewal Summary</h4>
                         <div class="summary-item">
@@ -211,6 +248,10 @@
                         <div class="summary-item">
                             <span>Duration</span>
                             <strong id="prevSummaryDuration">—</strong>
+                        </div>
+                        <div class="summary-item" id="prevSummaryDiscountRow" style="display:none">
+                            <span>Coupon Discount</span>
+                            <strong id="prevSummaryDiscount" style="color:var(--success-color)">-₹0</strong>
                         </div>
                         <div class="summary-item total">
                             <span>Total Amount</span>
@@ -375,6 +416,10 @@
                             <span>Duration:</span>
                             <strong id="summaryDuration">-</strong>
                         </div>
+                        <div class="summary-item" id="summaryDiscountRow" style="display:none">
+                            <span>Coupon Discount:</span>
+                            <strong id="summaryDiscount" style="color:var(--success-color)">-₹0</strong>
+                        </div>
                         <div class="summary-item total">
                             <span>Total Amount:</span>
                             <strong id="summaryAmount">₹0</strong>
@@ -420,6 +465,43 @@
                             <label for="transactionId"><i class="fas fa-receipt"></i> Transaction ID / Reference Number</label>
                             <input type="text" id="transactionId" name="transactionId">
                             <small>Enter transaction ID for UPI/Card/Bank Transfer</small>
+                        </div>
+
+                        <!-- ── Coupon Code Section ── -->
+                        <div class="coupon-section" id="couponSection">
+                            <div class="coupon-section-header">
+                                <i class="fas fa-tag"></i>
+                                <span>Have a Coupon Code?</span>
+                                <button type="button" class="coupon-toggle-btn" id="couponToggleBtn" onclick="toggleCouponInput()">
+                                    Apply
+                                </button>
+                            </div>
+                            <div class="coupon-input-wrap hidden" id="couponInputWrap">
+                                <div class="coupon-input-row">
+                                    <input type="text"
+                                           id="couponCodeInput"
+                                           placeholder="e.g. FLEX-IRON3-428-GYM-BURN5"
+                                           autocomplete="off"
+                                           autocapitalize="characters"
+                                           oninput="this.value=this.value.toUpperCase()"
+                                           onkeydown="if(event.key==='Enter'){event.preventDefault();applyCoupon();}">
+                                    <button type="button" class="btn btn-primary btn-sm" id="applyCouponBtn" onclick="applyCoupon()">
+                                        <i class="fas fa-check"></i> Apply
+                                    </button>
+                                </div>
+                                <div class="coupon-feedback" id="couponFeedback"></div>
+                                <div class="coupon-applied-card hidden" id="couponAppliedCard">
+                                    <div class="ca-icon"><i class="fas fa-check-circle"></i></div>
+                                    <div class="ca-body">
+                                        <strong id="caTitle">Coupon Applied!</strong>
+                                        <p id="caDesc"></p>
+                                        <p class="ca-savings">You save <span id="caSavings">₹0</span></p>
+                                    </div>
+                                    <button type="button" class="ca-remove" onclick="removeCoupon()" title="Remove coupon">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="form-group">

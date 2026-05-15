@@ -21,7 +21,10 @@ const {
   validateCouponCode,
   claimOffer,
   trackCouponPayment,
-  getCouponUsageStats
+  getCouponUsageStats,
+  generateBulkCoupons,
+  getCouponClaimStatus,
+  validateCouponForQR
 } = require('../controllers/offersController');
 
 // Middleware to verify admin authentication
@@ -86,6 +89,12 @@ router.get('/coupons/available', async (req, res) => {
 // Create new coupon (gym admin - uses gym-compatible auth)
 router.post('/coupons', gymadminAuth, createCoupon);
 
+// Bulk generate multiple coupons (gym admin) - /api/offers/coupons/bulk-generate
+router.post('/coupons/bulk-generate', gymadminAuth, generateBulkCoupons);
+
+// Public: validate coupon for QR registration page (no auth required)
+router.post('/coupons/validate-qr', validateCouponForQR);
+
 // Update coupon (gym admin - uses gym-compatible auth)
 router.put('/coupons/:id', gymadminAuth, updateCoupon);
 
@@ -97,6 +106,9 @@ router.get('/coupons/validate/:code', validateCoupon);
 
 // Use coupon (public - for users)
 router.post('/coupons/use/:code', useCoupon);
+
+// Get coupon claim status (gym admin) - /api/offers/coupons/:id/claim-status
+router.get('/coupons/:id/claim-status', gymadminAuth, getCouponClaimStatus);
 
 // Get coupon analytics (gym admin - uses gym-compatible auth)
 router.get('/coupons/analytics', gymadminAuth, getCouponAnalytics);

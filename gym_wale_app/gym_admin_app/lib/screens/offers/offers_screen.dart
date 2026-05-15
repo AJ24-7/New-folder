@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../models/gym_offer.dart';
@@ -441,18 +442,55 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
   }
 
   Widget _buildCouponsTab() {
-    return _coupons.isEmpty
-        ? _buildEmptyState('No coupons found', 'Create coupons to offer discounts to your members')
-        : RefreshIndicator(
-            onRefresh: _loadCoupons,
-            child: ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _coupons.length,
-              itemBuilder: (context, index) {
-                return _buildCouponCard(_coupons[index]);
-              },
+    return Column(
+      children: [
+        // ── Bulk Generate banner ───────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [AppTheme.primaryColor, const Color(0xFF7B61FF)],
             ),
-          );
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+            leading: const Icon(Icons.bolt, color: Colors.white, size: 28),
+            title: const Text(
+              'Bulk Generate Coupons',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            subtitle: const Text(
+              'Create up to 50 unique coupon codes at once',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+            trailing: ElevatedButton(
+              onPressed: _showBulkGenerateDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Generate', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ),
+        // ── Coupon list ────────────────────────────────────────────────────
+        Expanded(
+          child: _coupons.isEmpty
+              ? _buildEmptyState('No coupons found', 'Create coupons to offer discounts to your members')
+              : RefreshIndicator(
+                  onRefresh: _loadCoupons,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    itemCount: _coupons.length,
+                    itemBuilder: (context, index) => _buildCouponCard(_coupons[index]),
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 
   Widget _buildFilterDropdown(String label, String value, List<String> items, Function(String?) onChanged) {
@@ -1383,6 +1421,9 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                     ),
                   ),
                   const Spacer(),
+                  // Claim status badge
+                  _buildClaimStatusBadge(coupon),
+                  const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
@@ -1479,6 +1520,200 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
         ),
       ),
     );
+  }
+
+  // ─── Claim Status Badge ────────────────────────────────────────────────
+  Widget _buildClaimStatusBadge(GymCoupon coupon) {
+    final usageCount = coupon.usageCount;
+    final usageLimit = coupon.usageLimit;
+    String label; Color bg; Color fg;
+    if (!coupon.isValid) { label = 'Expired'; bg = Colors.grey.shade200; fg = Colors.grey.shade600; }
+    else if (usageLimit != null && usageCount >= usageLimit) { label = 'Fully Claimed'; bg = Colors.red.withValues(alpha: 0.12); fg = Colors.red; }
+    else if (usageCount > 0) { label = 'Partial ($usageCount${usageLimit != null ? '/$usageLimit' : ''})'; bg = Colors.orange.withValues(alpha: 0.12); fg = Colors.orange.shade700; }
+    else { label = 'Unclaimed'; bg = Colors.teal.withValues(alpha: 0.12); fg = Colors.teal; }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(8)),
+      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: fg)),
+    );
+  }
+
+  // ─── Bulk Generate Dialog ─────────────────────────────────────────────
+  void _showBulkGenerateDialog() {
+    if (_gymId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gym not loaded — please wait and try again.')));
+      return;
+    }
+    final titleCtrl      = TextEditingController(text: 'Bulk Promo');
+    final descCtrl       = TextEditingController(text: 'Generated coupon');
+    final valueCtrl      = TextEditingController(text: '10');
+    final usageLimitCtrl = TextEditingController(text: '1');
+    final minAmountCtrl  = TextEditingController();
+    DateTime? expiryDate;
+    String discountType = 'percentage';
+    int count = 10;
+    bool generating = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlgState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Row(children: [
+            Icon(Icons.bolt, color: Color(0xFF7B61FF)),
+            SizedBox(width: 8),
+            Text('Bulk Generate Coupons', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+          ]),
+          content: SizedBox(
+            width: 420,
+            child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                const Text('Count: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                Text('$count', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF7B61FF))),
+              ]),
+              Slider(value: count.toDouble(), min: 1, max: 50, divisions: 49, activeColor: const Color(0xFF7B61FF), label: '$count', onChanged: (v) => setDlgState(() => count = v.round())),
+              const SizedBox(height: 10),
+              TextField(controller: titleCtrl, decoration: InputDecoration(labelText: 'Coupon Title', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+              const SizedBox(height: 10),
+              TextField(controller: descCtrl, decoration: InputDecoration(labelText: 'Description', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+              const SizedBox(height: 10),
+              Row(children: [
+                const Text('Discount: ', style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('%'), selected: discountType == 'percentage', selectedColor: const Color(0xFF7B61FF), labelStyle: TextStyle(color: discountType == 'percentage' ? Colors.white : null, fontWeight: FontWeight.bold), onSelected: (_) => setDlgState(() => discountType = 'percentage')),
+                const SizedBox(width: 8),
+                ChoiceChip(label: const Text('₹ Fixed'), selected: discountType == 'fixed', selectedColor: const Color(0xFF7B61FF), labelStyle: TextStyle(color: discountType == 'fixed' ? Colors.white : null, fontWeight: FontWeight.bold), onSelected: (_) => setDlgState(() => discountType = 'fixed')),
+              ]),
+              const SizedBox(height: 10),
+              TextField(controller: valueCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: discountType == 'percentage' ? 'Discount %' : 'Discount Amount ₹', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+              const SizedBox(height: 10),
+              TextField(controller: minAmountCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Min Purchase ₹ (optional)', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+              const SizedBox(height: 10),
+              TextField(controller: usageLimitCtrl, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Usage Limit per Coupon', border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), isDense: true)),
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () async {
+                  final picked = await showDatePicker(context: ctx, initialDate: DateTime.now().add(const Duration(days: 30)), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730)));
+                  if (picked != null) setDlgState(() => expiryDate = picked);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade400), borderRadius: BorderRadius.circular(10)),
+                  child: Row(children: [
+                    const Icon(Icons.calendar_today, size: 18, color: Color(0xFF7B61FF)),
+                    const SizedBox(width: 10),
+                    Text(expiryDate == null ? 'Select expiry date' : DateFormat('dd MMM yyyy').format(expiryDate!), style: TextStyle(color: expiryDate == null ? Colors.grey : null)),
+                  ]),
+                ),
+              ),
+              if (generating) ...[const SizedBox(height: 16), const Center(child: CircularProgressIndicator()), const SizedBox(height: 6), const Center(child: Text('Generating…', style: TextStyle(fontSize: 13)))],
+            ])),
+          ),
+          actions: [
+            TextButton(onPressed: generating ? null : () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton.icon(
+              onPressed: generating ? null : () async {
+                final dv = double.tryParse(valueCtrl.text.trim());
+                if (dv == null || dv <= 0) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid discount value.'))); return; }
+                if (expiryDate == null) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select an expiry date.'))); return; }
+                setDlgState(() => generating = true);
+                try {
+                  final params = <String, dynamic>{'gymId': _gymId, 'count': count, 'title': titleCtrl.text.trim().isNotEmpty ? titleCtrl.text.trim() : 'Bulk Promo', 'description': descCtrl.text.trim(), 'discountType': discountType, 'discountValue': dv, 'usageLimit': int.tryParse(usageLimitCtrl.text.trim()) ?? 1, 'expiryDate': expiryDate!.toIso8601String()};
+                  if (minAmountCtrl.text.trim().isNotEmpty) params['minAmount'] = double.tryParse(minAmountCtrl.text.trim());
+                  final created = await _apiService.bulkGenerateCoupons(params);
+                  if (!ctx.mounted) return;
+                  Navigator.pop(ctx);
+                  _loadCoupons();
+                  _showBulkResultSheet(created);
+                } catch (e) {
+                  setDlgState(() => generating = false);
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
+              },
+              icon: const Icon(Icons.bolt, size: 18),
+              label: const Text('Generate'),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF7B61FF), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── Bulk Result Bottom Sheet ──────────────────────────────────────────
+  void _showBulkResultSheet(List<dynamic> coupons) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.65, maxChildSize: 0.92, minChildSize: 0.35,
+        builder: (ctx, scrollCtrl) => Container(
+          decoration: BoxDecoration(color: Theme.of(context).scaffoldBackgroundColor, borderRadius: const BorderRadius.vertical(top: Radius.circular(20))),
+          child: Column(children: [
+            Container(margin: const EdgeInsets.symmetric(vertical: 10), width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2))),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+              child: Row(children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 22),
+                const SizedBox(width: 8),
+                Text('${coupons.length} Coupons Generated!', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                const Spacer(),
+                TextButton.icon(
+                  onPressed: () => _copyToClipboard(coupons.map((c) => (c['code'] ?? '') as String).join('\n'), 'All codes copied!'),
+                  icon: const Icon(Icons.copy, size: 16),
+                  label: const Text('Copy All'),
+                ),
+              ]),
+            ),
+            const Divider(height: 1),
+            Expanded(child: ListView.builder(
+              controller: scrollCtrl,
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              itemCount: coupons.length,
+              itemBuilder: (ctx, i) {
+                final c = coupons[i];
+                final code        = (c['code'] ?? '') as String;
+                final claimStatus = (c['claimStatus'] ?? 'unclaimed') as String;
+                Color statusColor;
+                switch (claimStatus) {
+                  case 'fully_claimed':     statusColor = Colors.red; break;
+                  case 'partially_claimed': statusColor = Colors.orange; break;
+                  case 'expired':           statusColor = Colors.grey; break;
+                  case 'disabled':          statusColor = Colors.grey.shade400; break;
+                  default:                  statusColor = Colors.teal;
+                }
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.local_offer, color: Color(0xFF7B61FF)),
+                    title: Text(code, style: const TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    subtitle: Text((c['title'] ?? '') as String, style: const TextStyle(fontSize: 12)),
+                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(6)),
+                        child: Text(claimStatus.replaceAll('_', ' ').toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor)),
+                      ),
+                      const SizedBox(width: 4),
+                      IconButton(icon: const Icon(Icons.copy, size: 18), onPressed: () => _copyToClipboard(code, 'Copied!'), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                    ]),
+                  ),
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  void _copyToClipboard(String text, String message) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), duration: const Duration(seconds: 2)));
   }
 
   Widget _buildEmptyState(String title, String subtitle) {

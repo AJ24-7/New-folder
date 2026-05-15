@@ -63,6 +63,9 @@ dependencies:
   # Device Info
   device_info_plus: ^9.1.1
   
+  # File System (for QR template download on mobile/desktop)
+  path_provider: ^2.1.0
+
   # URL Launcher
   url_launcher: ^6.2.4
   

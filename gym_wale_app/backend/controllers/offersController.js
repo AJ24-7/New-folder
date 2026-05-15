@@ -1205,6 +1205,253 @@ exports.trackCouponPayment = async (req, res) => {
   }
 };
 
+// ============================================================
+// BULK COUPON GENERATION
+// ============================================================
+
+// Word bank for memorable gym-themed coupon codes
+const _COUPON_WORDS = [
+  'FLEX', 'IRON', 'GYM', 'FIT', 'BURN', 'BOOST', 'POWER', 'MUSCLE',
+  'STRONG', 'PEAK', 'GAINS', 'LIFT', 'BEAST', 'FIRE', 'SWIFT', 'BOLD',
+  'CORE', 'PUSH', 'FUEL', 'ZONE', 'PUMP', 'GRIND', 'FORGE', 'BLAZE',
+  'SURGE', 'TITAN', 'APEX', 'ELITE', 'DRIVE', 'FORCE', 'HUSTLE', 'GRIT'
+];
+
+function _shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Generates a unique 5-segment code: WORD1-WORD2-NNN-WORD3-WORD4
+// where NNN is a 3-digit number and 2 words have an appended digit.
+function _generateCouponCode(existingCodes) {
+  let code;
+  let attempts = 0;
+  do {
+    const words = _shuffle(_COUPON_WORDS).slice(0, 4);
+    // Append a single digit to two of the four words for text+number feel
+    const mixed = words.map((w, i) =>
+      i % 2 === 1 ? `${w}${Math.floor(Math.random() * 9) + 1}` : w
+    );
+    // Insert a 3-digit number as segment 3 → 5 segments total
+    const num = String(Math.floor(Math.random() * 900) + 100);
+    mixed.splice(2, 0, num);
+    code = mixed.join('-');
+    attempts++;
+  } while (existingCodes.has(code) && attempts < 300);
+  return code;
+}
+
+function _resolveCouponClaimStatus(coupon) {
+  const now = new Date();
+  if (coupon.expiryDate && coupon.expiryDate < now) return 'expired';
+  if (!coupon.isActive || coupon.status === 'disabled') return 'disabled';
+  if (!coupon.usageLimit || coupon.usageLimit === null) {
+    return coupon.usageCount > 0 ? 'partially_claimed' : 'unclaimed';
+  }
+  if (coupon.usageCount >= coupon.usageLimit) return 'fully_claimed';
+  if (coupon.usageCount > 0) return 'partially_claimed';
+  return 'unclaimed';
+}
+
+// POST /api/offers/coupons/bulk-generate  (gymadminAuth)
+exports.generateBulkCoupons = async (req, res) => {
+  try {
+    const {
+      gymId,
+      count = 10,
+      title,
+      description,
+      discountType,
+      discountValue,
+      minAmount,
+      maxDiscountAmount,
+      usageLimit,
+      expiryDate,
+      applicableCategories,
+      newUsersOnly
+    } = req.body;
+
+    const effectiveGymId = gymId || req.gym?.id || req.admin?.id;
+
+    if (!effectiveGymId || !title || !discountType || !discountValue || !expiryDate) {
+      return res.status(400).json({
+        message: 'Missing required fields: gymId, title, discountType, discountValue, expiryDate'
+      });
+    }
+
+    // Validate discount
+    const parsedValue = parseFloat(discountValue);
+    if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+      return res.status(400).json({ message: 'discountValue must be a positive number' });
+    }
+    if (discountType === 'percentage' && parsedValue > 100) {
+      return res.status(400).json({ message: 'Percentage discount cannot exceed 100%' });
+    }
+
+    const parsedExpiry = new Date(expiryDate);
+    if (isNaN(parsedExpiry.getTime()) || parsedExpiry <= new Date()) {
+      return res.status(400).json({ message: 'expiryDate must be a future date' });
+    }
+
+    const safeCount = Math.min(Math.max(parseInt(count) || 10, 1), 50);
+
+    const gym = await Gym.findById(effectiveGymId);
+    if (!gym) return res.status(404).json({ message: 'Gym not found' });
+
+    // Gather existing codes to avoid collisions
+    const existing = await Coupon.find({ gymId: effectiveGymId }).select('code').lean();
+    const existingSet = new Set(existing.map(c => c.code));
+
+    const docs = [];
+    for (let i = 0; i < safeCount; i++) {
+      const code = _generateCouponCode(existingSet);
+      existingSet.add(code);
+      docs.push({
+        code,
+        title,
+        description: description || `Bulk coupon — ${title}`,
+        discountType,
+        discountValue: parsedValue,
+        minAmount: minAmount ? parseFloat(minAmount) : 0,
+        maxDiscountAmount: maxDiscountAmount ? parseFloat(maxDiscountAmount) : null,
+        usageLimit: usageLimit ? parseInt(usageLimit) : 1,
+        userUsageLimit: 1,
+        expiryDate: parsedExpiry,
+        gymId: effectiveGymId,
+        applicableCategories: applicableCategories || ['membership'],
+        newUsersOnly: Boolean(newUsersOnly),
+        status: 'active',
+        isActive: true,
+        createdBy: req.gym?.id || req.admin?.id,
+        usageCount: 0
+      });
+    }
+
+    const created = await Coupon.insertMany(docs);
+
+    res.status(201).json({
+      message: `${created.length} coupon${created.length !== 1 ? 's' : ''} generated successfully`,
+      count: created.length,
+      coupons: created.map(c => ({
+        _id: c._id,
+        code: c.code,
+        title: c.title,
+        discountType: c.discountType,
+        discountValue: c.discountValue,
+        minAmount: c.minAmount,
+        expiryDate: c.expiryDate,
+        status: c.status,
+        usageCount: c.usageCount,
+        usageLimit: c.usageLimit,
+        claimStatus: 'unclaimed'
+      }))
+    });
+  } catch (error) {
+    console.error('Error generating bulk coupons:', error);
+    res.status(500).json({ message: 'Failed to generate coupons', error: error.message });
+  }
+};
+
+// GET /api/offers/coupons/:id/claim-status  (gymadminAuth)
+exports.getCouponClaimStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const coupon = await Coupon.findById(id).lean();
+    if (!coupon) return res.status(404).json({ message: 'Coupon not found' });
+
+    res.json({
+      _id: coupon._id,
+      code: coupon.code,
+      usageCount: coupon.usageCount,
+      usageLimit: coupon.usageLimit,
+      claimStatus: _resolveCouponClaimStatus(coupon),
+      isActive: coupon.isActive,
+      expiryDate: coupon.expiryDate
+    });
+  } catch (error) {
+    console.error('Error fetching claim status:', error);
+    res.status(500).json({ message: 'Failed to fetch claim status', error: error.message });
+  }
+};
+
+// POST /api/offers/coupons/validate-qr  (public — used from QR registration page)
+exports.validateCouponForQR = async (req, res) => {
+  try {
+    const { code, gymId, purchaseAmount } = req.body;
+
+    if (!code || !gymId) {
+      return res.status(400).json({ valid: false, message: 'code and gymId are required' });
+    }
+
+    const upperCode = code.trim().toUpperCase();
+    const coupon = await Coupon.findOne({
+      code: upperCode,
+      gymId,
+      status: 'active',
+      isActive: true,
+      expiryDate: { $gte: new Date() }
+    });
+
+    if (!coupon) {
+      return res.status(404).json({ valid: false, message: 'Coupon not found or has expired' });
+    }
+
+    // Check usage limit
+    if (coupon.usageLimit !== null && coupon.usageCount >= coupon.usageLimit) {
+      return res.status(400).json({ valid: false, message: 'Coupon has already been fully redeemed' });
+    }
+
+    // Minimum purchase check
+    const amount = parseFloat(purchaseAmount || 0);
+    if (coupon.minAmount > 0 && amount < coupon.minAmount) {
+      return res.status(400).json({
+        valid: false,
+        message: `Minimum purchase amount of ₹${coupon.minAmount} required`
+      });
+    }
+
+    // Compute discount
+    let discountAmount = 0;
+    let finalAmount = amount;
+    if (amount > 0) {
+      if (coupon.discountType === 'percentage') {
+        discountAmount = (amount * coupon.discountValue) / 100;
+        if (coupon.maxDiscountAmount) discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+      } else {
+        discountAmount = Math.min(coupon.discountValue, amount);
+      }
+      finalAmount = Math.max(0, amount - discountAmount);
+    }
+
+    res.json({
+      valid: true,
+      coupon: {
+        _id: coupon._id,
+        code: coupon.code,
+        title: coupon.title,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minAmount: coupon.minAmount,
+        expiryDate: coupon.expiryDate
+      },
+      discountDetails: {
+        originalAmount: amount,
+        discountAmount: Math.round(discountAmount * 100) / 100,
+        finalAmount: Math.round(finalAmount * 100) / 100
+      }
+    });
+  } catch (error) {
+    console.error('Error validating coupon for QR:', error);
+    res.status(500).json({ valid: false, message: 'Failed to validate coupon', error: error.message });
+  }
+};
+
 // Get coupon usage statistics for gym admin
 exports.getCouponUsageStats = async (req, res) => {
   try {

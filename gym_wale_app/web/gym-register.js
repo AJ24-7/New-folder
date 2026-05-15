@@ -33,6 +33,14 @@ let membershipPlans = [];
 let selectedPlan = null;
 let memberData = {};
 
+// Coupon state
+let _appliedCoupon = null;       // { _id, code, title, description, discountType, discountValue }
+let _couponDiscountAmount = 0;   // computed discount in ₹
+
+// Prev-member renewal coupon state
+let _prevAppliedCoupon = null;
+let _prevCouponDiscountAmount = 0;
+
 // Previous member lookup state
 let _prevLookupTimer = null;
 let _prevFoundMember = null;
@@ -610,11 +618,22 @@ function previousStep(step) {
 
 // Update Payment Summary
 function updatePaymentSummary() {
-    const finalPrice = resolvePlanFinalPrice(selectedPlan);
+    const basePrice = resolvePlanFinalPrice(selectedPlan);
+    const discountRow = document.getElementById('summaryDiscountRow');
+    const discountEl = document.getElementById('summaryDiscount');
+
     document.getElementById('summaryName').textContent = memberData.name || '-';
     document.getElementById('summaryPlan').textContent = resolvePlanTier(selectedPlan.months);
     document.getElementById('summaryDuration').textContent = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
-    document.getElementById('summaryAmount').textContent = `₹${finalPrice.toLocaleString('en-IN')}`;
+
+    if (_appliedCoupon && _couponDiscountAmount > 0) {
+        discountRow.style.display = '';
+        discountEl.textContent = `-₹${_couponDiscountAmount.toLocaleString('en-IN')}`;
+        document.getElementById('summaryAmount').textContent = `₹${Math.max(0, basePrice - _couponDiscountAmount).toLocaleString('en-IN')}`;
+    } else {
+        discountRow.style.display = 'none';
+        document.getElementById('summaryAmount').textContent = `₹${basePrice.toLocaleString('en-IN')}`;
+    }
 }
 
 function resolvePlanTier(months) {
@@ -925,11 +944,176 @@ function setupPrevPaymentMethodListener() {
     });
 }
 
+// ─────────────────────────────────────────────────────────────
+// Coupon UI helpers — new member (step 3)
+// ─────────────────────────────────────────────────────────────
+
+function toggleCouponInput() {
+    const wrap = document.getElementById('couponInputWrap');
+    const btn  = document.getElementById('couponToggleBtn');
+    const hidden = wrap.classList.toggle('hidden');
+    btn.textContent = hidden ? 'Apply' : 'Close';
+    if (hidden) {
+        // Reset state when collapsed
+        removeCoupon();
+    }
+}
+
+async function applyCoupon() {
+    const code = (document.getElementById('couponCodeInput').value || '').trim().toUpperCase();
+    if (!code) { _showCouponFeedback('couponFeedback', 'Please enter a coupon code.', 'error'); return; }
+
+    const purchaseAmount = selectedPlan ? resolvePlanFinalPrice(selectedPlan) : 0;
+
+    _showCouponFeedback('couponFeedback', '<i class="fas fa-spinner fa-spin"></i> Validating…', 'info');
+    document.getElementById('applyCouponBtn').disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/offers/coupons/validate-qr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, gymId, purchaseAmount })
+        });
+        const json = await res.json();
+
+        if (res.ok && json.valid) {
+            _appliedCoupon = json.coupon;
+            _couponDiscountAmount = json.discountDetails?.discountAmount || 0;
+
+            _showCouponFeedback('couponFeedback', '', 'clear');
+            _renderCouponApplied(
+                'couponAppliedCard', 'caTitle', 'caDesc', 'caSavings',
+                json.coupon, _couponDiscountAmount
+            );
+            document.getElementById('couponToggleBtn').textContent = '✓ Applied';
+            updatePaymentSummary();
+        } else {
+            _appliedCoupon = null;
+            _couponDiscountAmount = 0;
+            document.getElementById('couponAppliedCard').classList.add('hidden');
+            _showCouponFeedback('couponFeedback', json.message || 'Invalid or expired coupon.', 'error');
+            updatePaymentSummary();
+        }
+    } catch (_) {
+        _showCouponFeedback('couponFeedback', 'Could not validate coupon. Please try again.', 'error');
+    } finally {
+        document.getElementById('applyCouponBtn').disabled = false;
+    }
+}
+
+function removeCoupon() {
+    _appliedCoupon = null;
+    _couponDiscountAmount = 0;
+    document.getElementById('couponCodeInput').value = '';
+    document.getElementById('couponAppliedCard').classList.add('hidden');
+    _showCouponFeedback('couponFeedback', '', 'clear');
+    document.getElementById('couponToggleBtn').textContent = 'Close';
+    if (selectedPlan) updatePaymentSummary();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Coupon UI helpers — prev member renewal
+// ─────────────────────────────────────────────────────────────
+
+function togglePrevCouponInput() {
+    const wrap = document.getElementById('prevCouponInputWrap');
+    const btn  = document.getElementById('prevCouponToggleBtn');
+    const hidden = wrap.classList.toggle('hidden');
+    btn.textContent = hidden ? 'Apply' : 'Close';
+    if (hidden) removePrevCoupon();
+}
+
+async function applyPrevCoupon() {
+    const code = (document.getElementById('prevCouponCodeInput').value || '').trim().toUpperCase();
+    if (!code) { _showCouponFeedback('prevCouponFeedback', 'Please enter a coupon code.', 'error'); return; }
+
+    const purchaseAmount = _prevSelectedRenewalPlan ? resolvePlanFinalPrice(_prevSelectedRenewalPlan) : 0;
+
+    _showCouponFeedback('prevCouponFeedback', '<i class="fas fa-spinner fa-spin"></i> Validating…', 'info');
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/offers/coupons/validate-qr`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, gymId, purchaseAmount })
+        });
+        const json = await res.json();
+
+        if (res.ok && json.valid) {
+            _prevAppliedCoupon = json.coupon;
+            _prevCouponDiscountAmount = json.discountDetails?.discountAmount || 0;
+
+            _showCouponFeedback('prevCouponFeedback', '', 'clear');
+            _renderCouponApplied(
+                'prevCouponAppliedCard', 'prevCaTitle', 'prevCaDesc', 'prevCaSavings',
+                json.coupon, _prevCouponDiscountAmount
+            );
+            document.getElementById('prevCouponToggleBtn').textContent = '✓ Applied';
+            _updatePrevRenewalSummary();
+        } else {
+            _prevAppliedCoupon = null;
+            _prevCouponDiscountAmount = 0;
+            document.getElementById('prevCouponAppliedCard').classList.add('hidden');
+            _showCouponFeedback('prevCouponFeedback', json.message || 'Invalid or expired coupon.', 'error');
+            _updatePrevRenewalSummary();
+        }
+    } catch (_) {
+        _showCouponFeedback('prevCouponFeedback', 'Could not validate coupon. Please try again.', 'error');
+    }
+}
+
+function removePrevCoupon() {
+    _prevAppliedCoupon = null;
+    _prevCouponDiscountAmount = 0;
+    document.getElementById('prevCouponCodeInput').value = '';
+    document.getElementById('prevCouponAppliedCard').classList.add('hidden');
+    _showCouponFeedback('prevCouponFeedback', '', 'clear');
+    document.getElementById('prevCouponToggleBtn').textContent = 'Close';
+    _updatePrevRenewalSummary();
+}
+
+function _updatePrevRenewalSummary() {
+    if (!_prevSelectedRenewalPlan) return;
+    const basePrice = resolvePlanFinalPrice(_prevSelectedRenewalPlan);
+    const discountRow = document.getElementById('prevSummaryDiscountRow');
+    const discountEl  = document.getElementById('prevSummaryDiscount');
+    const amountEl    = document.getElementById('prevSummaryAmount');
+    if (!amountEl) return;
+
+    if (_prevAppliedCoupon && _prevCouponDiscountAmount > 0) {
+        discountRow.style.display = '';
+        discountEl.textContent = `-₹${_prevCouponDiscountAmount.toLocaleString('en-IN')}`;
+        amountEl.textContent = `₹${Math.max(0, basePrice - _prevCouponDiscountAmount).toLocaleString('en-IN')}`;
+    } else {
+        discountRow.style.display = 'none';
+        amountEl.textContent = `₹${basePrice.toLocaleString('en-IN')}`;
+    }
+}
+
+// Shared rendering helpers
+function _showCouponFeedback(elId, html, type) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (type === 'clear' || !html) { el.innerHTML = ''; el.className = 'coupon-feedback'; return; }
+    el.innerHTML = html;
+    el.className = `coupon-feedback coupon-feedback--${type}`;
+}
+
+function _renderCouponApplied(cardId, titleId, descId, savingsId, coupon, discountAmt) {
+    const card = document.getElementById(cardId);
+    if (!card) return;
+    document.getElementById(titleId).textContent = coupon.title || 'Coupon Applied!';
+    document.getElementById(descId).textContent = coupon.description || '';
+    document.getElementById(savingsId).textContent = `₹${discountAmt.toLocaleString('en-IN')}`;
+    card.classList.remove('hidden');
+}
+
 async function submitRenewal(form, paymentMethod) {
     showLoading(true);
     try {
         const formData = new FormData(form);
-        const finalPrice = resolvePlanFinalPrice(_prevSelectedRenewalPlan);
+        const baseRenewalPrice = resolvePlanFinalPrice(_prevSelectedRenewalPlan);
+        const finalPrice = Math.max(0, baseRenewalPrice - _prevCouponDiscountAmount);
 
         // For Card/UPI, open Razorpay then ask for transaction ID
         if (paymentMethod === 'Card' || paymentMethod === 'UPI') {
@@ -954,6 +1138,10 @@ async function submitRenewal(form, paymentMethod) {
         submission.append('months', _prevSelectedRenewalPlan.months);
         submission.append('paymentMode', paymentMethod);
         submission.append('paymentAmount', finalPrice);
+
+        if (_prevAppliedCoupon) {
+            submission.append('couponCode', _prevAppliedCoupon.code);
+        }
 
         const txnId = document.getElementById('prevTransactionId').value.trim();
         if (txnId) submission.append('transactionId', txnId);
@@ -1120,7 +1308,8 @@ async function submitNewMember() {
 
         const monthlyPlan = `${selectedPlan.months} Month${selectedPlan.months > 1 ? 's' : ''}`;
         const paymentMode = normalizePaymentMode(paymentMethod);
-        const finalPrice = resolvePlanFinalPrice(selectedPlan);
+        const basePrice = resolvePlanFinalPrice(selectedPlan);
+        const finalPrice = Math.max(0, basePrice - _couponDiscountAmount);
 
         const data = {
             gymId: gymId,
@@ -1181,6 +1370,10 @@ async function submitNewMember() {
         }
         formData.append('membershipPlan', JSON.stringify(data.membershipPlan));
         formData.append('payment', JSON.stringify(data.payment));
+
+        if (_appliedCoupon) {
+            formData.append('couponCode', _appliedCoupon.code);
+        }
 
         const response = await fetch(`${API_BASE_URL}/members/qr-register-new`, {
             method: 'POST',

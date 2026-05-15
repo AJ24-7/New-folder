@@ -452,7 +452,9 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
         </div>
       `;
     } else {
-      subject = `Welcome to ${gymName} - Complete Your Membership! 🎉`;
+      subject = registrationType === 'instant'
+        ? `Welcome to ${gymName} - Registration Complete! 🎉`
+        : `Welcome to ${gymName} - Complete Your Membership! 🎉`;
       htmlContent = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8f9fa;">
           <div style="background: linear-gradient(135deg, #1976d2, #1565c0); color: white; padding: 30px; text-align: center;">
@@ -556,7 +558,7 @@ const sendWelcomeEmail = async (member, gym, registrationType, specialOffer) => 
           ? `#gym-${gym._id}` 
           : `${process.env.BRAND_PORTAL_URL || 'https://gym-wale.com'}/payment/${member.membershipId}`
       },
-      footerNote: `This email was sent because you registered via QR code at ${gym.name}`
+      footerNote: `This email was sent because you registered via QR code at ${gymName}`
     });
 
     console.log(`Welcome email sent to ${member.email}`);
@@ -632,6 +634,7 @@ const registerPreviousMember = async (req, res) => {
     if (!gym) {
       return res.status(404).json({ message: 'Gym not found' });
     }
+    const gymDisplayName = gym.gymName || gym.name || 'Gym';
     
     // Check if member already exists with this phone or email
     const existingMember = await findExistingMemberByIdentity(gymId, phone, email);
@@ -651,25 +654,20 @@ const registerPreviousMember = async (req, res) => {
       
       await existingMember.save();
       
-      // Send notification email
-      try {
-        await sendEmail({
-          to: email,
-          subject: `${gym.name} - Information Updated`,
-          template: 'gym-wale',
-          heading: 'Profile Updated',
-          content: `
-            <p>Hi <strong>${name}</strong>,</p>
-            <p>Your information has been successfully updated at <strong>${gym.name}</strong>.</p>
-            <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-              <p style="color:#cbd5e1;margin:0;">Your profile is now up to date. Please contact the gym for any membership renewals or queries.</p>
-            </div>
-          `,
-          footerNote: `This email was sent because you updated your information via QR code at ${gym.name}`
-        });
-      } catch (emailError) {
-        console.error('Error sending update email:', emailError);
-      }
+      // Send notification email (fire-and-forget — do not block the HTTP response)
+      sendEmail({
+        to: email,
+        subject: `${gymDisplayName} - Information Updated`,
+        title: 'Profile Updated',
+        bodyHtml: `
+          <p>Hi <strong style="color:#10b981;">${name}</strong>,</p>
+          <p>Your information has been successfully updated at <strong>${gymDisplayName}</strong>.</p>
+          <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
+            <p style="color:#cbd5e1;margin:0;">Your profile is now up to date. Please contact the gym for any membership renewals or queries.</p>
+          </div>
+        `,
+        footerNote: `This email was sent because you updated your information via QR code at ${gymDisplayName}`
+      }).catch(err => console.error('Error sending update email:', err));
       
       return res.status(200).json({
         message: 'Member found and updated successfully (existing member flow applied)',
@@ -705,26 +703,21 @@ const registerPreviousMember = async (req, res) => {
     
     await newMember.save();
     
-    // Send welcome email
-    try {
-      await sendEmail({
-        to: email,
-        subject: `Welcome Back to ${gym.name}!`,
-        template: 'gym-wale',
-        heading: 'Registration Received',
-        content: `
-          <p>Hi <strong>${name}</strong>,</p>
-          <p>Thank you for registering at <strong>${gym.name}</strong>!</p>
-          <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-            <p style="color:#cbd5e1;margin:0;"><strong>Member ID:</strong> ${newMembershipId}</p>
-          </div>
-          <p style="color:#f59e0b;">Please visit the gym to complete your membership and payment.</p>
-        `,
-        footerNote: `This email was sent because you registered via QR code at ${gym.name}`
-      });
-    } catch (emailError) {
-      console.error('Error sending welcome email:', emailError);
-    }
+    // Send welcome email (fire-and-forget)
+    sendEmail({
+      to: email,
+      subject: `Welcome Back to ${gymDisplayName}!`,
+      title: 'Registration Received',
+      bodyHtml: `
+        <p>Hi <strong style="color:#10b981;">${name}</strong>,</p>
+        <p>Thank you for registering at <strong>${gymDisplayName}</strong>!</p>
+        <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
+          <p style="color:#cbd5e1;margin:0;"><strong>Member ID:</strong> ${newMembershipId}</p>
+        </div>
+        <p style="color:#f59e0b;">Please visit the gym to complete your membership and payment.</p>
+      `,
+      footerNote: `This email was sent because you registered via QR code at ${gymDisplayName}`
+    }).catch(err => console.error('Error sending welcome email:', err));
     
     res.status(201).json({
       message: 'Registration submitted successfully. Please visit the gym to complete your membership.',
@@ -867,6 +860,28 @@ const registerNewMember = async (req, res) => {
         } catch (fcmErr) {
           console.error('❌ Error sending FCM cash payment notification:', fcmErr.message);
         }
+
+        // Notify member about cash payment pending (fire-and-forget)
+        const gymDisplayName = gym.gymName || gym.name || 'Gym';
+        sendEmail({
+          to: email,
+          subject: `${gymDisplayName} - Registration Pending Cash Payment`,
+          title: 'Registration Submitted',
+          bodyHtml: `
+            <p>Hi <strong style="color:#10b981;">${resolvedName}</strong>,</p>
+            <p>Your registration at <strong>${gymDisplayName}</strong> has been submitted!</p>
+            <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
+              <table style="width:100%;font-size:13px;">
+                <tr><td style="padding:6px 0;color:#94a3b8;width:140px;"><strong>Plan:</strong></td><td style="padding:6px 0;color:#e2e8f0;">${resolvedPlan}</td></tr>
+                <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Duration:</strong></td><td style="padding:6px 0;color:#e2e8f0;">${resolvedMonthlyPlan}</td></tr>
+                <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Amount:</strong></td><td style="padding:6px 0;color:#e2e8f0;">&#8377;${resolvedAmount}</td></tr>
+                <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Validation Code:</strong></td><td style="padding:6px 0;color:#38bdf8;font-weight:700;font-size:18px;letter-spacing:2px;">${validationCode}</td></tr>
+              </table>
+            </div>
+            <p style="color:#f59e0b;text-align:center;">&#9203; Please show this code to the gym staff and pay &#8377;${resolvedAmount} at the counter to activate your membership.</p>
+          `,
+          footerNote: `This email was sent because you registered via QR code at ${gymDisplayName}`
+        }).catch(err => console.error('Error sending cash registration email:', err));
 
         return res.status(202).json({
           message: 'Registration submitted! Please pay at the counter — your membership will be activated after the admin confirms your cash payment.',

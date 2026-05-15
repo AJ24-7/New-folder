@@ -344,6 +344,18 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> bulkGenerateCoupons(Map<String, dynamic> params) async {
+    try {
+      final response = await _dio.post('${ApiConfig.coupons}/bulk-generate', data: params);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return (response.data['coupons'] ?? response.data ?? []) as List<dynamic>;
+      }
+      throw Exception(response.data['message'] ?? 'Bulk generation failed');
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<bool> updateCoupon(String couponId, Map<String, dynamic> data) async {
     try {
       final response = await _dio.put('${ApiConfig.coupons}/$couponId', data: data);
