@@ -427,7 +427,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       ),
       child: Form(
         key: _formKey,
-        child: Column(
+        child: Consumer<AuthProvider>(
+          builder: (context, authProvider, _) => Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -454,6 +455,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             TextFormField(
               controller: _emailController,
               keyboardType: TextInputType.emailAddress,
+              enabled: !authProvider.isLoading,
               decoration: InputDecoration(
                 labelText: 'Email Address',
                 hintText: 'Enter your admin email',
@@ -489,6 +491,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             TextFormField(
               controller: _passwordController,
               obscureText: _obscurePassword,
+              enabled: !authProvider.isLoading,
               decoration: InputDecoration(
                 labelText: 'Password',
                 hintText: 'Enter your password',
@@ -530,9 +533,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             const SizedBox(height: 24),
 
             // Login Button
-            Consumer<AuthProvider>(
-              builder: (context, authProvider, child) {
-                return Container(
+            Container(
                   height: 50,
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
@@ -574,9 +575,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                             ),
                           ),
                   ),
-                );
-              },
-            ),
+                ),
 
             const SizedBox(height: 16),
 
@@ -670,7 +669,8 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
               ],
             ),
           ],
-        ),
+          ), // end Consumer builder Column
+        ), // end Consumer
       ),
     );
   }

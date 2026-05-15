@@ -48,14 +48,30 @@ class AuthService {
         debugPrint('❌ Message: ${error.message}');
         debugPrint('❌ Response: ${error.response?.data}');
         
-        // Handle 401 errors and refresh token
-        if (error.response?.statusCode == 401) {
+        // Handle 401 errors and refresh token.
+        // Skip auth endpoints — a 401 on login/refresh means bad credentials,
+        // not an expired token.  Retrying them would create an infinite loop.
+        final requestPath = error.requestOptions.path;
+        final isAuthEndpoint = requestPath.contains('/auth/login') ||
+            requestPath.contains('/auth/refresh') ||
+            requestPath.contains('/auth/2fa');
+
+        if (error.response?.statusCode == 401 && !isAuthEndpoint) {
           try {
-            await refreshToken();
-            // Retry the request
+            final refreshed = await refreshToken();
+            if (!refreshed) {
+              // No valid refresh token — pass the original error through
+              await logout();
+              return handler.next(error);
+            }
+            // Retry the original request with the new token
+            final newToken = await _storage.getToken();
             final opts = Options(
               method: error.requestOptions.method,
-              headers: error.requestOptions.headers,
+              headers: {
+                ...error.requestOptions.headers,
+                if (newToken != null) 'Authorization': 'Bearer $newToken',
+              },
             );
             final response = await _dio.request(
               error.requestOptions.path,
@@ -65,7 +81,7 @@ class AuthService {
             );
             return handler.resolve(response);
           } catch (e) {
-            // Refresh failed, logout user
+            // Refresh failed — logout and surface the error
             await logout();
             return handler.next(error);
           }
