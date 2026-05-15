@@ -379,51 +379,65 @@ const sendWelcomeEmailForCash = async (member, gym) => {
 
     await sendEmail({
       to: member.email,
-      from: 'support@gym-wale.com',
-      subject: `Welcome to ${gymName} - Membership Created`,
+      subject: `Welcome to ${gymName} - Your Membership is Active!`,
       title: `Welcome to ${gymName}!`,
-      preheader: 'Your membership has been successfully activated',
+      preheader: 'Your cash payment is confirmed and membership is now active',
       bodyHtml: `
         <p>Hi <strong style="color:#10b981;">${memberName}</strong>,</p>
-        <p>🎉 Welcome to <strong>${gymName}</strong>! Your cash payment has been confirmed and your membership is now <strong style="color:#10b981;">active</strong>.</p>
+        <p>🎉 Welcome to <strong>${gymName}</strong>! Your cash payment has been confirmed by the gym admin and your membership is now <strong style="color:#10b981;">active</strong>.</p>
 
         <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-          <table style="width:100%;font-size:13px;">
+          <h3 style="color:#38bdf8;margin:0 0 14px 0;font-size:15px;">📋 Membership Details</h3>
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;width:140px;"><strong>Membership ID:</strong></td>
-              <td style="padding:6px 0;"><span style="background:#0d4d89;color:#ffffff;padding:4px 10px;border-radius:6px;font-weight:600;letter-spacing:1px;">${membershipId}</span></td>
+              <td style="padding:8px 0;color:#94a3b8;width:150px;vertical-align:top;"><strong>Membership ID:</strong></td>
+              <td style="padding:8px 0;"><span style="background:#0d4d89;color:#ffffff;padding:4px 12px;border-radius:6px;font-weight:700;letter-spacing:1px;font-size:12px;">${membershipId}</span></td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;"><strong>Plan:</strong></td>
-              <td style="padding:6px 0;">${planSelected} (${monthlyPlan})</td>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Member Name:</strong></td>
+              <td style="padding:8px 0;color:#f1f5f9;">${memberName}</td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;"><strong>Payment:</strong></td>
-              <td style="padding:6px 0;">₹${member.paymentAmount} (Cash) <span style="color:#10b981;">✓ Confirmed</span></td>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Plan:</strong></td>
+              <td style="padding:8px 0;color:#f1f5f9;">${planSelected} &bull; ${monthlyPlan} month(s)</td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;"><strong>Valid Until:</strong></td>
-              <td style="padding:6px 0;">${membershipValidUntil}</td>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Amount Paid:</strong></td>
+              <td style="padding:8px 0;color:#f1f5f9;">&#8377;${Number(member.paymentAmount || 0).toLocaleString('en-IN')} <span style="color:#10b981;font-weight:600;">(Cash &mdash; Confirmed ✓)</span></td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;"><strong>Join Date:</strong></td>
-              <td style="padding:6px 0;">${joinDate}</td>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Join Date:</strong></td>
+              <td style="padding:8px 0;color:#f1f5f9;">${joinDate}</td>
             </tr>
             <tr>
-              <td style="padding:6px 0;color:#94a3b8;"><strong>Status:</strong></td>
-              <td style="padding:6px 0;"><span style="background:#10b981;color:#fff;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;">ACTIVE</span></td>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Valid Until:</strong></td>
+              <td style="padding:8px 0;color:#f1f5f9;">${membershipValidUntil}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 0;color:#94a3b8;vertical-align:top;"><strong>Status:</strong></td>
+              <td style="padding:8px 0;"><span style="background:#10b981;color:#fff;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:0.5px;">ACTIVE</span></td>
             </tr>
           </table>
         </div>
 
-        <p style="color:#cbd5e1;font-size:14px;text-align:center;margin-top:20px;">
-          We look forward to seeing you reach your fitness goals! 💪
+        <div style="background:#0d2137;border:1px solid #1e3a5f;padding:14px 18px;border-radius:10px;margin:18px 0;">
+          <h3 style="color:#38bdf8;margin:0 0 8px 0;font-size:14px;">📍 Gym Contact</h3>
+          <p style="margin:4px 0;color:#cbd5e1;font-size:13px;"><strong style="color:#94a3b8;">Gym:</strong> ${gymName}</p>
+          ${gym.address ? `<p style="margin:4px 0;color:#cbd5e1;font-size:13px;"><strong style="color:#94a3b8;">Address:</strong> ${gym.address}</p>` : ''}
+          ${gym.contact ? `<p style="margin:4px 0;color:#cbd5e1;font-size:13px;"><strong style="color:#94a3b8;">Contact:</strong> ${gym.contact}</p>` : ''}
+          ${gym.email ? `<p style="margin:4px 0;color:#cbd5e1;font-size:13px;"><strong style="color:#94a3b8;">Email:</strong> ${gym.email}</p>` : ''}
+        </div>
+
+        <p style="color:#cbd5e1;font-size:14px;text-align:center;margin-top:20px;line-height:1.6;">
+          We're excited to have you on board! Show this email at the gym counter as proof of membership.<br>
+          <strong style="color:#10b981;">Let's crush those fitness goals together! 💪</strong>
         </p>
       `,
       action: {
         label: 'Contact Gym',
-        url: gym.contact ? `tel:${gym.contact}` : '#'
-      }
+        url: gym.contact ? `tel:${gym.contact}` : (gym.email ? `mailto:${gym.email}` : '#')
+      },
+      footerNote: `This email was sent because you registered as a new member at ${gymName} via cash payment.`
     });
     console.log(`✅ Welcome email sent to ${member.email}`);
   } catch (error) {

@@ -23,6 +23,8 @@ const DEFAULT_BRAND = {
     try {
       // Try different possible logo paths
       const possibleLogoPaths = [
+        path.join(__dirname, '../../assets/images/logo.png'),
+        path.join(__dirname, '../../assets/icons/logo.png'),
         path.join(__dirname, '../../frontend/gymadmin/public/Gym-Wale.png'),
         path.join(__dirname, '../../uploads/gym-logos/Gym-Wale.png'),
         path.join(__dirname, '../../frontend/public/Gym-Wale.png'),
@@ -112,10 +114,10 @@ function wrapEmail(opts = {}) {
 <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
 <tr>
 <td style="text-align:center;">
-<div style="display:inline-block;background:rgba(255,255,255,0.2);padding:8px;border-radius:8px;margin-bottom:10px;">
-<div style="width:40px;height:40px;background:${b.accent};border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-weight:bold;color:white;font-size:16px;">GW</div>
+<div style="display:inline-block;margin-bottom:12px;">
+<img src="${b.logo}" alt="${b.name}" width="64" height="64" style="width:64px;height:64px;object-fit:contain;display:block;margin:0 auto;" />
 </div>
-<h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:600;">${b.name}</h1>
+<h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:0.5px;">${b.name}</h1>
 <p style="margin:5px 0 0;color:rgba(255,255,255,0.9);font-size:14px;">${minimal ? '' : 'Fitness Management Platform'}</p>
 </td>
 </tr>

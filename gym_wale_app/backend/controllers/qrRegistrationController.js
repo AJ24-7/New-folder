@@ -3,6 +3,7 @@ const Member = require('../models/Member');
 const Gym = require('../models/gym');
 const Payment = require('../models/Payment');
 const Notification = require('../models/Notification');
+const Coupon = require('../models/Coupon');
 const sendEmail = require('../utils/sendEmail');
 const gymNotificationService = require('../services/gymNotificationService');
 const fcmService = require('../services/fcmService');
@@ -985,7 +986,24 @@ const registerNewMember = async (req, res) => {
       console.error('❌ Error creating payment record:', paymentError);
     }
 
-    // Send welcome email
+    // Mark coupon as used (non-cash immediate registration only)
+    const couponCode = String(req.body?.couponCode || '').trim().toUpperCase();
+    if (couponCode) {
+      try {
+        const coupon = await Coupon.findOne({
+          code: couponCode,
+          gymId,
+          status: 'active',
+          isActive: true
+        });
+        if (coupon && (coupon.usageLimit === null || coupon.usageCount < coupon.usageLimit)) {
+          await coupon.incrementUsage(resolvedAmount, 0);
+        }
+      } catch (couponError) {
+        console.error('Error marking coupon as used:', couponError);
+      }
+    }
+
     try {
       await sendWelcomeEmail(memberRecord, gym, 'instant');
     } catch (emailError) {
@@ -1140,6 +1158,24 @@ const renewMemberViaQR = async (req, res) => {
     existingMember.updatedAt = now;
 
     await existingMember.save();
+
+    // Mark coupon as used (non-cash renewal only)
+    const renewCouponCode = String(req.body?.couponCode || '').trim().toUpperCase();
+    if (renewCouponCode) {
+      try {
+        const coupon = await Coupon.findOne({
+          code: renewCouponCode,
+          gymId,
+          status: 'active',
+          isActive: true
+        });
+        if (coupon && (coupon.usageLimit === null || coupon.usageCount < coupon.usageLimit)) {
+          await coupon.incrementUsage(amount, 0);
+        }
+      } catch (couponError) {
+        console.error('Error marking renewal coupon as used:', couponError);
+      }
+    }
 
     // Send renewal confirmation email
     try {
