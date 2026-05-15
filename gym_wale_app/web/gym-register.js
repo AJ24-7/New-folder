@@ -802,7 +802,9 @@ function showPrevMemberStatus(member) {
     const renewalSection = document.getElementById('prevRenewalSection');
     const submitBtn = document.getElementById('prevSubmitBtn');
 
-    const isActive = member.isActive;
+    const isActive = member.validUntil
+        ? new Date(member.validUntil) > new Date()
+        : Boolean(member.isActive);
     const expiry = member.validUntil ? new Date(member.validUntil).toLocaleDateString('en-IN') : null;
     const name = escapeHtml(member.name || '');
     const plan = escapeHtml(member.planSelected || '');
@@ -1537,9 +1539,12 @@ async function checkForDuplicateAndBlock() {
 }
 
 function showMemberBanner(member) {
+    const isMemberActive = member.validUntil
+        ? new Date(member.validUntil) > new Date()
+        : Boolean(member.isActive);
     let details = `<p class="em-name">${escapeHtml(member.name || 'Unknown')}</p>`;
     if (member.planSelected) details += `<span class="em-badge em-plan">${escapeHtml(member.planSelected)}</span>`;
-    if (member.isActive) {
+    if (isMemberActive) {
         details += `<span class="em-badge em-active">Active</span>`;
         if (member.validUntil) details += `<span class="em-valid"> Valid until <strong>${new Date(member.validUntil).toLocaleDateString()}</strong></span>`;
     } else {
