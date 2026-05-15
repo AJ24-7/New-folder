@@ -1054,12 +1054,24 @@ const lookupMemberForQR = async (req, res) => {
     }
 
     const now = new Date();
-    const validUntilDate = existing.validUntil ? new Date(existing.validUntil) : null;
+
+    // Resolve the canonical validity date from either storage field.
+    // QR-registered members use `validUntil` (Date); offline-added and
+    // Excel bulk-upload members use `membershipValidUntil` (String).
+    // We must check both so every registration type is handled correctly.
+    const rawValidity =
+      existing.validUntil ||
+      (existing.membershipValidUntil && existing.membershipValidUntil !== 'NA'
+        ? existing.membershipValidUntil
+        : null);
+    const validUntilDate = rawValidity ? new Date(rawValidity) : null;
+    const isValidDate = validUntilDate && !isNaN(validUntilDate.getTime());
+
     const allowanceDate = existing.allowanceExpiryDate ? new Date(existing.allowanceExpiryDate) : null;
     const isFrozen = !!existing.currentlyFrozen;
     const isActive = !isFrozen && (
-      (validUntilDate && validUntilDate > now) ||
-      (allowanceDate && allowanceDate > now)
+      (isValidDate && validUntilDate > now) ||
+      (allowanceDate && !isNaN(allowanceDate.getTime()) && allowanceDate > now)
     );
 
     return res.json({
@@ -1070,7 +1082,7 @@ const lookupMemberForQR = async (req, res) => {
         planSelected: existing.planSelected,
         monthlyPlan: existing.monthlyPlan,
         paymentStatus: existing.paymentStatus,
-        validUntil: existing.validUntil,
+        validUntil: isValidDate ? validUntilDate : null,
         isActive
       }
     });
@@ -1142,8 +1154,16 @@ const renewMemberViaQR = async (req, res) => {
 
     // Non-cash: extend membership directly
     const now = new Date();
-    const baseDate = existingMember.validUntil && new Date(existingMember.validUntil) > now
-      ? new Date(existingMember.validUntil)
+    // Resolve existing expiry from either field (offline/bulk members only have
+    // membershipValidUntil; QR members have validUntil).
+    const rawExistingExpiry =
+      existingMember.validUntil ||
+      (existingMember.membershipValidUntil && existingMember.membershipValidUntil !== 'NA'
+        ? existingMember.membershipValidUntil
+        : null);
+    const existingExpiry = rawExistingExpiry ? new Date(rawExistingExpiry) : null;
+    const baseDate = existingExpiry && !isNaN(existingExpiry.getTime()) && existingExpiry > now
+      ? existingExpiry
       : now;
     const newValidUntil = new Date(baseDate);
     newValidUntil.setMonth(newValidUntil.getMonth() + monthsNum);
