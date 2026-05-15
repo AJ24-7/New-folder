@@ -1226,21 +1226,16 @@ function _shuffle(arr) {
   return a;
 }
 
-// Generates a unique 5-segment code: WORD1-WORD2-NNN-WORD3-WORD4
-// where NNN is a 3-digit number and 2 words have an appended digit.
+// Generates a short code: WORD + 3-digit number, e.g. "FLEX837" (max 8 chars)
 function _generateCouponCode(existingCodes) {
+  // Use only short words (≤4 chars) to keep total code ≤ 7 chars
+  const shortWords = _COUPON_WORDS.filter(w => w.length <= 4);
   let code;
   let attempts = 0;
   do {
-    const words = _shuffle(_COUPON_WORDS).slice(0, 4);
-    // Append a single digit to two of the four words for text+number feel
-    const mixed = words.map((w, i) =>
-      i % 2 === 1 ? `${w}${Math.floor(Math.random() * 9) + 1}` : w
-    );
-    // Insert a 3-digit number as segment 3 → 5 segments total
+    const word = shortWords[Math.floor(Math.random() * shortWords.length)];
     const num = String(Math.floor(Math.random() * 900) + 100);
-    mixed.splice(2, 0, num);
-    code = mixed.join('-');
+    code = `${word}${num}`;
     attempts++;
   } while (existingCodes.has(code) && attempts < 300);
   return code;

@@ -353,7 +353,14 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
   Widget _buildStatsCards(bool isDesktop) {
     final size = MediaQuery.of(context).size;
     final isMobile = size.width <= 600;
-    
+
+    // Derive counts from local lists so cards update immediately after any change
+    final activeOffersCount = _offers.where((o) => o.status == 'active').length;
+    final activeCouponsCount = _coupons
+        .where((c) => c.isActive && c.status == 'active' && !c.isExpired)
+        .length;
+    final totalClaimsCount = _coupons.fold<int>(0, (sum, c) => sum + c.usageCount);
+
     return GridView.count(
       crossAxisCount: isDesktop ? 4 : 2,
       crossAxisSpacing: isMobile ? 8 : 16,
@@ -364,21 +371,21 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
       children: [
         StatCard(
           title: 'Active Offers',
-          value: _stats?.activeOffers.toString() ?? '0',
+          value: activeOffersCount.toString(),
           icon: Icons.local_offer,
           color: Colors.green,
           trend: null,
         ),
         StatCard(
           title: 'Active Coupons',
-          value: _stats?.activeCoupons.toString() ?? '0',
+          value: activeCouponsCount.toString(),
           icon: Icons.confirmation_number,
           color: Colors.blue,
           trend: null,
         ),
         StatCard(
           title: 'Total Claims',
-          value: _stats?.totalClaims.toString() ?? '0',
+          value: totalClaimsCount.toString(),
           icon: Icons.redeem,
           color: Colors.orange,
           trend: null,
