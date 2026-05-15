@@ -1374,6 +1374,108 @@ exports.getCouponClaimStatus = async (req, res) => {
   }
 };
 
+// GET /api/offers/coupons/available-admin  (gymadminAuth — used from Flutter admin app)
+exports.getAvailableCouponsForAdmin = async (req, res) => {
+  try {
+    const gymId = req.query.gymId || req.gym?.id || req.admin?.gymId || req.admin?.id;
+    if (!gymId) {
+      return res.status(400).json({ message: 'Gym ID is required' });
+    }
+
+    const now = new Date();
+    const coupons = await Coupon.find({
+      gymId,
+      status: 'active',
+      isActive: true,
+      expiryDate: { $gte: now },
+      $or: [
+        { usageLimit: null },
+        { usageLimit: { $exists: false } },
+        { $expr: { $lt: ['$usageCount', '$usageLimit'] } }
+      ]
+    })
+      .select('code title description discountType discountValue minAmount maxDiscountAmount usageCount usageLimit expiryDate applicableCategories')
+      .sort({ createdAt: -1 });
+
+    res.json({ coupons });
+  } catch (error) {
+    console.error('Error fetching available coupons for admin:', error);
+    res.status(500).json({ message: 'Failed to fetch coupons', coupons: [] });
+  }
+};
+
+// POST /api/offers/coupons/validate-admin  (gymadminAuth — validate + compute discount for offline member add)
+exports.validateCouponForAdmin = async (req, res) => {
+  try {
+    const { code, purchaseAmount } = req.body;
+    const gymId = req.body.gymId || req.gym?.id || req.admin?.gymId || req.admin?.id;
+
+    if (!code || !gymId) {
+      return res.status(400).json({ valid: false, message: 'code and gymId are required' });
+    }
+
+    const upperCode = code.trim().toUpperCase();
+    const now = new Date();
+    const coupon = await Coupon.findOne({
+      code: upperCode,
+      gymId,
+      status: 'active',
+      isActive: true,
+      expiryDate: { $gte: now }
+    });
+
+    if (!coupon) {
+      return res.status(404).json({ valid: false, message: 'Coupon not found or has expired' });
+    }
+
+    if (coupon.usageLimit !== null && coupon.usageLimit !== undefined && coupon.usageCount >= coupon.usageLimit) {
+      return res.status(400).json({ valid: false, message: 'Coupon has already been fully redeemed' });
+    }
+
+    const amount = parseFloat(purchaseAmount || 0);
+    if (coupon.minAmount > 0 && amount > 0 && amount < coupon.minAmount) {
+      return res.status(400).json({
+        valid: false,
+        message: `Minimum purchase amount of ₹${coupon.minAmount} required`
+      });
+    }
+
+    let discountAmount = 0;
+    let finalAmount = amount;
+    if (amount > 0) {
+      if (coupon.discountType === 'percentage') {
+        discountAmount = (amount * coupon.discountValue) / 100;
+        if (coupon.maxDiscountAmount) discountAmount = Math.min(discountAmount, coupon.maxDiscountAmount);
+      } else {
+        discountAmount = Math.min(coupon.discountValue, amount);
+      }
+      finalAmount = Math.max(0, amount - discountAmount);
+    }
+
+    res.json({
+      valid: true,
+      coupon: {
+        _id: coupon._id,
+        code: coupon.code,
+        title: coupon.title,
+        description: coupon.description,
+        discountType: coupon.discountType,
+        discountValue: coupon.discountValue,
+        minAmount: coupon.minAmount,
+        expiryDate: coupon.expiryDate
+      },
+      discountDetails: {
+        originalAmount: amount,
+        discountAmount: Math.round(discountAmount * 100) / 100,
+        finalAmount: Math.round(finalAmount * 100) / 100
+      }
+    });
+  } catch (error) {
+    console.error('Error validating coupon for admin:', error);
+    res.status(500).json({ valid: false, message: 'Failed to validate coupon', error: error.message });
+  }
+};
+
 // POST /api/offers/coupons/validate-qr  (public — used from QR registration page)
 exports.validateCouponForQR = async (req, res) => {
   try {

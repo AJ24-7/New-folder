@@ -24,7 +24,9 @@ const {
   getCouponUsageStats,
   generateBulkCoupons,
   getCouponClaimStatus,
-  validateCouponForQR
+  validateCouponForQR,
+  getAvailableCouponsForAdmin,
+  validateCouponForAdmin
 } = require('../controllers/offersController');
 
 // Middleware to verify admin authentication
@@ -58,6 +60,12 @@ router.patch('/:id/toggle', gymadminAuth, toggleOfferStatus);
 // Get all coupons for a gym (gym admin - uses gym-compatible auth)
 router.get('/coupons', gymadminAuth, getCoupons);
 
+// Get available (active, not-expired, not-fully-redeemed) coupons for admin add-member dialog
+router.get('/coupons/available-admin', gymadminAuth, getAvailableCouponsForAdmin);
+
+// Validate a coupon code for admin offline member add (gymadminAuth)
+router.post('/coupons/validate-admin', gymadminAuth, validateCouponForAdmin);
+
 // Get available coupons for users (public - no auth)
 router.get('/coupons/available', async (req, res) => {
   try {
@@ -69,11 +77,17 @@ router.get('/coupons/available', async (req, res) => {
 
     const Coupon = require('../models/Coupon');
     
-    // Get active, non-expired coupons
+    // Get active, non-expired, not-fully-redeemed coupons
     const coupons = await Coupon.find({
       gymId,
       status: 'active',
+      isActive: true,
       expiryDate: { $gte: new Date() },
+      $or: [
+        { usageLimit: null },
+        { usageLimit: { $exists: false } },
+        { $expr: { $lt: ['$usageCount', '$usageLimit'] } }
+      ]
     })
       .select('code title description discountType discountValue minAmount maxDiscountAmount expiryDate')
       .sort({ createdAt: -1 })

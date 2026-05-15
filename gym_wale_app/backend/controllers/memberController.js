@@ -1295,6 +1295,28 @@ exports.addMember = async (req, res) => {
       // Do not block member creation if payment fails
     }
 
+    // Apply coupon if provided (offline admin-added member)
+    const offlineCouponCode = String(req.body.couponCode || '').trim().toUpperCase();
+    if (offlineCouponCode) {
+      try {
+        const Coupon = require('../models/Coupon');
+        const coupon = await Coupon.findOne({
+          code: offlineCouponCode,
+          gymId,
+          status: 'active',
+          isActive: true,
+          expiryDate: { $gte: new Date() }
+        });
+        if (coupon && (coupon.usageLimit === null || coupon.usageLimit === undefined || coupon.usageCount < coupon.usageLimit)) {
+          await coupon.incrementUsage(normalizedPaymentAmount, 0);
+          console.log(`✅ Offline coupon ${offlineCouponCode} applied for member ${member.membershipId}`);
+        }
+      } catch (couponErr) {
+        console.error('[MemberController] Error applying coupon:', couponErr);
+        // Do not block member creation if coupon application fails
+      }
+    }
+
     // Create notification for new member
     try {
       const Notification = require('../models/Notification');

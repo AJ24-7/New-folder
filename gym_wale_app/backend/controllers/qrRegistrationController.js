@@ -823,6 +823,7 @@ const registerNewMember = async (req, res) => {
     // list when a validation is rejected or times out.
     if (resolvedPaymentMode === 'Cash') {
       try {
+        const qrCouponCode = String(req.body?.couponCode || '').trim().toUpperCase() || undefined;
         const { validationCode, expiresAt } = createCashValidationRequest({
           memberName: resolvedName,
           email,
@@ -838,7 +839,9 @@ const registerNewMember = async (req, res) => {
             activityPreference: activitiesString,
             // Pass existing member _id so confirmCashPayment updates rather than duplicates
             memberId: existingMember ? existingMember._id : undefined,
-            profileImageUrl: profileImageUrl || undefined
+            profileImageUrl: profileImageUrl || undefined,
+            // Pass coupon code so it can be applied when cash is confirmed
+            couponCode: qrCouponCode
           }
         });
 

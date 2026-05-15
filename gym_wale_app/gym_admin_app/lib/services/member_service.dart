@@ -64,6 +64,7 @@ class MemberService {
     required String activityPreference,
     String? address,
     XFile? profileImage,
+    String? couponCode,
   }) async {
     try {
       String? imageUrl;
@@ -89,6 +90,7 @@ class MemberService {
         'activityPreference': activityPreference,
         if (address != null) 'address': address,
         if (imageUrl != null) 'profileImage': imageUrl,
+        if (couponCode != null && couponCode.isNotEmpty) 'couponCode': couponCode.trim().toUpperCase(),
       };
       
       final response = await _dio.post(

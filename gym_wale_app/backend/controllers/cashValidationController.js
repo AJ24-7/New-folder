@@ -43,6 +43,60 @@ async function createPaymentNotification(gymId, paymentData) {
   }
 }
 
+async function createCashRequestNotification(gymId, validationData) {
+  try {
+    const Notification = require('../models/Notification');
+    await new Notification({
+      user: gymId,
+      title: '💵 Cash Payment Request',
+      message: `₹${Number(validationData.amount || 0).toLocaleString('en-IN')} requested by ${validationData.memberName || 'Member'} for ${validationData.planName || 'plan'} (${validationData.duration || ''})`,
+      type: 'cash_payment_request',
+      priority: 'high',
+      read: false,
+      isRead: false,
+      metadata: {
+        memberName: validationData.memberName,
+        amount: validationData.amount,
+        planName: validationData.planName,
+        duration: validationData.duration,
+        validationCode: validationData.validationCode,
+        gymId: validationData.gymId,
+        expiresAt: validationData.expiresAt,
+        status: 'pending'
+      }
+    }).save();
+  } catch (error) {
+    console.error('❌ Error creating cash request notification:', error.message);
+  }
+}
+
+async function createCashRejectionNotification(gymId, validationData) {
+  try {
+    const Notification = require('../models/Notification');
+    await new Notification({
+      user: gymId,
+      title: '❌ Cash Payment Request Rejected',
+      message: `Request for ₹${Number(validationData.amount || 0).toLocaleString('en-IN')} from ${validationData.memberName || 'Member'} was rejected`,
+      type: 'cash_payment_request',
+      priority: 'normal',
+      read: false,
+      isRead: false,
+      metadata: {
+        memberName: validationData.memberName,
+        amount: validationData.amount,
+        planName: validationData.planName,
+        duration: validationData.duration,
+        validationCode: validationData.validationCode,
+        gymId: validationData.gymId,
+        status: 'rejected',
+        rejectedAt: new Date()
+      }
+    }).save();
+  } catch (error) {
+    console.error('❌ Error creating cash rejection notification:', error.message);
+  }
+}
+
 // Create a new cash validation request
 const createCashValidation = async (req, res) => {
   try {
@@ -78,6 +132,9 @@ const createCashValidation = async (req, res) => {
 
     // Store validation request
     cashValidationStore.set(validationCode, validationData);
+
+    // Create notification record so admin can review this request in the notification list
+    createCashRequestNotification(gymId || 'default_gym', validationData);
 
     // Auto-expire after 2 minutes
     setTimeout(() => {
@@ -298,6 +355,24 @@ const confirmCashPayment = async (req, res) => {
       console.error('❌ Failed to create payment record for cash confirmation:', paymentError);
     }
 
+    // Mark coupon as used (if one was applied during QR cash registration)
+    const cashCouponCode = validation.registrationData?.couponCode;
+    if (cashCouponCode) {
+      try {
+        const Coupon = require('../models/Coupon');
+        const coupon = await Coupon.findOne({
+          code: cashCouponCode,
+          gymId: resolvedGymId,
+        });
+        if (coupon && (coupon.usageLimit === null || coupon.usageLimit === undefined || coupon.usageCount < coupon.usageLimit)) {
+          await coupon.incrementUsage(paymentAmount, 0);
+          console.log(`✅ Coupon ${cashCouponCode} marked as used after cash confirmation`);
+        }
+      } catch (couponError) {
+        console.error('Error marking cash-confirmation coupon as used:', couponError);
+      }
+    }
+
     // Send welcome email
     try {
       await sendWelcomeEmailForCash(member, gym);
@@ -470,6 +545,9 @@ const rejectCashPayment = async (req, res) => {
     // Mark as rejected
     validation.status = 'rejected';
     validation.rejectedAt = new Date();
+
+    // Create notification record for the rejection
+    createCashRejectionNotification(validation.gymId, validation);
 
     res.json({
       success: true,

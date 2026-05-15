@@ -165,7 +165,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
     _cashPaymentSubscription =
         notifProvider.cashPaymentRequests.listen((data) {
       if (mounted) {
-        CashPaymentRequestDialog.show(context, data);
+        CashPaymentRequestDialog.show(context, data).then((_) {
+          if (mounted) {
+            Provider.of<NotificationProvider>(context, listen: false)
+                .loadNotifications(refresh: true);
+          }
+        });
       }
     });
   }

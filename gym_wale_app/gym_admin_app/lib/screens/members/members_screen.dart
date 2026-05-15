@@ -15,8 +15,10 @@ import '../../models/gym_activity.dart';
 import '../../services/member_service.dart';
 import '../../services/gym_service.dart';
 import '../../services/cloudinary_service.dart';
+import '../../services/api_service.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/sidebar_menu.dart';
+import '../../models/gym_offer.dart';
 import '../support/support_screen.dart';
 import '../equipment/equipment_screen.dart';
 import '../offers/offers_screen.dart';
@@ -1184,6 +1186,7 @@ class _AddMemberDialog extends StatefulWidget {
 class _AddMemberDialogState extends State<_AddMemberDialog> {
   final _formKey = GlobalKey<FormState>();
   final _memberService = MemberService();
+  final _apiService = ApiService();
   
   // Form controllers
   final _nameController = TextEditingController();
@@ -1192,6 +1195,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   final _emailController = TextEditingController();
   final _addressController = TextEditingController();
   final _amountController = TextEditingController(text: '0');
+  final _couponCodeController = TextEditingController();
   
   String _gender = 'Male';
   String _paymentMode = 'Cash';
@@ -1202,6 +1206,13 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
   XFile? _profileImage;
   Uint8List? _profileImageBytes;
   bool _isSubmitting = false;
+
+  // Coupon state
+  List<GymCoupon> _availableCoupons = [];
+  GymCoupon? _appliedCoupon;
+  double _couponDiscountAmount = 0.0;
+  bool _isValidatingCoupon = false;
+  String? _couponError;
 
   bool get _isMultiTier => widget.membershipPlan?.isMultiTier ?? false;
 
@@ -1257,6 +1268,64 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
       _duration = _durationOptions.first['value'] as String;
       _autoFillAmount();
     }
+    _loadAvailableCoupons();
+  }
+
+  Future<void> _loadAvailableCoupons() async {
+    try {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      final gymId = auth.currentAdmin?.id ?? '';
+      if (gymId.isEmpty) return;
+      final raw = await _apiService.getAvailableCouponsForAdmin(gymId);
+      if (!mounted) return;
+      setState(() {
+        _availableCoupons = raw
+            .map((c) => GymCoupon.fromJson(Map<String, dynamic>.from(c as Map)))
+            .toList();
+      });
+    } catch (e) {
+      // silently ignore; coupon chips just won't appear
+    }
+  }
+
+  Future<void> _applyCouponCode(String code) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final gymId = auth.currentAdmin?.id ?? '';
+    if (gymId.isEmpty || code.trim().isEmpty) return;
+    setState(() { _isValidatingCoupon = true; _couponError = null; });
+    final result = await _apiService.validateCouponForAdmin(
+      code: code,
+      gymId: gymId,
+      purchaseAmount: _paymentAmount > 0 ? _paymentAmount : null,
+    );
+    if (!mounted) return;
+    if (result['valid'] == true) {
+      final couponData = result['coupon'] as Map?;
+      final discountDetails = result['discountDetails'] as Map?;
+      setState(() {
+        _appliedCoupon = couponData != null
+            ? GymCoupon.fromJson(Map<String, dynamic>.from(couponData))
+            : null;
+        _couponDiscountAmount = (discountDetails?['discountAmount'] as num?)?.toDouble() ?? 0.0;
+        _couponCodeController.text = code.trim().toUpperCase();
+        _isValidatingCoupon = false;
+        _couponError = null;
+      });
+    } else {
+      setState(() {
+        _couponError = result['message'] as String? ?? 'Invalid coupon';
+        _isValidatingCoupon = false;
+      });
+    }
+  }
+
+  void _removeCoupon() {
+    setState(() {
+      _appliedCoupon = null;
+      _couponDiscountAmount = 0.0;
+      _couponCodeController.clear();
+      _couponError = null;
+    });
   }
 
   @override
@@ -1267,6 +1336,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
     _emailController.dispose();
     _addressController.dispose();
     _amountController.dispose();
+    _couponCodeController.dispose();
     super.dispose();
   }
 
@@ -1321,6 +1391,7 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
         activityPreference: _selectedActivities.join(', '),
         address: _addressController.text.isEmpty ? null : _addressController.text,
         profileImage: _profileImage,
+        couponCode: _appliedCoupon?.code,
       );
 
       if (mounted) {
@@ -1690,6 +1761,120 @@ class _AddMemberDialogState extends State<_AddMemberDialog> {
                     );
                   }).toList(),
                 ),
+
+                const SizedBox(height: 20),
+
+                // ── Coupon / Offer ─────────────────────────────
+                Text(
+                  'Apply Coupon',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Available coupon chips
+                if (_availableCoupons.isNotEmpty && _appliedCoupon == null) ...[
+                  SizedBox(
+                    height: 36,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _availableCoupons.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (context, index) {
+                        final c = _availableCoupons[index];
+                        return ActionChip(
+                          label: Text(
+                            c.code,
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                          avatar: const Icon(Icons.local_offer_outlined, size: 14),
+                          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.08),
+                          side: BorderSide(color: AppTheme.primaryColor.withValues(alpha: 0.3)),
+                          onPressed: () => _applyCouponCode(c.code),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+
+                // Manual code entry
+                if (_appliedCoupon == null)
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _couponCodeController,
+                          decoration: InputDecoration(
+                            labelText: 'Enter Coupon Code',
+                            prefixIcon: const Icon(Icons.confirmation_number_outlined),
+                            border: const OutlineInputBorder(),
+                            errorText: _couponError,
+                            isDense: true,
+                          ),
+                          textCapitalization: TextCapitalization.characters,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: _isValidatingCoupon
+                            ? null
+                            : () => _applyCouponCode(_couponCodeController.text),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        ),
+                        child: _isValidatingCoupon
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text('Apply'),
+                      ),
+                    ],
+                  ),
+
+                // Applied coupon banner
+                if (_appliedCoupon != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.successColor.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.successColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: AppTheme.successColor, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _appliedCoupon!.code,
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              if (_appliedCoupon!.title.isNotEmpty)
+                                Text(_appliedCoupon!.title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                              if (_couponDiscountAmount > 0)
+                                Text(
+                                  'Savings: ₹${_couponDiscountAmount.toStringAsFixed(0)}',
+                                  style: const TextStyle(color: AppTheme.successColor, fontWeight: FontWeight.w600, fontSize: 12),
+                                ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          onPressed: _removeCoupon,
+                          tooltip: 'Remove coupon',
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

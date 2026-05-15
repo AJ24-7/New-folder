@@ -215,9 +215,13 @@ couponSchema.methods.incrementUsage = async function(revenue = 0, savings = 0) {
   this.totalSavings += savings;
   this.updatedAt = new Date();
   
-  // Auto-disable if usage limit reached
-  if (this.autoDisableAfterUses && this.usageCount >= this.autoDisableAfterUses) {
+  // Auto-disable if usage limit reached (covers both usageLimit and autoDisableAfterUses)
+  const limitReached =
+    (this.usageLimit !== null && this.usageLimit !== undefined && this.usageCount >= this.usageLimit) ||
+    (this.autoDisableAfterUses && this.usageCount >= this.autoDisableAfterUses);
+  if (limitReached) {
     this.status = 'disabled';
+    this.isActive = false;
   }
   
   return this.save();

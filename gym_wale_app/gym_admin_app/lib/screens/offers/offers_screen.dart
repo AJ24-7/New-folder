@@ -33,6 +33,7 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
   bool _isLoading = true;
   String _selectedStatus = 'all';
   String _selectedCategory = 'all';
+  String _selectedCouponStatus = 'active'; // 'active', 'expired', 'disabled', 'all'
   String? _gymId;
   Timer? _refreshTimer;
 
@@ -62,7 +63,10 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
 
   void _startRefreshTimer() {
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted) _loadCoupons();
+      if (mounted) {
+        _loadCoupons();
+        _loadStats();
+      }
     });
   }
 
@@ -121,6 +125,25 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
       if (_selectedCategory != 'all' && offer.category != _selectedCategory) return false;
       return true;
     }).toList();
+  }
+
+  List<GymCoupon> get _filteredCoupons {
+    switch (_selectedCouponStatus) {
+      case 'active':
+        return _coupons
+            .where((c) => c.isActive && c.status == 'active' && !c.isExpired &&
+                (c.usageLimit == null || c.usageCount < c.usageLimit!))
+            .toList();
+      case 'expired':
+        return _coupons.where((c) => c.isExpired).toList();
+      case 'disabled':
+        return _coupons
+            .where((c) => !c.isActive || c.status == 'disabled' ||
+                (c.usageLimit != null && c.usageCount >= c.usageLimit!))
+            .toList();
+      default:
+        return _coupons;
+    }
   }
 
   @override
@@ -502,18 +525,75 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
             ),
           ),
         ),
+        // ── Coupon status filter ───────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: Row(
+            children: [
+              const Icon(Icons.filter_list, size: 16, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final entry in [
+                        ('active', 'Active', Colors.green),
+                        ('expired', 'Expired', Colors.grey),
+                        ('disabled', 'Fully Used', Colors.red),
+                        ('all', 'All', AppTheme.primaryColor),
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            label: Text(entry.$2, style: const TextStyle(fontSize: 12)),
+                            selected: _selectedCouponStatus == entry.$1,
+                            selectedColor: (entry.$3 as Color).withValues(alpha: 0.2),
+                            side: BorderSide(
+                              color: _selectedCouponStatus == entry.$1
+                                  ? (entry.$3 as Color)
+                                  : Colors.grey.shade300,
+                            ),
+                            labelStyle: TextStyle(
+                              color: _selectedCouponStatus == entry.$1
+                                  ? (entry.$3 as Color)
+                                  : null,
+                              fontWeight: _selectedCouponStatus == entry.$1
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                            onSelected: (_) =>
+                                setState(() => _selectedCouponStatus = entry.$1),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
         // ── Coupon list ────────────────────────────────────────────────────
         Expanded(
           child: _coupons.isEmpty
               ? _buildEmptyState('No coupons found', 'Create coupons to offer discounts to your members')
-              : RefreshIndicator(
-                  onRefresh: _loadCoupons,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                    itemCount: _coupons.length,
-                    itemBuilder: (context, index) => _buildCouponCard(_coupons[index]),
-                  ),
-                ),
+              : _filteredCoupons.isEmpty
+                  ? _buildEmptyState(
+                      'No ${_selectedCouponStatus == 'all' ? '' : _selectedCouponStatus + ' '}coupons',
+                      _selectedCouponStatus == 'active'
+                          ? 'All coupons are either expired or fully redeemed'
+                          : 'No coupons match this filter')
+                  : RefreshIndicator(
+                      onRefresh: () async {
+                        await _loadCoupons();
+                        await _loadStats();
+                      },
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                        itemCount: _filteredCoupons.length,
+                        itemBuilder: (context, index) => _buildCouponCard(_filteredCoupons[index]),
+                      ),
+                    ),
         ),
       ],
     );
@@ -1450,23 +1530,39 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                   // Claim status badge
                   _buildClaimStatusBadge(coupon),
                   const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? (coupon.isValid ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2))
-                          : (coupon.isValid ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1)),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      coupon.isValid ? 'ACTIVE' : 'EXPIRED',
-                      style: TextStyle(
-                        color: coupon.isValid ? Colors.green : Colors.red,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                  Builder(builder: (_) {
+                    final Color chipColor;
+                    final String chipLabel;
+                    if (!coupon.isActive || coupon.status == 'disabled') {
+                      chipColor = Colors.red;
+                      chipLabel = 'DISABLED';
+                    } else if (coupon.usageLimit != null && coupon.usageCount >= coupon.usageLimit!) {
+                      chipColor = Colors.red;
+                      chipLabel = 'FULLY USED';
+                    } else if (coupon.isExpired) {
+                      chipColor = Colors.grey;
+                      chipLabel = 'EXPIRED';
+                    } else {
+                      chipColor = Colors.green;
+                      chipLabel = 'ACTIVE';
+                    }
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: chipColor.withValues(alpha:
+                            Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.1),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ),
-                  ),
+                      child: Text(
+                        chipLabel,
+                        style: TextStyle(
+                          color: chipColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    );
+                  }),
                   const SizedBox(width: 8),
                   PopupMenuButton(
                     itemBuilder: (context) => [
@@ -1553,8 +1649,9 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
     final usageCount = coupon.usageCount;
     final usageLimit = coupon.usageLimit;
     String label; Color bg; Color fg;
-    if (!coupon.isValid) { label = 'Expired'; bg = Colors.grey.shade200; fg = Colors.grey.shade600; }
+    if (!coupon.isActive || coupon.status == 'disabled') { label = 'Disabled'; bg = Colors.red.withValues(alpha: 0.12); fg = Colors.red; }
     else if (usageLimit != null && usageCount >= usageLimit) { label = 'Fully Claimed'; bg = Colors.red.withValues(alpha: 0.12); fg = Colors.red; }
+    else if (coupon.isExpired) { label = 'Expired'; bg = Colors.grey.shade200; fg = Colors.grey.shade600; }
     else if (usageCount > 0) { label = 'Partial ($usageCount${usageLimit != null ? '/$usageLimit' : ''})'; bg = Colors.orange.withValues(alpha: 0.12); fg = Colors.orange.shade700; }
     else { label = 'Unclaimed'; bg = Colors.teal.withValues(alpha: 0.12); fg = Colors.teal; }
     return Container(

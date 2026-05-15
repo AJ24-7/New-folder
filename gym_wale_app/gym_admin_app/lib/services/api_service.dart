@@ -376,6 +376,55 @@ class ApiService {
     }
   }
 
+  /// Fetch active, non-expired, non-fully-redeemed coupons for the add-member dialog.
+  Future<List<dynamic>> getAvailableCouponsForAdmin(String gymId) async {
+    try {
+      final response = await _dio.get(
+        '${ApiConfig.coupons}/available-admin',
+        queryParameters: {'gymId': gymId},
+      );
+      if (response.statusCode == 200) {
+        return (response.data['coupons'] ?? []) as List<dynamic>;
+      }
+      return [];
+    } catch (e) {
+      print('Error fetching available coupons for admin: $e');
+      return [];
+    }
+  }
+
+  /// Validate a coupon code for offline member add and return discount details.
+  /// Returns a map with keys: `valid`, `coupon` (map), `discountDetails` (map), `message`.
+  Future<Map<String, dynamic>> validateCouponForAdmin({
+    required String code,
+    required String gymId,
+    double? purchaseAmount,
+  }) async {
+    try {
+      final response = await _dio.post(
+        '${ApiConfig.coupons}/validate-admin',
+        data: {
+          'code': code.trim().toUpperCase(),
+          'gymId': gymId,
+          if (purchaseAmount != null) 'purchaseAmount': purchaseAmount,
+        },
+      );
+      if (response.statusCode == 200) {
+        return Map<String, dynamic>.from(response.data);
+      }
+      return {'valid': false, 'message': 'Validation failed'};
+    } on DioException catch (e) {
+      final body = e.response?.data;
+      if (body is Map && body['message'] != null) {
+        return {'valid': false, 'message': body['message']};
+      }
+      return {'valid': false, 'message': 'Failed to validate coupon'};
+    } catch (e) {
+      print('Error validating coupon for admin: $e');
+      return {'valid': false, 'message': 'Failed to validate coupon'};
+    }
+  }
+
   // Notifications
   Future<List<dynamic>> getNotifications() async {
     try {

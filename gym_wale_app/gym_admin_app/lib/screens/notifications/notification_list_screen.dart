@@ -293,6 +293,10 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
         iconData = Icons.payment;
         iconColor = Colors.green;
         break;
+      case 'cash_payment_request':
+        iconData = Icons.payments_rounded;
+        iconColor = const Color(0xFF22c55e);
+        break;
       case 'holiday-notice':
       case 'holiday':
         iconData = Icons.beach_access;
@@ -394,6 +398,34 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                   _buildDetailRow('Status', notification.metadata!['ticketStatus'].toString()),
                 if (notification.metadata!['ticketPriority'] != null)
                   _buildDetailRow('Priority', notification.metadata!['ticketPriority'].toString()),
+                const SizedBox(height: 16),
+              ],
+
+              // Show cash payment request details
+              if (notification.type == 'cash_payment_request' && notification.metadata != null) ...[
+                const Divider(),
+                const SizedBox(height: 8),
+                Text(
+                  'Cash Payment Details',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green[700],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (notification.metadata!['memberName'] != null)
+                  _buildDetailRow('Member', notification.metadata!['memberName'].toString()),
+                if (notification.metadata!['amount'] != null)
+                  _buildDetailRow('Amount', '₹${notification.metadata!['amount']}'),
+                if (notification.metadata!['planName'] != null)
+                  _buildDetailRow('Plan', notification.metadata!['planName'].toString()),
+                if (notification.metadata!['duration'] != null)
+                  _buildDetailRow('Duration', notification.metadata!['duration'].toString()),
+                if (notification.metadata!['validationCode'] != null)
+                  _buildDetailRow('Reference', notification.metadata!['validationCode'].toString()),
+                if (notification.metadata!['status'] != null)
+                  _buildDetailRow('Status', notification.metadata!['status'].toString()),
                 const SizedBox(height: 16),
               ],
 
