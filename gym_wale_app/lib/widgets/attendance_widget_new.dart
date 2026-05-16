@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../config/app_theme.dart';
 import '../models/attendance_settings.dart';
 import 'package:geolocator/geolocator.dart';
@@ -50,11 +51,39 @@ class _AttendanceWidgetState extends State<AttendanceWidget> {
       _loadAttendanceData();
       _checkGeofenceAndLocation();
     });
+    // Listen for background-task events (e.g. auto-mark entry/exit from the
+    // foreground service) so the widget refreshes without a manual pull-to-refresh.
+    if (!kIsWeb) {
+      FlutterForegroundTask.addTaskDataCallback(_onBackgroundTaskData);
+    }
   }
 
   @override
   void dispose() {
+    if (!kIsWeb) {
+      FlutterForegroundTask.removeTaskDataCallback(_onBackgroundTaskData);
+    }
     super.dispose();
+  }
+
+  /// Called when the background isolate sends data via
+  /// [FlutterForegroundTask.sendDataToMain].  Refreshes attendance state when
+  /// the event is for this widget's gym.
+  void _onBackgroundTaskData(Object data) {
+    if (!mounted) return;
+    try {
+      if (data is Map) {
+        final event = data['event'] as String?;
+        final gymId = data['gymId'] as String?;
+        if ((event == 'attendance_entry' || event == 'attendance_exit') &&
+            gymId == widget.gymId) {
+          debugPrint('[AttendanceWidget] Background event $event for gym $gymId — refreshing');
+          _loadAttendanceData();
+        }
+      }
+    } catch (e) {
+      debugPrint('[AttendanceWidget] Error handling background data: $e');
+    }
   }
 
   Future<void> _loadAttendanceData() async {

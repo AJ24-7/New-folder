@@ -2569,7 +2569,9 @@ class ApiService {
   /// Get today's attendance status
   static Future<Map<String, dynamic>> getTodayAttendance(String gymId) async {
     try {
-      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/today/$gymId');
+      final utcOffset = DateTime.now().timeZoneOffset.inMinutes;
+      final url = Uri.parse('${ApiConfig.baseUrl}/geofence-attendance/today/$gymId')
+          .replace(queryParameters: {'utcOffsetMinutes': utcOffset.toString()});
       
       final response = await http.get(
         url,

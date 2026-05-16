@@ -57,9 +57,13 @@ class _GeofenceTaskHandler extends TaskHandler {
   DateTime? _savedEnterTimeAcrossExit;
   static const int _shortExitToleranceSecs = 180; // 3 minutes
 
-  static const int _kBackendOk        = 0; // success — stop trying
-  static const int _kBackendSoftFail  = 1; // transient error — retry later
-  static const int _kBackendHardBlock = 2; // permanent block — stop today
+  static const int _kBackendOk           = 0; // success — stop trying
+  static const int _kBackendSoftFail     = 1; // transient error — retry later
+  static const int _kBackendHardBlock    = 2; // permanent block — stop today
+  /// Backend confirmed the record already exists (returned alreadyMarked:true).
+  /// Treat like _kBackendOk for state tracking but suppress the welcome
+  /// notification to avoid showing a "fake" pop-up to the user.
+  static const int _kBackendAlreadyMarked = 3;
 
   /// GPS jitter protection: require this many consecutive outside-boundary
   /// readings before we consider the user to have truly exited the geofence.
@@ -558,7 +562,7 @@ class _GeofenceTaskHandler extends TaskHandler {
                 position: position,
                 isEntry: true,
               );
-              if (result == _kBackendOk) {
+              if (result == _kBackendOk || result == _kBackendAlreadyMarked) {
                 _entryMarkedToday = true;
                 _entryReallyMarked = true;
                 _dwellMarkAttempts = 0;
@@ -569,22 +573,27 @@ class _GeofenceTaskHandler extends TaskHandler {
                   await _notifPlugin.cancel(3001);
                 } catch (_) {}
 
-                await _showLocalNotif(
-                  id: 3002,
-                  title: 'Attendance Marked',
-                  body:
-                      'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout!',
-                  icon: 'ic_check',
-                );
+                if (result == _kBackendOk) {
+                  // Genuinely new mark — show welcome notification
+                  await _showLocalNotif(
+                    id: 3002,
+                    title: 'Attendance Marked',
+                    body:
+                        'Auto check-in at ${_fmtTime(DateTime.now())} — enjoy your workout!',
+                    icon: 'ic_check',
+                  );
+                }
+                // Always notify main isolate so the subscription screen
+                // (AttendanceWidget) and AttendanceProvider refresh their state.
+                // Skip for alreadyMarked to avoid a duplicate welcome pop-up, but
+                // the UI still needs to know attendance is recorded.
                 try {
                   FlutterForegroundTask.sendDataToMain({
                     'event': 'attendance_entry',
                     'gymId': gymId,
                     'timestamp': DateTime.now().toIso8601String(),
+                    'alreadyMarked': result == _kBackendAlreadyMarked,
                   });
-                  // If exit auto-mark is disabled, attendance is fully done —
-                  // send the stop event in the same try block.
-                  // No service-stopped event needed — service stays alive
                 } catch (_) {}
 
                 // If exit auto-mark is disabled, attendance is fully done for today.
@@ -747,11 +756,15 @@ class _GeofenceTaskHandler extends TaskHandler {
               'Authorization': 'Bearer $token',
             },
             body: jsonEncode({
-              'gymId':         gymId,
-              'latitude':      position.latitude,
-              'longitude':     position.longitude,
-              'accuracy':      position.accuracy,
-              'isMockLocation': position.isMocked,
+              'gymId':            gymId,
+              'latitude':         position.latitude,
+              'longitude':        position.longitude,
+              'accuracy':         position.accuracy,
+              'isMockLocation':   position.isMocked,
+              // Pass client timezone offset so the server stores the attendance
+              // record on the correct local date (fixes UTC midnight off-by-one
+              // for users in UTC+ timezones like IST UTC+5:30).
+              'utcOffsetMinutes': DateTime.now().timeZoneOffset.inMinutes,
               if (overrideTimestamp != null)
                 'timestamp': overrideTimestamp.toIso8601String(),
             }),
@@ -774,6 +787,14 @@ class _GeofenceTaskHandler extends TaskHandler {
           _lastBackendErrorMsg =
               body['message'] as String? ?? 'Server rejected attendance request';
           return _classifyBackendFailure(_lastBackendErrorMsg!);
+        }
+        // Detect "already marked today" response — treat as success for state
+        // tracking but return _kBackendAlreadyMarked so the caller can skip the
+        // welcome notification (avoids a "fake" check-in pop-up on service restart).
+        if (body != null && body['alreadyMarked'] == true) {
+          debugPrint('[BGTask] ${isEntry ? "Entry" : "Exit"} already in DB — syncing local state silently');
+          _lastBackendErrorMsg = null;
+          return _kBackendAlreadyMarked;
         }
         debugPrint('[BGTask] ${isEntry ? "Entry" : "Exit"} backend call OK');
         _lastBackendErrorMsg = null;
