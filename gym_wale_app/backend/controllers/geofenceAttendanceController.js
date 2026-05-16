@@ -103,7 +103,7 @@ const isWithinTimeWindow = (openingTime, closingTime) => {
 // Auto-mark attendance on geofence ENTER event
 exports.autoMarkEntry = async (req, res) => {
     try {
-        const { gymId, latitude, longitude, accuracy, isMockLocation } = req.body;
+        const { gymId, latitude, longitude, accuracy, isMockLocation, utcOffsetMinutes } = req.body;
         const memberId = req.user.id; // Assuming JWT middleware sets req.user
 
         // Validation
@@ -285,16 +285,27 @@ exports.autoMarkEntry = async (req, res) => {
             }
         }
 
-        // Get today's date at midnight for consistent date comparison
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Compute "today" in the client's local timezone so attendance records
+        // filed between local midnight and UTC midnight land on the correct date.
+        // utcOffsetMinutes: client sends DateTime.now().timeZoneOffset.inMinutes
+        // (positive for east of UTC, e.g. IST = +330).  Fall back to UTC if absent.
+        const offsetMs = (typeof utcOffsetMinutes === 'number' && isFinite(utcOffsetMinutes))
+            ? utcOffsetMinutes * 60 * 1000
+            : 0;
+        const localNow = new Date(Date.now() + offsetMs);
+        const localMidnight = new Date(
+            Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth(), localNow.getUTCDate())
+        );
+        // "today" window: [localMidnight, localMidnight + 24h)
+        const today     = localMidnight;
+        const tomorrow  = new Date(localMidnight.getTime() + 24 * 60 * 60 * 1000);
 
         // Check if attendance already marked today (try Member._id first, fall back to User._id)
         let existingAttendance = await Attendance.findOne({
             gymId: gymId,
             personId: resolvedPersonId,
             personType: 'Member',
-            date: today
+            date: { $gte: today, $lt: tomorrow }
         });
         // Backward compat: also check by User._id for older records
         if (!existingAttendance && resolvedPersonId.toString() !== memberId.toString()) {
@@ -302,7 +313,7 @@ exports.autoMarkEntry = async (req, res) => {
                 gymId: gymId,
                 personId: memberId,
                 personType: 'Member',
-                date: today
+                date: { $gte: today, $lt: tomorrow }
             });
         }
 
@@ -474,7 +485,7 @@ exports.autoMarkEntry = async (req, res) => {
 // Auto-mark exit on geofence EXIT event
 exports.autoMarkExit = async (req, res) => {
     try {
-        const { gymId, latitude, longitude, accuracy } = req.body;
+        const { gymId, latitude, longitude, accuracy, timestamp } = req.body;
         const memberId = req.user.id;
 
         // Validation
@@ -505,23 +516,30 @@ exports.autoMarkExit = async (req, res) => {
             }
         }
 
-        // Get today's date
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Get today's date using UTC offset from client (same logic as autoMarkEntry)
+        const exitUtcOffsetMinutes = req.body.utcOffsetMinutes;
+        const exitOffsetMs = (typeof exitUtcOffsetMinutes === 'number' && isFinite(exitUtcOffsetMinutes))
+            ? exitUtcOffsetMinutes * 60 * 1000 : 0;
+        const exitLocalNow = new Date(Date.now() + exitOffsetMs);
+        const exitLocalMidnight = new Date(
+            Date.UTC(exitLocalNow.getUTCFullYear(), exitLocalNow.getUTCMonth(), exitLocalNow.getUTCDate())
+        );
+        const exitToday    = exitLocalMidnight;
+        const exitTomorrow = new Date(exitLocalMidnight.getTime() + 24 * 60 * 60 * 1000);
 
         // Find today's attendance record (try Member._id first, fall back to User._id)
         let attendance = await Attendance.findOne({
             gymId: gymId,
             personId: resolvedPersonId,
             personType: 'Member',
-            date: today
+            date: { $gte: exitToday, $lt: exitTomorrow }
         });
         if (!attendance && resolvedPersonId.toString() !== memberId.toString()) {
             attendance = await Attendance.findOne({
                 gymId: gymId,
                 personId: memberId,
                 personType: 'Member',
-                date: today
+                date: { $gte: exitToday, $lt: exitTomorrow }
             });
         }
 
@@ -541,8 +559,24 @@ exports.autoMarkExit = async (req, res) => {
 
         // Calculate duration inside gym
         const entryTime = new Date(attendance.geofenceEntry.timestamp);
-        const exitTime = new Date();
-        const durationInMinutes = Math.round((exitTime - entryTime) / (1000 * 60));
+        const serverNow = new Date();
+
+        // Accept the client's override timestamp (the estimated actual departure
+        // time, computed as now minus the GPS exit-grace period).  Validate it:
+        //   • must be a parseable date
+        //   • must not be in the future
+        //   • must not be older than 2 hours (anti-fraud)
+        let exitTime = serverNow;
+        if (timestamp) {
+            const clientTime = new Date(timestamp);
+            const ageMs = serverNow - clientTime;
+            if (!isNaN(clientTime.getTime()) && ageMs >= 0 && ageMs <= 2 * 60 * 60 * 1000) {
+                exitTime = clientTime;
+            }
+        }
+
+        // Minimum stay validation uses server time to prevent client manipulation
+        const durationInMinutes = Math.round((serverNow - entryTime) / (1000 * 60));
 
         // Minimum stay validation (prevent quick in/out fraud)
         const minimumStayMinutes = exitGeofenceConfig ? (exitGeofenceConfig.minimumStayDuration || 5) : 5;
@@ -554,13 +588,16 @@ exports.autoMarkExit = async (req, res) => {
             });
         }
 
+        // Actual workout duration uses the validated exit timestamp
+        const recordedDuration = Math.round((exitTime - entryTime) / (1000 * 60));
+
         // Update attendance with exit information
         attendance.geofenceExit = {
             timestamp: exitTime,
             latitude,
             longitude,
             accuracy,
-            durationInside: durationInMinutes
+            durationInside: recordedDuration
         };
         attendance.checkOutTime = exitTime.toTimeString().split(' ')[0].substring(0, 5); // HH:MM format
 
@@ -573,7 +610,7 @@ exports.autoMarkExit = async (req, res) => {
             
             const notification = new Notification({
                 title: '👋 Gym Exit Recorded',
-                message: `You checked out from ${gymName} at ${attendance.checkOutTime}. Workout duration: ${durationInMinutes} minutes. Great session!`,
+                message: `You checked out from ${gymName} at ${attendance.checkOutTime}. Workout duration: ${recordedDuration} minutes. Great session!`,
                 recipient: memberId,
                 recipientType: 'Member',
                 type: 'attendance',
@@ -581,7 +618,7 @@ exports.autoMarkExit = async (req, res) => {
                     attendanceId: attendance._id,
                     gymId: gymId,
                     checkOutTime: attendance.checkOutTime,
-                    durationInMinutes: durationInMinutes,
+                    durationInMinutes: recordedDuration,
                     authenticationMethod: 'geofence'
                 },
                 read: false,
@@ -593,12 +630,12 @@ exports.autoMarkExit = async (req, res) => {
             await sendFcmPush(
                 req.user.fcmToken,
                 '👋 Gym Exit Recorded',
-                `Great session at ${gymName}! You trained for ${durationInMinutes} min. See you next time!`,
+                `Great session at ${gymName}! You trained for ${recordedDuration} min. See you next time!`,
                 {
                     type: 'attendance_exit',
                     gymId: String(gymId),
                     attendanceId: String(attendance._id),
-                    durationInMinutes: String(durationInMinutes),
+                    durationInMinutes: String(recordedDuration),
                 }
             );
         } catch (notifError) {
@@ -609,10 +646,10 @@ exports.autoMarkExit = async (req, res) => {
             success: true,
             message: 'Gym exit recorded successfully',
             attendance: attendance,
-            durationInMinutes,
+            durationInMinutes: recordedDuration,
             notification: {
                 title: '👋 Gym Exit Recorded',
-                message: `Workout duration: ${durationInMinutes} minutes. Great session!`
+                message: `Workout duration: ${recordedDuration} minutes. Great session!`
             }
         });
 
@@ -690,14 +727,21 @@ exports.getTodayAttendance = async (req, res) => {
             }
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        // Compute client-local "today" window from query parameter
+        const todayUtcOffset = parseInt(req.query.utcOffsetMinutes, 10);
+        const todayOffsetMs = (isFinite(todayUtcOffset)) ? todayUtcOffset * 60 * 1000 : 0;
+        const todayLocalNow = new Date(Date.now() + todayOffsetMs);
+        const todayLocalMidnight = new Date(
+            Date.UTC(todayLocalNow.getUTCFullYear(), todayLocalNow.getUTCMonth(), todayLocalNow.getUTCDate())
+        );
+        const todayStart = todayLocalMidnight;
+        const todayEnd   = new Date(todayLocalMidnight.getTime() + 24 * 60 * 60 * 1000);
 
         const attendance = await Attendance.findOne({
             gymId,
             personId: { $in: personIds },
             personType: 'Member',
-            date: today
+            date: { $gte: todayStart, $lt: todayEnd }
         });
 
         return res.status(200).json({
