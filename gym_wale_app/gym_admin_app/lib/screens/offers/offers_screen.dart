@@ -548,15 +548,15 @@ class _OffersScreenState extends State<OffersScreen> with SingleTickerProviderSt
                           child: ChoiceChip(
                             label: Text(entry.$2, style: const TextStyle(fontSize: 12)),
                             selected: _selectedCouponStatus == entry.$1,
-                            selectedColor: (entry.$3 as Color).withValues(alpha: 0.2),
+                            selectedColor: (entry.$3).withValues(alpha: 0.2),
                             side: BorderSide(
                               color: _selectedCouponStatus == entry.$1
-                                  ? (entry.$3 as Color)
+                                  ? entry.$3
                                   : Colors.grey.shade300,
                             ),
                             labelStyle: TextStyle(
                               color: _selectedCouponStatus == entry.$1
-                                  ? (entry.$3 as Color)
+                                  ? entry.$3
                                   : null,
                               fontWeight: _selectedCouponStatus == entry.$1
                                   ? FontWeight.bold
