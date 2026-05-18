@@ -76,6 +76,12 @@ const memberProblemReportSchema = new mongoose.Schema({
     },
     respondedAt: Date
   },
+  // Thread of user follow-up replies after admin response
+  userReplies: [{
+    message: { type: String, required: true, maxlength: 2000 },
+    sentAt: { type: Date, default: Date.now },
+    readByAdmin: { type: Boolean, default: false }
+  }],
   resolutionNotes: String,
   createdAt: {
     type: Date,

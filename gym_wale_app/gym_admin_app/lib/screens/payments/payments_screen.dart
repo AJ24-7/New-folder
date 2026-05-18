@@ -145,7 +145,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     });
 
     try {
-      final stats = await _paymentService.getPaymentStats();
+      final stats = await _paymentService.getPaymentStats(
+        month: _selectedMonth,
+        year: _selectedYear,
+      );
       final chartData = await _paymentService.getPaymentChartData(
         month: _selectedMonth,
         year: _selectedYear,
@@ -467,12 +470,16 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             // Payment Statistics Cards
             _buildStatsGrid(l10n),
             SizedBox(height: isMobile ? 16 : 24),
+
+            // Recent Payments (directly below stats for instant visibility)
+            _buildRecentPaymentsSection(l10n, isDark),
+            SizedBox(height: isMobile ? 16 : 24),
             
             // Payment Chart
             _buildPaymentChart(l10n, isDark),
             SizedBox(height: isMobile ? 16 : 24),
             
-            // Payment Content Grid - Stack on mobile, side-by-side on desktop
+            // Dues + Pending side-by-side on desktop
             if (isDesktop)
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,18 +491,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   ),
                   const SizedBox(width: 16),
                   
-                  // Right Column
+                  // Pending Payments Section
                   Expanded(
-                    child: Column(
-                      children: [
-                        // Pending Payments Section
-                        _buildPendingPaymentsSection(l10n, isDark),
-                        const SizedBox(height: 16),
-                        
-                        // Recent Payments Section
-                        _buildRecentPaymentsSection(l10n, isDark),
-                      ],
-                    ),
+                    child: _buildPendingPaymentsSection(l10n, isDark),
                   ),
                 ],
               )
@@ -508,10 +506,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   
                   // Pending Payments Section
                   _buildPendingPaymentsSection(l10n, isDark),
-                  SizedBox(height: isMobile ? 12 : 16),
-                  
-                  // Recent Payments Section
-                  _buildRecentPaymentsSection(l10n, isDark),
                 ],
               ),
           ],
@@ -1276,12 +1270,21 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   Future<void> _loadChartData() async {
     try {
-      final chartData = await _paymentService.getPaymentChartData(
-        month: _selectedMonth,
-        year: _selectedYear,
-      );
+      final results = await Future.wait([
+        _paymentService.getPaymentChartData(
+          month: _selectedMonth,
+          year: _selectedYear,
+        ),
+        _paymentService.getPaymentStats(
+          month: _selectedMonth,
+          year: _selectedYear,
+        ),
+      ]);
       if (!mounted) return;
-      setState(() => _chartData = chartData);
+      setState(() {
+        _chartData = results[0] as PaymentChartData;
+        _stats = results[1] as PaymentStats;
+      });
     } catch (e) {
       debugPrint('Error loading chart data: $e');
     }
@@ -1317,195 +1320,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
   void _showAmountReceivedDetails() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          width: 600,
-          constraints: const BoxConstraints(maxHeight: 700),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.successColor.withValues(alpha: 0.1),
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppTheme.successColor.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const FaIcon(
-                        FontAwesomeIcons.arrowDown,
-                        color: AppTheme.successColor,
-                        size: 24,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Amount Received',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _currencyFormat.format(_stats?.amountReceived ?? 0),
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.successColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const FaIcon(FontAwesomeIcons.xmark, size: 20),
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Content
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Stats Summary
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildDetailStatCard(
-                              'Total Received',
-                              _stats?.totalReceived.toString() ?? '0',
-                              FontAwesomeIcons.receipt,
-                              AppTheme.successColor,
-                              'transactions',
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildDetailStatCard(
-                              'Pending',
-                              _currencyFormat.format(_stats?.pendingPayments ?? 0),
-                              FontAwesomeIcons.clock,
-                              AppTheme.warningColor,
-                              '${_stats?.totalPending ?? 0} pending',
-                            ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 24),
-                      
-                      // Pending Payments Section
-                      if (_pendingPayments.isNotEmpty) ...[
-                        Row(
-                          children: [
-                            const FaIcon(
-                              FontAwesomeIcons.clock,
-                              size: 16,
-                              color: AppTheme.warningColor,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'Pending Payments',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const Spacer(),
-                            Text(
-                              '${_pendingPayments.length} items',
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppTheme.textSecondaryColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        ListView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemCount: _pendingPayments.length > 5 ? 5 : _pendingPayments.length,
-                          itemBuilder: (context, index) {
-                            final payment = _pendingPayments[index];
-                            return _buildPaymentCard(payment, isDark, showMarkPaid: true);
-                          },
-                        ),
-                        if (_pendingPayments.length > 5)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Center(
-                              child: TextButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(context);
-                                  _showAllPendingPayments();
-                                },
-                                icon: const FaIcon(FontAwesomeIcons.arrowRight, size: 14),
-                                label: Text('View All ${_pendingPayments.length} Pending'),
-                              ),
-                            ),
-                          ),
-                      ] else ...[
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(32),
-                            child: Column(
-                              children: [
-                                const FaIcon(
-                                  FontAwesomeIcons.circleCheck,
-                                  size: 48,
-                                  color: AppTheme.successColor,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No pending payments!',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    color: AppTheme.successColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'All payments are up to date',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.textSecondaryColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      builder: (context) => _AmountReceivedDialog(
+        initialStats: _stats,
+        paymentService: _paymentService,
+        currencyFormat: _currencyFormat,
+        isDark: isDark,
+        initialMonth: _selectedMonth,
+        initialYear: _selectedYear,
       ),
     );
   }
@@ -1933,6 +1756,525 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         title: 'All Recent Payments',
         payments: _recentPayments,
         isDark: Theme.of(context).brightness == Brightness.dark,
+      ),
+    );
+  }
+}
+
+// Enhanced Amount Received Dialog with month/year selection
+class _AmountReceivedDialog extends StatefulWidget {
+  final PaymentStats? initialStats;
+  final PaymentService paymentService;
+  final NumberFormat currencyFormat;
+  final bool isDark;
+  final int initialMonth;
+  final int initialYear;
+
+  const _AmountReceivedDialog({
+    required this.initialStats,
+    required this.paymentService,
+    required this.currencyFormat,
+    required this.isDark,
+    required this.initialMonth,
+    required this.initialYear,
+  });
+
+  @override
+  State<_AmountReceivedDialog> createState() => _AmountReceivedDialogState();
+}
+
+class _AmountReceivedDialogState extends State<_AmountReceivedDialog> {
+  late int _selectedMonth;
+  late int _selectedYear;
+  List<Payment> _receivedPayments = [];
+  PaymentStats? _monthStats;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMonth = widget.initialMonth;
+    _selectedYear = widget.initialYear;
+    _monthStats = widget.initialStats;
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final results = await Future.wait([
+        widget.paymentService.getPaymentStats(
+          month: _selectedMonth,
+          year: _selectedYear,
+        ),
+        widget.paymentService.getRecentPayments(
+          limit: 100,
+          type: 'received',
+          month: _selectedMonth,
+          year: _selectedYear,
+        ),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _monthStats = results[0] as PaymentStats;
+        _receivedPayments = results[1] as List<Payment>;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final monthName = DateFormat.MMMM().format(DateTime(_selectedYear, _selectedMonth));
+    final totalReceived = _monthStats?.amountReceived ?? 0;
+    final txCount = _monthStats?.totalReceived ?? _receivedPayments.length;
+    final pending = _monthStats?.pendingPayments ?? 0;
+    final pendingCount = _monthStats?.totalPending ?? 0;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 620,
+        constraints: const BoxConstraints(maxHeight: 750),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ── Header ──────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 20, 12, 20),
+              decoration: BoxDecoration(
+                color: AppTheme.successColor.withValues(alpha: 0.08),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.successColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const FaIcon(
+                          FontAwesomeIcons.arrowTrendUp,
+                          color: AppTheme.successColor,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Amount Received',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const FaIcon(FontAwesomeIcons.xmark, size: 18),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Month / Year selectors
+                  Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: widget.isDark
+                                ? Colors.grey.shade800
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.successColor.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: DropdownButton<int>(
+                            value: _selectedMonth,
+                            underline: const SizedBox.shrink(),
+                            isExpanded: true,
+                            isDense: true,
+                            items: List.generate(12, (i) => i + 1)
+                                .map((m) => DropdownMenuItem(
+                                      value: m,
+                                      child: Text(
+                                        DateFormat.MMMM().format(DateTime(2000, m)),
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() => _selectedMonth = v);
+                              _loadData();
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: widget.isDark
+                                ? Colors.grey.shade800
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.successColor.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: DropdownButton<int>(
+                            value: _selectedYear,
+                            underline: const SizedBox.shrink(),
+                            isExpanded: true,
+                            isDense: true,
+                            items: List.generate(
+                              5,
+                              (i) => DateTime.now().year - 2 + i,
+                            )
+                                .map((y) => DropdownMenuItem(
+                                      value: y,
+                                      child: Text(
+                                        y.toString(),
+                                        style: const TextStyle(fontSize: 14),
+                                      ),
+                                    ))
+                                .toList(),
+                            onChanged: (v) {
+                              if (v == null) return;
+                              setState(() => _selectedYear = v);
+                              _loadData();
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Total for selected month
+                  if (_isLoading)
+                    const SizedBox(
+                      height: 32,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          widget.currencyFormat.format(totalReceived),
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.successColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Text(
+                            'in $monthName $_selectedYear',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.textSecondaryColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+
+            // ── Summary Stat Row ─────────────────────────────────────────
+            if (!_isLoading)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Transactions',
+                        value: txCount.toString(),
+                        icon: FontAwesomeIcons.receipt,
+                        color: AppTheme.successColor,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Avg per Tx',
+                        value: txCount > 0
+                            ? widget.currencyFormat.format(totalReceived / txCount)
+                            : '—',
+                        icon: FontAwesomeIcons.chartLine,
+                        color: AppTheme.infoColor,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _buildStatTile(
+                        label: 'Pending',
+                        value: widget.currencyFormat.format(pending),
+                        icon: FontAwesomeIcons.clock,
+                        color: AppTheme.warningColor,
+                        subtitle: '$pendingCount items',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+            // ── Payments List ────────────────────────────────────────────
+            Flexible(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _receivedPayments.isEmpty
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(40),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FaIcon(
+                                  FontAwesomeIcons.moneyBillTransfer,
+                                  size: 48,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No received payments in $monthName $_selectedYear',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Row(
+                                children: [
+                                  const FaIcon(
+                                    FontAwesomeIcons.arrowDown,
+                                    size: 14,
+                                    color: AppTheme.successColor,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Received Payments — $monthName $_selectedYear',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    '${_receivedPayments.length} items',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textSecondaryColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: ListView.builder(
+                                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                itemCount: _receivedPayments.length,
+                                itemBuilder: (context, index) {
+                                  final payment = _receivedPayments[index];
+                                  return _buildReceivedPaymentTile(payment);
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatTile({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+    String? subtitle,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              FaIcon(icon, size: 12, color: color),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: color,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (subtitle != null)
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 10,
+                color: color.withValues(alpha: 0.7),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReceivedPaymentTile(Payment payment) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: widget.isDark
+            ? Colors.grey.shade800.withValues(alpha: 0.3)
+            : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: widget.isDark ? Colors.grey.shade700 : Colors.grey.shade200,
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppTheme.successColor.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Center(
+              child: FaIcon(
+                FontAwesomeIcons.arrowDown,
+                size: 14,
+                color: AppTheme.successColor,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  payment.memberName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  payment.description ?? payment.planName ?? 'Membership payment',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondaryColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Row(
+                  children: [
+                    Text(
+                      DateFormat('dd MMM yyyy').format(payment.createdAt),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        color: AppTheme.textSecondaryColor,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: AppTheme.successColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        payment.method.toUpperCase(),
+                        style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.successColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '+${widget.currencyFormat.format(payment.amount)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+              color: AppTheme.successColor,
+            ),
+          ),
+        ],
       ),
     );
   }

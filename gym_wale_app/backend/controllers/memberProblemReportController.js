@@ -408,3 +408,80 @@ exports.getProblemReportById = async (req, res) => {
     });
   }
 };
+
+// User: Reply to admin's response on their problem report
+exports.userReplyToReport = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { message } = req.body;
+    const userId = req.user._id;
+
+    if (!message || !message.trim()) {
+      return res.status(400).json({ success: false, message: 'Reply message is required' });
+    }
+
+    // Find the report belonging to this user (reportId is the custom MPR-xxx string)
+    const report = await MemberProblemReport.findOne({ reportId, userId })
+      .populate('gymId', 'gymName fcmTokens');
+
+    if (!report) {
+      return res.status(404).json({ success: false, message: 'Problem report not found' });
+    }
+
+    // Append the user reply
+    report.userReplies = report.userReplies || [];
+    report.userReplies.push({ message: message.trim(), sentAt: new Date() });
+    report.updatedAt = new Date();
+    await report.save();
+
+    // Notify gym admin via DB notification + FCM push
+    try {
+      const gymId = report.gymId?._id ?? report.gymId;
+      const userName = req.user.name || req.user.firstName || 'Member';
+
+      // Save admin notification
+      const adminNotif = new Notification({
+        title: `💬 Member Reply on Report`,
+        message: `${userName} replied to their report "${report.subject}": ${message.trim().substring(0, 100)}`,
+        type: 'grievance',
+        priority: 'normal',
+        icon: 'fa-reply',
+        color: '#2196f3',
+        user: gymId,
+        metadata: {
+          reportId: report.reportId,
+          category: report.category,
+          subject: report.subject,
+          memberReply: message.trim(),
+          source: 'member-problem-report-reply',
+        },
+      });
+      await adminNotif.save();
+
+      // FCM push to gym admin
+      const adminFcmTokens = await gymNotificationService.getGymAdminFCMTokens(gymId);
+      if (adminFcmTokens.length > 0) {
+        await fcmService.notifyGymAdmin(
+          adminFcmTokens,
+          `💬 Member Reply: ${report.subject}`,
+          message.trim().substring(0, 150),
+          {
+            type: 'grievance',
+            notificationId: adminNotif._id.toString(),
+            gymId: gymId.toString(),
+            reportId: report.reportId,
+            channel: 'high_priority_channel',
+          }
+        );
+      }
+    } catch (notifErr) {
+      console.error('⚠️ Failed to notify admin of user reply:', notifErr.message);
+    }
+
+    res.json({ success: true, message: 'Reply sent successfully', report });
+  } catch (error) {
+    console.error('Error sending user reply to report:', error);
+    res.status(500).json({ success: false, message: 'Failed to send reply', error: error.message });
+  }
+};
+

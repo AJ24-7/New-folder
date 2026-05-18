@@ -1814,9 +1814,26 @@ class ApiService {
     }
   }
 
+  /// Submit a user reply to an admin's response on a problem report.
+  /// [reportId] is the custom MPR-xxx string from notification metadata.
+  static Future<bool> submitReportReply(String reportId, String message) async {
+    if (_token == null) return false;
+    try {
+      final url = Uri.parse(ApiConfig.baseUrl + '/member-problems/$reportId/user-reply');
+      final response = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode({'message': message}),
+      ).timeout(const Duration(seconds: 30));
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint('[API] submitReportReply error: $e');
+      return false;
+    }
+  }
+
   /// Export user account data
-  static Future<Map<String, dynamic>?> exportAccountData() async {
-    if (_token == null) {
+  static Future<Map<String, dynamic>?> exportAccountData() async {    if (_token == null) {
       return null;
     }
     

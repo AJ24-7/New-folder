@@ -34,10 +34,17 @@ class PaymentService {
     ));
   }
 
-  /// Get payment statistics
-  Future<PaymentStats> getPaymentStats() async {
+  /// Get payment statistics (optionally filtered by month/year)
+  Future<PaymentStats> getPaymentStats({int? month, int? year}) async {
     try {
-      final response = await _dio.get('/api/payments/stats');
+      final queryParams = <String, dynamic>{};
+      if (month != null) queryParams['month'] = month;
+      if (year != null) queryParams['year'] = year;
+
+      final response = await _dio.get(
+        '/api/payments/stats',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
       
       if (response.statusCode == 200) {
         // Backend returns {success: true, data: {...}}
@@ -88,6 +95,8 @@ class PaymentService {
     int limit = 10,
     String? type,
     String? status,
+    int? month,
+    int? year,
   }) async {
     try {
       final queryParams = <String, dynamic>{
@@ -96,6 +105,8 @@ class PaymentService {
       
       if (type != null) queryParams['type'] = type;
       if (status != null) queryParams['status'] = status;
+      if (month != null) queryParams['month'] = month;
+      if (year != null) queryParams['year'] = year;
 
       final response = await _dio.get(
         '/api/payments/recent',

@@ -5,6 +5,16 @@ import '../models/user.dart';
 import '../services/api_service.dart';
 import '../services/firebase_notification_service.dart';
 
+/// Helper: register the FCM token with the backend after authentication.
+void _registerFcmTokenWithBackend() {
+  if (kIsWeb) return;
+  final token = FirebaseNotificationService.instance.fcmToken;
+  if (token != null) {
+    ApiService.registerFcmToken(token).catchError(
+        (e) => debugPrint('[AUTH] FCM token registration error: $e'));
+  }
+}
+
 class AuthProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
@@ -46,6 +56,7 @@ class AuthProvider extends ChangeNotifier {
         _error = null;
         // Persist user data locally so the session survives restarts.
         if (_user != null) await ApiService.cacheUser(_user!);
+        _registerFcmTokenWithBackend();
         notifyListeners();
         return true;
       } else {
@@ -75,6 +86,7 @@ class AuthProvider extends ChangeNotifier {
         _user = result['user'];
         _error = null;
         if (_user != null) await ApiService.cacheUser(_user!);
+        _registerFcmTokenWithBackend();
         notifyListeners();
         return true;
       } else {
@@ -104,6 +116,7 @@ class AuthProvider extends ChangeNotifier {
         _user = result['user'];
         _error = null;
         if (_user != null) await ApiService.cacheUser(_user!);
+        _registerFcmTokenWithBackend();
         notifyListeners();
         return true;
       } else {

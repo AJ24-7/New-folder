@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'api_service.dart';
 import 'local_notification_service.dart';
 
 /// Top-level background handler – must be outside any class.
@@ -142,6 +143,11 @@ class FirebaseNotificationService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('fcm_token', token);
+      // Sync token to backend whenever it is obtained or refreshed.
+      if (ApiService.isAuthenticated) {
+        ApiService.registerFcmToken(token).catchError(
+            (e) => debugPrint('[FCM] Backend token sync error: $e'));
+      }
     } catch (e) {
       debugPrint('[FCM] _persistToken error: $e');
     }

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../config/app_theme.dart';
 import '../models/notification.dart';
 import '../providers/notification_provider.dart';
+import '../services/api_service.dart';
 import '../l10n/app_localizations.dart';
 import 'support_ticket_screen.dart';
 
@@ -343,6 +344,27 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
                           ),
                         ],
                       ),
+                      // Reply button for admin responses to problem reports
+                      if (notification.type == 'problem-report-response' ||
+                          notification.type == 'report_reply') ...[
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () => _showReplyDialog(notification),
+                            icon: const Icon(Icons.reply, size: 16),
+                            label: const Text('Reply to Admin', style: TextStyle(fontSize: 13)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFFFF5722),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              side: const BorderSide(color: Color(0xFFFF5722)),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -590,5 +612,94 @@ class _NotificationsScreenState extends State<NotificationsScreen> with SingleTi
       // Navigator.pushNamed(context, notification.actionData!);
     }
     // Add more action handlers as needed
+  }
+
+  void _showReplyDialog(AppNotification notification) {
+    final reportId = notification.data?['reportId'] as String?;
+    if (reportId == null || reportId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cannot reply: report ID not found')),
+      );
+      return;
+    }
+
+    final TextEditingController replyController = TextEditingController();
+    bool isSending = false;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.reply, color: Color(0xFFFF5722)),
+              SizedBox(width: 8),
+              Text('Reply to Admin'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Replying to: ${notification.title}',
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: replyController,
+                maxLines: 4,
+                maxLength: 500,
+                decoration: const InputDecoration(
+                  hintText: 'Write your follow-up message...',
+                  border: OutlineInputBorder(),
+                  contentPadding: EdgeInsets.all(12),
+                ),
+                autofocus: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSending ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton.icon(
+              onPressed: isSending
+                  ? null
+                  : () async {
+                      final message = replyController.text.trim();
+                      if (message.isEmpty) return;
+                      setDialogState(() => isSending = true);
+                      final success = await ApiService.submitReportReply(reportId, message);
+                      if (ctx.mounted) {
+                        Navigator.pop(ctx);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              success ? 'Reply sent to admin' : 'Failed to send reply. Please try again.',
+                            ),
+                            backgroundColor: success ? Colors.green : Colors.red,
+                          ),
+                        );
+                      }
+                    },
+              icon: isSending
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.send, size: 16),
+              label: Text(isSending ? 'Sending...' : 'Send Reply'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFFF5722),
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

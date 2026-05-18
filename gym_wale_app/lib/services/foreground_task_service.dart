@@ -728,6 +728,13 @@ class _GeofenceTaskHandler extends TaskHandler {
   //                            boundary); worth retrying.
   //   _kBackendHardBlock (2) → permanent server block (no membership, geofence
   //                            disabled, mock-location fraud); stop for today.
+
+  /// Hardcoded fallback origin — used when 'api_base_url' is not yet stored
+  /// in SharedPreferences (e.g. the very first tick after a fresh install
+  /// before main() has written the pref, or if the write failed silently).
+  /// Must match ApiConfig._defaultApiOrigin without the /api suffix.
+  static const _kApiOriginFallback = 'https://gym-wale.onrender.com';
+
   Future<int> _callBackend({
     required SharedPreferences prefs,
     required String gymId,
@@ -736,23 +743,40 @@ class _GeofenceTaskHandler extends TaskHandler {
     DateTime? overrideTimestamp,
   }) async {
     try {
-      final token   = prefs.getString('auth_token');
-      final baseUrl = prefs.getString('api_base_url');
+      final token = prefs.getString('auth_token');
 
-      if (token == null || baseUrl == null) {
-        debugPrint('[BGTask] No auth token or base URL — cannot call backend');
+      if (token == null || token.isEmpty) {
+        debugPrint('[BGTask] No auth token — cannot call backend');
+        _lastBackendErrorMsg = 'Not authenticated';
         return _kBackendSoftFail;
       }
 
+      // ── Resolve origin URL ─────────────────────────────────────────────────
+      // Prefer the value persisted by ForegroundTaskService.persistApiBaseUrl.
+      // If it is missing (pref never written, cleared, or migration) fall back
+      // to the hardcoded constant so the background isolate can ALWAYS reach
+      // the server.  Also strip a trailing '/api' so that an old app version
+      // that accidentally stored ApiConfig.baseUrl (with '/api') does not
+      // produce a double-slash path like /api/api/geofence-attendance/...
+      // which would 404 before hitting any route middleware on the server,
+      // causing "no logs on Render" even though the HTTP call was made.
+      final rawBase = prefs.getString('api_base_url') ?? '';
+      final origin = rawBase.isEmpty
+          ? _kApiOriginFallback
+          : rawBase.replaceAll(RegExp(r'/api/*$'), '').trimRight();
+
       final endpoint = isEntry
-          ? '$baseUrl/api/geofence-attendance/auto-mark/entry'
-          : '$baseUrl/api/geofence-attendance/auto-mark/exit';
+          ? '$origin/api/geofence-attendance/auto-mark/entry'
+          : '$origin/api/geofence-attendance/auto-mark/exit';
+
+      debugPrint('[BGTask] ▶ POST $endpoint (gymId=$gymId lat=${position.latitude.toStringAsFixed(5)} lng=${position.longitude.toStringAsFixed(5)} acc=${position.accuracy.toStringAsFixed(0)}m)');
 
       final resp = await http
           .post(
             Uri.parse(endpoint),
             headers: {
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
               'Authorization': 'Bearer $token',
             },
             body: jsonEncode({

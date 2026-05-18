@@ -10,7 +10,8 @@ const {
   getGymProblemReports,
   respondToMemberProblem,
   updateProblemReportStatus,
-  getProblemReportById
+  getProblemReportById,
+  userReplyToReport
 } = require('../controllers/memberProblemReportController');
 
 console.log('📋 Member Problem Report Routes loading...');
@@ -18,6 +19,7 @@ console.log('📋 Member Problem Report Routes loading...');
 // User routes (requires authentication)
 router.post('/submit', authMiddleware, upload.array('images', 5), submitMemberProblemReport);
 router.get('/my-reports/:gymId', authMiddleware, getMemberProblemReports);
+router.post('/:reportId/user-reply', authMiddleware, userReplyToReport);
 router.get('/:reportId', authMiddleware, getProblemReportById);
 
 // Admin routes (requires gym admin authentication)

@@ -1042,6 +1042,49 @@ class _GrievancesTabState extends State<GrievancesTab> with AutomaticKeepAliveCl
                             ],
                           ),
                         ),
+                        // Show user replies (follow-ups after admin response)
+                        if (report['userReplies'] != null && (report['userReplies'] as List).isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          const Text(
+                            'Member Follow-ups:',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(height: 6),
+                          ...((report['userReplies'] as List).map((reply) => Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      const Icon(Icons.person, size: 14, color: Colors.orange),
+                                      const SizedBox(width: 6),
+                                      const Text('Member', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                      const Spacer(),
+                                      if (reply['sentAt'] != null)
+                                        Text(
+                                          timeago.format(DateTime.parse(reply['sentAt'])),
+                                          style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(reply['message'] ?? '', style: const TextStyle(fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                          ))),
+                          // Allow admin to reply again after member follow-up
+                          const SizedBox(height: 4),
+                          _buildRespondField(reportId),
+                        ],
                       ] else ...[
                         _buildRespondField(reportId),
                       ],

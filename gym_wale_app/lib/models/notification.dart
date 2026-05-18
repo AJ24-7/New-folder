@@ -43,7 +43,10 @@ class AppNotification {
       type: json['type']?.toString() ?? 'general',
       createdAt: parseDate(json['createdAt'] ?? json['timestamp'] ?? json['created_at']),
       isRead: json['isRead'] ?? json['read'] ?? false,
-      data: json['data'] is Map<String, dynamic> ? json['data'] : null,
+      data: {
+        if (json['data'] is Map<String, dynamic>) ...(json['data'] as Map<String, dynamic>),
+        if (json['metadata'] is Map<String, dynamic>) ...(json['metadata'] as Map<String, dynamic>),
+      },
       imageUrl: json['imageUrl']?.toString(),
       actionType: json['actionType']?.toString(),
       actionData: json['actionData']?.toString(),
