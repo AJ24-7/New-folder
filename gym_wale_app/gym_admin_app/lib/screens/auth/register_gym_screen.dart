@@ -613,6 +613,7 @@ class _RegisterGymScreenState extends State<RegisterGymScreen> {
       appBar: AppBar(
         title: const Text('Register Gym With Gym-Wale'),
       ),
+      resizeToAvoidBottomInset: true,
       body: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -626,526 +627,624 @@ class _RegisterGymScreenState extends State<RegisterGymScreen> {
         child: SafeArea(
           child: Form(
             key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Mandatory Registration Details',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Complete all required steps before submitting for approval.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-                const SizedBox(height: 20),
-                Stepper(
-                  currentStep: _currentStep,
-                  type: StepperType.vertical,
-                  physics: const NeverScrollableScrollPhysics(),
-                  onStepContinue: _isSubmitting ? null : _onStepContinue,
-                  onStepCancel: _isSubmitting ? null : _onStepCancel,
-                  onStepTapped: (index) {
-                    if (_isSubmitting) return;
-                    setState(() => _currentStep = index);
-                  },
-                  controlsBuilder: (context, details) {
-                    final isLast = _currentStep == 4;
-                    return Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton(
-                              onPressed: _isSubmitting ? null : details.onStepContinue,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.primaryColor,
-                                foregroundColor: Colors.white,
-                              ),
-                              child: _isSubmitting
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(isLast ? 'Submit For Approval' : 'Continue'),
+                _buildStepIndicator(),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildCurrentStepContent(isDark),
+                        const SizedBox(height: 24),
+                        _buildNavControls(),
+                        const SizedBox(height: 8),
+                        Center(
+                          child: TextButton(
+                            onPressed: () => Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(builder: (_) => const LoginScreen()),
                             ),
+                            child: const Text('Already registered? Login'),
                           ),
-                          const SizedBox(width: 12),
-                          TextButton(
-                            onPressed: _isSubmitting ? null : details.onStepCancel,
-                            child: Text(_currentStep == 0 ? 'Cancel' : 'Back'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  steps: [
-                    Step(
-                      title: const Text('Basic Details'),
-                      isActive: _currentStep >= 0,
-                      content: Column(
-                        children: [
-                          TextFormField(
-                            controller: _gymNameController,
-                            decoration: _dec('Gym Name *'),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _contactPersonController,
-                            decoration: _dec('Contact Person *'),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _descriptionController,
-                            minLines: 2,
-                            maxLines: 4,
-                            decoration: _dec('Gym Description (Optional)'),
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: _dec('Admin Email *'),
-                            validator: (v) {
-                              final s = (v ?? '').trim();
-                              if (s.isEmpty) return 'Required';
-                              if (!s.contains('@') || !s.contains('.')) return 'Enter valid email';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: _dec('Admin Phone *'),
-                            validator: (v) {
-                              final s = (v ?? '').trim();
-                              if (s.isEmpty) return 'Required';
-                              if (s.length < 10) return 'Enter valid phone number';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _supportEmailController,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: _dec('Support Email *'),
-                            validator: (v) {
-                              final s = (v ?? '').trim();
-                              if (s.isEmpty) return 'Required';
-                              if (!s.contains('@') || !s.contains('.')) return 'Enter valid email';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _supportPhoneController,
-                            keyboardType: TextInputType.phone,
-                            decoration: _dec('Support Phone *'),
-                            validator: (v) {
-                              final s = (v ?? '').trim();
-                              if (s.isEmpty) return 'Required';
-                              if (s.length < 10) return 'Enter valid phone number';
-                              return null;
-                            },
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    Step(
-                      title: const Text('Address'),
-                      isActive: _currentStep >= 1,
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: _isFetchingLocation ? null : _useCurrentLocation,
-                              icon: _isFetchingLocation
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    )
-                                  : const Icon(Icons.my_location),
-                              label: const Text('Use Current Location'),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            height: 190,
-                            decoration: BoxDecoration(
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Stack(
-                              children: [
-                                GoogleMap(
-                                  onMapCreated: (controller) {
-                                    _mapController = controller;
-                                    _focusMapOnSelectedLocation();
-                                  },
-                                  initialCameraPosition: CameraPosition(
-                                    target: _selectedLocation ?? _fallbackMapCenter,
-                                    zoom: _selectedLocation == null ? 4.5 : 16,
-                                  ),
-                                  myLocationEnabled: true,
-                                  myLocationButtonEnabled: false,
-                                  zoomControlsEnabled: false,
-                                  onTap: (latLng) {
-                                    _setSelectedLocation(latLng);
-                                  },
-                                  markers: {
-                                    if (_selectedLocation != null)
-                                      Marker(
-                                        markerId: const MarkerId('selected-gym-location'),
-                                        position: _selectedLocation!,
-                                        draggable: true,
-                                        onDragEnd: (latLng) => _setSelectedLocation(latLng),
-                                      ),
-                                  },
-                                  gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
-                                    Factory<OneSequenceGestureRecognizer>(
-                                      () => EagerGestureRecognizer(),
-                                    ),
-                                  },
-                                ),
-                                if (_selectedLocation == null)
-                                  Positioned.fill(
-                                    child: ColoredBox(
-                                      color: Colors.black.withValues(alpha: 0.04),
-                                      child: const Center(
-                                        child: Text(
-                                          'Tap on map or use current location',
-                                          style: TextStyle(fontWeight: FontWeight.w600),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                if (_isReverseGeocoding)
-                                  const Positioned(
-                                    top: 10,
-                                    right: 10,
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _selectedLocation == null
-                                ? 'No map location selected yet.'
-                                : 'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _addressController,
-                            decoration: _dec('Address *'),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _cityController,
-                            decoration: _dec('City *'),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _stateController,
-                            decoration: _dec('State *'),
-                            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _pincodeController,
-                            keyboardType: TextInputType.number,
-                            decoration: _dec('Pincode *'),
-                            validator: (v) {
-                              final s = (v ?? '').trim();
-                              if (s.isEmpty) return 'Required';
-                              if (s.length < 5) return 'Enter valid pincode';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _landmarkController,
-                            decoration: _dec('Landmark (Optional)'),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Step(
-                      title: const Text('Operating Hours'),
-                      isActive: _currentStep >= 2,
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _timeRow(
-                            title: 'Morning Slot',
-                            opening: _formatTime(_morningOpening),
-                            closing: _formatTime(_morningClosing),
-                            onPickOpening: () => _pickTime(isMorning: true, isOpening: true),
-                            onPickClosing: () => _pickTime(isMorning: true, isOpening: false),
-                          ),
-                          const SizedBox(height: 8),
-                          _timeRow(
-                            title: 'Evening Slot',
-                            opening: _formatTime(_eveningOpening),
-                            closing: _formatTime(_eveningClosing),
-                            onPickOpening: () => _pickTime(isMorning: false, isOpening: true),
-                            onPickClosing: () => _pickTime(isMorning: false, isOpening: false),
-                          ),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Active Days *',
-                            style: TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: _allDays.map((day) {
-                              final selected = _activeDays.contains(day);
-                              return FilterChip(
-                                label: Text(day[0].toUpperCase() + day.substring(1, 3)),
-                                selected: selected,
-                                onSelected: (v) {
-                                  setState(() {
-                                    if (v) {
-                                      _activeDays.add(day);
-                                    } else {
-                                      _activeDays.remove(day);
-                                    }
-                                  });
-                                },
-                              );
-                            }).toList(),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Step(
-                      title: const Text('Photos & Logo'),
-                      isActive: _currentStep >= 3,
-                      content: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          OutlinedButton.icon(
-                            onPressed: _pickGymLogo,
-                            icon: const Icon(Icons.add_a_photo_outlined),
-                            label: Text(_gymLogo == null ? 'Upload Gym Logo (Optional)' : 'Change Gym Logo'),
-                          ),
-                          if (_gymLogo != null) ...[
-                            const SizedBox(height: 10),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(10),
-                              child: Image.memory(
-                                _imageBytesByPath[_gymLogo!.path] ?? Uint8List(0),
-                                width: 90,
-                                height: 90,
-                                fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const SizedBox(
-                                  width: 90,
-                                  height: 90,
-                                  child: ColoredBox(color: Color(0xFFE5E7EB)),
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                          OutlinedButton.icon(
-                            onPressed: _pickGymPhotos,
-                            icon: const Icon(Icons.photo_library_outlined),
-                            label: const Text('Upload Gym Photos (Min 2 Required)'),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Selected: ${_gymPhotos.length}',
-                            style: const TextStyle(color: Colors.grey),
-                          ),
-                          const SizedBox(height: 10),
-                          if (_gymPhotos.isNotEmpty)
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: _gymPhotos.map((file) {
-                                final bytes = _imageBytesByPath[file.path] ?? Uint8List(0);
-                                return Stack(
-                                  children: [
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.memory(
-                                        bytes,
-                                        width: 88,
-                                        height: 88,
-                                        fit: BoxFit.cover,
-                                        errorBuilder: (_, __, ___) => const SizedBox(
-                                          width: 88,
-                                          height: 88,
-                                          child: ColoredBox(color: Color(0xFFE5E7EB)),
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      right: 0,
-                                      top: 0,
-                                      child: InkWell(
-                                        onTap: () {
-                                          setState(() {
-                                            _gymPhotos.removeWhere((p) => p.path == file.path);
-                                            _imageBytesByPath.remove(file.path);
-                                          });
-                                        },
-                                        child: Container(
-                                          decoration: const BoxDecoration(
-                                            color: Colors.black54,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          padding: const EdgeInsets.all(2),
-                                          child: const Icon(Icons.close, color: Colors.white, size: 14),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                        ],
-                      ),
-                    ),
-                    Step(
-                      title: const Text('Security'),
-                      isActive: _currentStep >= 4,
-                      content: Column(
-                        children: [
-                          TextFormField(
-                            controller: _passwordController,
-                            obscureText: _obscurePassword,
-                            decoration: _dec('Create Password *').copyWith(
-                              suffixIcon: IconButton(
-                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                                icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                              ),
-                            ),
-                            validator: (v) {
-                              final s = v ?? '';
-                              if (s.isEmpty) return 'Required';
-                              if (s.length < 8) return 'Minimum 8 characters required';
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            obscureText: _obscureConfirmPassword,
-                            decoration: _dec('Confirm Password *').copyWith(
-                              suffixIcon: IconButton(
-                                onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-                                icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off),
-                              ),
-                            ),
-                            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                          ),
-                          const SizedBox(height: 12),
-                          Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'Note: Remember this password. This password will be used once your gym is approved.',
-                              style: TextStyle(fontSize: 12.5),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            alignment: WrapAlignment.start,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 4,
-                            runSpacing: 2,
-                            children: [
-                              Text(
-                                'By submitting, you agree to our',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
-                                  fontSize: 12,
-                                ),
-                              ),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(0, 24),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const TermsAndConditionsScreen(),
-                                    ),
-                                  );
-                                },
-                                child: const Text('Terms & Conditions'),
-                              ),
-                              Text(
-                                'and',
-                                style: TextStyle(
-                                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
-                                  fontSize: 12,
-                                ),
-                              ),
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  minimumSize: const Size(0, 24),
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const PrivacyPolicyScreen(),
-                                    ),
-                                  );
-                                },
-                                child: const Text('Privacy Policy'),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
-                  },
-                  child: const Text('Already registered? Login'),
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+
+  // ── Step progress indicator ────────────────────────────────────────────────
+
+  Widget _buildStepIndicator() {
+    const labels = ['Basic', 'Address', 'Hours', 'Photos', 'Security'];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+      child: Column(
+        children: [
+          Row(
+            children: List.generate(labels.length * 2 - 1, (i) {
+              if (i.isOdd) {
+                final lineIdx = i ~/ 2;
+                return Expanded(
+                  child: Container(
+                    height: 2,
+                    color: lineIdx < _currentStep
+                        ? AppTheme.primaryColor
+                        : Colors.grey.withValues(alpha: 0.28),
+                  ),
+                );
+              }
+              final idx = i ~/ 2;
+              final done = idx < _currentStep;
+              final active = idx == _currentStep;
+              return Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: (done || active)
+                      ? AppTheme.primaryColor
+                      : Colors.grey.withValues(alpha: 0.28),
+                ),
+                alignment: Alignment.center,
+                child: done
+                    ? const Icon(Icons.check, color: Colors.white, size: 14)
+                    : Text(
+                        '${idx + 1}',
+                        style: TextStyle(
+                          color: active ? Colors.white : Colors.grey,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+              );
+            }),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: labels.asMap().entries.map((e) {
+              final active = e.key == _currentStep;
+              return Text(
+                e.value,
+                style: TextStyle(
+                  fontSize: 9,
+                  color: active ? AppTheme.primaryColor : Colors.grey,
+                  fontWeight: active ? FontWeight.bold : FontWeight.normal,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Current step title + content ───────────────────────────────────────────
+
+  Widget _buildCurrentStepContent(bool isDark) {
+    const titles = [
+      'Basic Details',
+      'Address',
+      'Operating Hours',
+      'Photos & Logo',
+      'Security',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          titles[_currentStep],
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Step ${_currentStep + 1} of 5 — complete all steps before submitting.',
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+        if (_currentStep == 0) _buildStep0(),
+        if (_currentStep == 1) _buildStep1(),
+        if (_currentStep == 2) _buildStep2(),
+        if (_currentStep == 3) _buildStep3(),
+        if (_currentStep == 4) _buildStep4(isDark),
+      ],
+    );
+  }
+
+  // ── Navigation controls ────────────────────────────────────────────────────
+
+  Widget _buildNavControls() {
+    final isLast = _currentStep == 4;
+    return Row(
+      children: [
+        Expanded(
+          child: ElevatedButton(
+            onPressed: _isSubmitting ? null : _onStepContinue,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(48),
+            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : Text(isLast ? 'Submit For Approval' : 'Continue'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        TextButton(
+          onPressed: _isSubmitting ? null : _onStepCancel,
+          child: Text(_currentStep == 0 ? 'Cancel' : 'Back'),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 0 – Basic Details ─────────────────────────────────────────────────
+
+  Widget _buildStep0() {
+    return Column(
+      children: [
+        TextFormField(
+          controller: _gymNameController,
+          decoration: _dec('Gym Name *'),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _contactPersonController,
+          decoration: _dec('Contact Person *'),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _descriptionController,
+          minLines: 2,
+          maxLines: 4,
+          decoration: _dec('Gym Description (Optional)'),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: _dec('Admin Email *'),
+          validator: (v) {
+            final s = (v ?? '').trim();
+            if (s.isEmpty) return 'Required';
+            if (!s.contains('@') || !s.contains('.')) return 'Enter valid email';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _phoneController,
+          keyboardType: TextInputType.phone,
+          decoration: _dec('Admin Phone *'),
+          validator: (v) {
+            final s = (v ?? '').trim();
+            if (s.isEmpty) return 'Required';
+            if (s.length < 10) return 'Enter valid phone number';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _supportEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: _dec('Support Email *'),
+          validator: (v) {
+            final s = (v ?? '').trim();
+            if (s.isEmpty) return 'Required';
+            if (!s.contains('@') || !s.contains('.')) return 'Enter valid email';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _supportPhoneController,
+          keyboardType: TextInputType.phone,
+          decoration: _dec('Support Phone *'),
+          validator: (v) {
+            final s = (v ?? '').trim();
+            if (s.isEmpty) return 'Required';
+            if (s.length < 10) return 'Enter valid phone number';
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  // ── Step 1 – Address ───────────────────────────────────────────────────────
+
+  Widget _buildStep1() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _isFetchingLocation ? null : _useCurrentLocation,
+            icon: _isFetchingLocation
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location),
+            label: const Text('Use Current Location'),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          height: 220,
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Stack(
+            children: [
+              GoogleMap(
+                onMapCreated: (controller) {
+                  _mapController = controller;
+                  _focusMapOnSelectedLocation();
+                },
+                initialCameraPosition: CameraPosition(
+                  target: _selectedLocation ?? _fallbackMapCenter,
+                  zoom: _selectedLocation == null ? 4.5 : 16,
+                ),
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false,
+                zoomControlsEnabled: false,
+                onTap: (latLng) => _setSelectedLocation(latLng),
+                markers: {
+                  if (_selectedLocation != null)
+                    Marker(
+                      markerId: const MarkerId('selected-gym-location'),
+                      position: _selectedLocation!,
+                      draggable: true,
+                      onDragEnd: (latLng) => _setSelectedLocation(latLng),
+                    ),
+                },
+                gestureRecognizers: <Factory<OneSequenceGestureRecognizer>>{
+                  Factory<OneSequenceGestureRecognizer>(
+                    () => EagerGestureRecognizer(),
+                  ),
+                },
+              ),
+              if (_selectedLocation == null)
+                Positioned.fill(
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    child: const Center(
+                      child: Text(
+                        'Tap on map or use current location',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+              if (_isReverseGeocoding)
+                const Positioned(
+                  top: 10,
+                  right: 10,
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _selectedLocation == null
+              ? 'No map location selected yet.'
+              : 'Lat: ${_selectedLocation!.latitude.toStringAsFixed(6)}, '
+                  'Lng: ${_selectedLocation!.longitude.toStringAsFixed(6)}',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _addressController,
+          decoration: _dec('Address *'),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _cityController,
+          decoration: _dec('City *'),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _stateController,
+          decoration: _dec('State *'),
+          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _pincodeController,
+          keyboardType: TextInputType.number,
+          decoration: _dec('Pincode *'),
+          validator: (v) {
+            final s = (v ?? '').trim();
+            if (s.isEmpty) return 'Required';
+            if (s.length < 5) return 'Enter valid pincode';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _landmarkController,
+          decoration: _dec('Landmark (Optional)'),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 2 – Operating Hours ───────────────────────────────────────────────
+
+  Widget _buildStep2() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _timeRow(
+          title: 'Morning Slot',
+          opening: _formatTime(_morningOpening),
+          closing: _formatTime(_morningClosing),
+          onPickOpening: () => _pickTime(isMorning: true, isOpening: true),
+          onPickClosing: () => _pickTime(isMorning: true, isOpening: false),
+        ),
+        const SizedBox(height: 8),
+        _timeRow(
+          title: 'Evening Slot',
+          opening: _formatTime(_eveningOpening),
+          closing: _formatTime(_eveningClosing),
+          onPickOpening: () => _pickTime(isMorning: false, isOpening: true),
+          onPickClosing: () => _pickTime(isMorning: false, isOpening: false),
+        ),
+        const SizedBox(height: 16),
+        const Text(
+          'Active Days *',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _allDays.map((day) {
+            final selected = _activeDays.contains(day);
+            return FilterChip(
+              label: Text(day[0].toUpperCase() + day.substring(1, 3)),
+              selected: selected,
+              onSelected: (v) {
+                setState(() {
+                  if (v) {
+                    _activeDays.add(day);
+                  } else {
+                    _activeDays.remove(day);
+                  }
+                });
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  // ── Step 3 – Photos & Logo ─────────────────────────────────────────────────
+
+  Widget _buildStep3() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _pickGymLogo,
+          icon: const Icon(Icons.add_a_photo_outlined),
+          label: Text(
+              _gymLogo == null ? 'Upload Gym Logo (Optional)' : 'Change Gym Logo'),
+        ),
+        if (_gymLogo != null) ...[
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.memory(
+              _imageBytesByPath[_gymLogo!.path] ?? Uint8List(0),
+              width: 90,
+              height: 90,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const SizedBox(
+                width: 90,
+                height: 90,
+                child: ColoredBox(color: Color(0xFFE5E7EB)),
+              ),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        OutlinedButton.icon(
+          onPressed: _pickGymPhotos,
+          icon: const Icon(Icons.photo_library_outlined),
+          label: const Text('Upload Gym Photos (Min 2 Required)'),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Selected: ${_gymPhotos.length}',
+          style: const TextStyle(color: Colors.grey),
+        ),
+        const SizedBox(height: 10),
+        if (_gymPhotos.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _gymPhotos.map((file) {
+              final bytes = _imageBytesByPath[file.path] ?? Uint8List(0);
+              return Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.memory(
+                      bytes,
+                      width: 88,
+                      height: 88,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                        width: 88,
+                        height: 88,
+                        child: ColoredBox(color: Color(0xFFE5E7EB)),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _gymPhotos.removeWhere((p) => p.path == file.path);
+                          _imageBytesByPath.remove(file.path);
+                        });
+                      },
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.black54,
+                          shape: BoxShape.circle,
+                        ),
+                        padding: const EdgeInsets.all(2),
+                        child: const Icon(Icons.close,
+                            color: Colors.white, size: 14),
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
+
+  // ── Step 4 – Security ──────────────────────────────────────────────────────
+
+  Widget _buildStep4(bool isDark) {
+    return Column(
+      children: [
+        TextFormField(
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          decoration: _dec('Create Password *').copyWith(
+            suffixIcon: IconButton(
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
+              icon: Icon(
+                  _obscurePassword ? Icons.visibility : Icons.visibility_off),
+            ),
+          ),
+          validator: (v) {
+            final s = v ?? '';
+            if (s.isEmpty) return 'Required';
+            if (s.length < 8) return 'Minimum 8 characters required';
+            return null;
+          },
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _confirmPasswordController,
+          obscureText: _obscureConfirmPassword,
+          decoration: _dec('Confirm Password *').copyWith(
+            suffixIcon: IconButton(
+              onPressed: () => setState(
+                  () => _obscureConfirmPassword = !_obscureConfirmPassword),
+              icon: Icon(_obscureConfirmPassword
+                  ? Icons.visibility
+                  : Icons.visibility_off),
+            ),
+          ),
+          validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: const Text(
+            'Note: Remember this password. This password will be used once your gym is approved.',
+            style: TextStyle(fontSize: 12.5),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          alignment: WrapAlignment.start,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          runSpacing: 2,
+          children: [
+            Text(
+              'By submitting, you agree to our',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                fontSize: 12,
+              ),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 24),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const TermsAndConditionsScreen()),
+              ),
+              child: const Text('Terms & Conditions'),
+            ),
+            Text(
+              'and',
+              style: TextStyle(
+                color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                fontSize: 12,
+              ),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                minimumSize: const Size(0, 24),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                    builder: (_) => const PrivacyPolicyScreen()),
+              ),
+              child: const Text('Privacy Policy'),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
