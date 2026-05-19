@@ -1116,50 +1116,19 @@ exports.registerGym = async (req, res) => {
       console.error('Error creating admin notification:', notificationError);
     }
 
-    // Send confirmation email with subscription information
+    // Send confirmation email
     try {
-      const subscriptionPlan = req.body.subscriptionPlan || '1month';
-      const planNames = {
-        '1month': 'Monthly',
-        '3month': 'Quarterly', 
-        '6month': 'Half-Yearly',
-        '12month': 'Annual'
-      };
-      
       await sendEmail({
         to: newGym.email,
         subject: 'Your Gym Registration is Received - Gym-Wale',
         title: 'Welcome to Gym-Wale!',
         preheader: 'Your gym registration has been received and is under review',
         bodyHtml: `
-          <p>Dear <strong style="color:#10b981;">${newGym.contactPerson || newGym.gymName}</strong>,</p>
-          <p>🎉 Thank you for registering your gym on <strong>Gym-Wale</strong>!</p>
-          <p>Your registration has been received and is under review. Our team will contact you soon.</p>
-          
-          <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-            <h4 style="color:#38bdf8;margin:0 0 12px 0;">📋 Your Subscription Plan</h4>
-            <table style="width:100%;font-size:13px;">
-              <tr><td style="padding:6px 0;color:#94a3b8;width:120px;"><strong>Plan:</strong></td><td style="padding:6px 0;">${planNames[subscriptionPlan] || 'Monthly'}</td></tr>
-              <tr><td style="padding:6px 0;color:#94a3b8;"><strong>Trial Period:</strong></td><td style="padding:6px 0;color:#10b981;">1 Month FREE</td></tr>
-            </table>
-            <p style="color:#cbd5e1;font-size:13px;margin:12px 0 0 0;">Your free trial will begin once your gym is approved by our admin team.</p>
-          </div>
-          
-          <div style="background:#1e293b;border:1px solid #334155;padding:18px;border-radius:14px;margin:18px 0;">
-            <h4 style="color:#38bdf8;margin:0 0 12px 0;">✨ Features You'll Get:</h4>
-            <ul style="margin:0;padding-left:16px;color:#cbd5e1;font-size:14px;">
-              <li style="margin-bottom:6px;">Customizable Dashboard</li>
-              <li style="margin-bottom:6px;">Full Payment Management</li>
-              <li style="margin-bottom:6px;">Enhanced Membership Handler</li>
-              <li style="margin-bottom:6px;">Fingerprint & Face Recognition</li>
-              <li style="margin-bottom:6px;">Advanced Analytics & Reports</li>
-              <li>And much more!</li>
-            </ul>
-          </div>
-          
-          <p style="color:#cbd5e1;font-size:14px;text-align:center;margin-top:20px;">
-            Welcome to the Gym-Wale family! 🏋️‍♂️
-          </p>
+          <p>Dear <strong>${newGym.contactPerson || newGym.gymName}</strong>,</p>
+          <p>Thank you for registering your gym on <strong>Gym-Wale</strong>!</p>
+          <p>Your registration has been received and is currently under review. Our team will verify your details and get back to you shortly.</p>
+          <p>Once approved, you will receive another email with instructions to get started.</p>
+          <p style="margin-top:18px;">Welcome to the Gym-Wale family!</p>
         `,
         action: {
           label: 'Track Status',
