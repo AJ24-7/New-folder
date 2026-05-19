@@ -642,6 +642,7 @@ class _RegisterGymScreenState extends State<RegisterGymScreen> {
                 Stepper(
                   currentStep: _currentStep,
                   type: StepperType.vertical,
+                  physics: const NeverScrollableScrollPhysics(),
                   onStepContinue: _isSubmitting ? null : _onStepContinue,
                   onStepCancel: _isSubmitting ? null : _onStepCancel,
                   onStepTapped: (index) {

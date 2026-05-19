@@ -15,6 +15,7 @@ import 'diet_plans_screen.dart';
 import 'workout_assistant_screen.dart';
 import 'bookings_screen.dart';
 import 'support_ticket_screen.dart';
+import 'report_chat_screen.dart';
 import 'login_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -365,7 +366,7 @@ class SettingsScreen extends StatelessWidget {
                           onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (_) => const SupportTicketScreen()),
+                                builder: (_) => const ReportChatScreen()),
                           ),
                         ),
                         const _TileDivider(),

@@ -171,6 +171,7 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
 
   Widget _buildFilterChip(String label, String value) {
     final isSelected = _selectedFilter == value;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return ChoiceChip(
       label: Text(label),
       selected: isSelected,
@@ -181,8 +182,11 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
         }
       },
       selectedColor: AppTheme.primaryColor,
+      backgroundColor: isDark ? const Color(0xFF2C2C2C) : null,
       labelStyle: TextStyle(
-        color: isSelected ? Colors.white : AppTheme.textPrimary,
+        color: isSelected
+            ? Colors.white
+            : (isDark ? Colors.white70 : AppTheme.textPrimary),
       ),
     );
   }
@@ -196,9 +200,12 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
     final createdAt = ticket['createdAt'] != null
         ? DateTime.parse(ticket['createdAt'])
         : DateTime.now();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final subtleColor = isDark ? const Color(0xFFB0B0B0) : AppTheme.textSecondary;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      color: isDark ? const Color(0xFF1E1E1E) : null,
       child: InkWell(
         onTap: () => _showTicketDetails(ticket),
         borderRadius: BorderRadius.circular(12),
@@ -212,9 +219,10 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
                   Expanded(
                     child: Text(
                       subject,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : AppTheme.textPrimary,
                       ),
                     ),
                   ),
@@ -224,13 +232,13 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.label, size: 16, color: AppTheme.textSecondary),
+                  Icon(Icons.label, size: 16, color: subtleColor),
                   const SizedBox(width: 4),
                   Text(
                     category.toUpperCase(),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: subtleColor,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -249,25 +257,25 @@ class _SupportTicketScreenState extends State<SupportTicketScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  const Icon(Icons.confirmation_number,
-                      size: 16, color: AppTheme.textSecondary),
+                  Icon(Icons.confirmation_number,
+                      size: 16, color: subtleColor),
                   const SizedBox(width: 4),
                   Text(
                     ticketId,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: subtleColor,
                     ),
                   ),
                   const Spacer(),
                   Icon(Icons.access_time,
-                      size: 16, color: AppTheme.textSecondary),
+                      size: 16, color: subtleColor),
                   const SizedBox(width: 4),
                   Text(
                     _formatDate(createdAt),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppTheme.textSecondary,
+                      color: subtleColor,
                     ),
                   ),
                 ],
@@ -417,30 +425,45 @@ class TicketDetailsView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(2),
+            child: Builder(
+              builder: (context) => Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? const Color(0xFF4C4C4C)
+                      : Colors.grey[300],
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
           ),
           const SizedBox(height: 20),
-          Text(
-            ticket['subject'] ?? 'Ticket Details',
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Ticket ID: ${ticket['ticketId']}',
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-            ),
+          Builder(
+            builder: (context) {
+              final isDark = Theme.of(context).brightness == Brightness.dark;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ticket['subject'] ?? 'Ticket Details',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: isDark ? Colors.white : AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Ticket ID: ${ticket['ticketId']}',
+                    style: TextStyle(
+                      color: isDark ? Colors.white54 : AppTheme.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const Divider(height: 24),
           Expanded(
@@ -466,7 +489,7 @@ class TicketDetailsView extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  ...messages.map((msg) => _buildMessage(msg)).toList(),
+                  ...messages.map((msg) => _buildMessage(context, msg)).toList(),
                 ],
               ],
             ),
@@ -487,22 +510,27 @@ class TicketDetailsView extends StatelessWidget {
     );
   }
 
-  Widget _buildMessage(dynamic message) {
+  Widget _buildMessage(BuildContext context, dynamic message) {
     final sender = message['sender'] ?? 'unknown';
     final text = message['message'] ?? '';
     final timestamp = message['timestamp'] != null
         ? DateTime.parse(message['timestamp'])
         : DateTime.now();
     final isAdmin = sender == 'admin';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isAdmin ? AppTheme.primaryColor.withOpacity(0.1) : Colors.grey[100],
+        color: isAdmin
+            ? AppTheme.primaryColor.withOpacity(0.1)
+            : (isDark ? const Color(0xFF2C2C2C) : Colors.grey[100]),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isAdmin ? AppTheme.primaryColor : Colors.grey[300]!,
+          color: isAdmin
+              ? AppTheme.primaryColor
+              : (isDark ? const Color(0xFF3C3C3C) : Colors.grey[300]!),
         ),
       ),
       child: Column(
@@ -513,28 +541,37 @@ class TicketDetailsView extends StatelessWidget {
               Icon(
                 isAdmin ? Icons.support_agent : Icons.person,
                 size: 16,
-                color: isAdmin ? AppTheme.primaryColor : AppTheme.textSecondary,
+                color: isAdmin
+                    ? AppTheme.primaryColor
+                    : (isDark ? Colors.white54 : AppTheme.textSecondary),
               ),
               const SizedBox(width: 8),
               Text(
                 isAdmin ? 'Support Team' : 'You',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
-                  color: isAdmin ? AppTheme.primaryColor : AppTheme.textPrimary,
+                  color: isAdmin
+                      ? AppTheme.primaryColor
+                      : (isDark ? Colors.white : AppTheme.textPrimary),
                 ),
               ),
               const Spacer(),
               Text(
                 _formatTime(timestamp),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppTheme.textSecondary,
+                  color: isDark ? Colors.white54 : AppTheme.textSecondary,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(text),
+          Text(
+            text,
+            style: TextStyle(
+              color: isDark ? Colors.white70 : null,
+            ),
+          ),
         ],
       ),
     );
