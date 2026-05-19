@@ -1,9 +1,21 @@
 // Unified Gym-Wale branded email template utility
 // Provides a single wrapper for all outgoing HTML emails.
 // Supports dark-mode friendly colors and mobile responsiveness.
+//
+// IMPORTANT: Never embed large local images (PNG/JPEG) as base64 in email HTML.
+// Gmail clips emails > 102KB. Use BRAND_LOGO_URL (hosted) or the inline SVG fallback.
 
-const { getBase64Logo } = require('./logoUtils');
-const path = require('path');
+// Compact inline SVG dumbbell logo (~500 bytes) used when no hosted URL is set.
+// This keeps every email well under Gmail's 102KB clipping threshold.
+const INLINE_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#0d4d89"/>
+  <rect x="28" y="10" width="8" height="44" rx="4" fill="white" opacity="0.9"/>
+  <rect x="10" y="22" width="44" height="8" rx="4" fill="white" opacity="0.85"/>
+  <rect x="8" y="18" width="10" height="16" rx="5" fill="white"/>
+  <rect x="46" y="18" width="10" height="16" rx="5" fill="white"/>
+  <rect x="8" y="30" width="10" height="16" rx="5" fill="white"/>
+  <rect x="46" y="30" width="10" height="16" rx="5" fill="white"/>
+</svg>`;
 
 const DEFAULT_BRAND = {
   name: process.env.BRAND_NAME || 'Gym-Wale',
@@ -13,39 +25,12 @@ const DEFAULT_BRAND = {
   accent: process.env.BRAND_ACCENT_COLOR || '#38bdf8',
   bg: '#0a0f1e',
   cardBg: '#142036',
-  // Try to use local logo file, fallback to placeholder
-  logo: (() => {
-    // First, check if a hosted logo URL is provided via environment variable
-    if (process.env.BRAND_LOGO_URL && process.env.BRAND_LOGO_URL.startsWith('http')) {
-      return process.env.BRAND_LOGO_URL;
-    }
-    
-    try {
-      // Try different possible logo paths
-      const possibleLogoPaths = [
-        path.join(__dirname, '../../assets/images/logo.png'),
-        path.join(__dirname, '../../assets/icons/logo.png'),
-        path.join(__dirname, '../../frontend/gymadmin/public/Gym-Wale.png'),
-        path.join(__dirname, '../../uploads/gym-logos/Gym-Wale.png'),
-        path.join(__dirname, '../../frontend/public/Gym-Wale.png'),
-        path.join(__dirname, '../assets/Gym-Wale.png')
-      ];
-      
-      for (const logoPath of possibleLogoPaths) {
-        try {
-          return getBase64Logo(logoPath);
-        } catch (error) {
-          continue;
-        }
-      }
-      
-      // If no local logo found, return fallback SVG
-      return getBase64Logo(null);
-    } catch (error) {
-      console.warn('Could not load Gym-Wale logo, using fallback');
-      return getBase64Logo(null);
-    }
-  })(),
+  // Use a hosted URL (set BRAND_LOGO_URL env var to an https:// URL) for the best
+  // cross-client experience. Falls back to a compact inline SVG that keeps the
+  // email well under Gmail's 102KB clip limit.
+  logo: (process.env.BRAND_LOGO_URL && process.env.BRAND_LOGO_URL.startsWith('http'))
+    ? process.env.BRAND_LOGO_URL
+    : `data:image/svg+xml;base64,${Buffer.from(INLINE_LOGO_SVG).toString('base64')}`,
   emailFromName: process.env.BRAND_FROM_NAME || 'Gym-Wale Team'
 };
 
@@ -95,7 +80,7 @@ function wrapEmail(opts = {}) {
 
   const effectiveFooterNote = footerNote || `This is an automated message from ${b.name}.`;
 
-  // Simplified, Gmail-optimized template (under 102KB)
+  // Gmail-safe template — kept under 102 KB. No base64-embedded images.
   return `<!DOCTYPE html>
 <html>
 <head>

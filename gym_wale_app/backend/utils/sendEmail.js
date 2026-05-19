@@ -1,5 +1,28 @@
 const nodemailer = require('nodemailer');
+const fs = require('fs');
+const path = require('path');
 const { wrapEmail, DEFAULT_BRAND } = require('./emailTemplate');
+
+// Build a small logo attachment (CID) so Outlook / Apple Mail render it inline.
+// Uses the same priority as the template: hosted URL (skip CID) → local PNG → SVG buffer.
+function buildLogoAttachment() {
+  // If a hosted URL is set, the template already uses it — no CID attachment needed.
+  if (process.env.BRAND_LOGO_URL && process.env.BRAND_LOGO_URL.startsWith('http')) {
+    return null;
+  }
+  // Try to attach local PNG (Outlook/Apple Mail render it via cid:gym-wale-logo).
+  // We do NOT embed it as base64 in the HTML — it lives only as an attachment.
+  const candidates = [
+    path.join(__dirname, '../../assets/images/logo.png'),
+    path.join(__dirname, '../../assets/icons/logo.png')
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      return { filename: 'logo.png', path: p, cid: 'gym-wale-logo', contentDisposition: 'inline' };
+    }
+  }
+  return null;
+}
 
 // Build transporter fresh each time so env-var updates (e.g. on Render) are
 // picked up without a server restart and never fall back to a Gmail session
@@ -142,11 +165,6 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   if (finalHtml.length > 100000) {
     console.warn('[SendEmail] WARNING: Email content is large and may be clipped by Gmail');
   }
-  
-  // Debug: Log first 200 characters of HTML for verification
-  if (finalHtml.length > 200) {
-    console.log('[SendEmail] HTML preview:', finalHtml.substring(0, 200) + '...');
-  }
 
   // Generate a simple text version as fallback
   const textContent = generateTextVersion(options);
@@ -154,29 +172,32 @@ async function sendEmail(arg1, subjectLegacy, htmlLegacy) {
   try {
     const fromAddress = `${process.env.BRAND_FROM_NAME || DEFAULT_BRAND.name} <${senderEmail}>`;
 
+    // Attach logo as CID inline image so Outlook / Apple Mail render it correctly
+    // without inflating the HTML body.  Gmail ignores CID attachments and uses
+    // the inline SVG data-URI in the HTML instead — best of both worlds.
+    const logoAttachment = buildLogoAttachment();
+
     const mailOptions = {
       from: fromAddress,
       to,
       subject,
       html: finalHtml,
-      text: textContent, // Add text version for better compatibility
+      text: textContent,
+      attachments: logoAttachment ? [logoAttachment] : [],
       headers: {
         ...headers,
-        'X-Priority': '1', // High priority
-        'X-MSMail-Priority': 'High',
-        'Importance': 'High',
         'X-Mailer': 'Gym-Wale System'
       }
     };
-    
+
     console.log('[SendEmail] Mail options prepared:', {
       from: mailOptions.from,
       to: mailOptions.to,
       subject: mailOptions.subject,
-      hasHTML: !!mailOptions.html,
-      htmlLength: mailOptions.html.length
+      htmlLength: mailOptions.html.length,
+      cidAttachment: !!logoAttachment
     });
-    
+
     const info = await transporter.sendMail(mailOptions);
     console.log(`✅ [SendEmail] Email sent to ${to} - Message ID: ${info.messageId}`);
     console.log(`✅ [SendEmail] Accepted: ${info.accepted?.join(', ') || 'N/A'}`);
