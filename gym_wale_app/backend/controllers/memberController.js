@@ -22,6 +22,7 @@ const IMPORT_REQUIRED_FIELDS = [
 
 const DEFAULT_PREVIEW_LIMIT = 500;
 const MAX_PREVIEW_LIMIT = 2000;
+const MAX_IMPORT_ROWS = 5000;
 
 const IMPORT_FIELD_ALIASES = {
   memberName: ['membername', 'member_name', 'name', 'fullname', 'full_name', 'customername', 'customer_name', 'clientname', 'member'],
@@ -36,8 +37,9 @@ const IMPORT_FIELD_ALIASES = {
   monthlyPlan: ['monthlyplan', 'duration', 'validity', 'tenure', 'months', 'planperiod'],
   activityPreference: ['activitypreference', 'activity', 'activities', 'workouttype', 'preference'],
   membershipId: ['membershipid', 'membership_id', 'memberid', 'member_id', 'id', 'membercode', 'member_code', 'admissionid', 'admission_id', 'enrollmentid', 'enrollment_id'],
-  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill', 'validupto', 'valid_upto', 'expireson', 'expiry_date', 'expiredate'],
-  joinDate: ['joindate', 'join_date', 'joiningdate', 'joining_date', 'dateofjoining', 'doj', 'enrollmentdate', 'enrolledon', 'memberjoindate', 'registrationdate', 'registeredon', 'admissiondate', 'member_since']
+  membershipValidUntil: ['membershipvaliduntil', 'validuntil', 'expiry', 'expirydate', 'valid_till', 'validtill', 'validupto', 'valid_upto', 'expireson', 'expiry_date', 'expiredate', 'enddate', 'end_date', 'membershipenddate', 'membership_end_date', 'validityenddate', 'validity_end_date', 'membershipexpiry', 'expiryOn'],
+  joinDate: ['joindate', 'join_date', 'joiningdate', 'joining_date', 'dateofjoining', 'doj', 'enrollmentdate', 'enrolledon', 'memberjoindate', 'registrationdate', 'registeredon', 'admissiondate', 'member_since', 'startdate', 'start_date', 'membershipstartdate', 'membership_start_date', 'validfrom', 'valid_from', 'membershipfrom', 'membership_from', 'startingdate'],
+  planStartDate: ['planstartdate', 'plan_start_date', 'planstart', 'plan_start', 'membershipplanstart', 'membership_plan_start']
 };
 
 function formatYyyyMmDdLocal(date) {
@@ -336,6 +338,7 @@ function normalizeImportedRows(rawRows, previewLimit = DEFAULT_PREVIEW_LIMIT) {
     const membershipId = normalizeIdentifierValue(mappedValues.membershipId);
     const membershipValidUntil = toYyyyMmDdDate(mappedValues.membershipValidUntil);
     const joinDate = parseDateValue(mappedValues.joinDate);
+    const planStartDate = parseDateValue(mappedValues.planStartDate);
 
     normalizedRows.push({
       sourceRowNumber: rowIndex + 2,
@@ -353,6 +356,7 @@ function normalizeImportedRows(rawRows, previewLimit = DEFAULT_PREVIEW_LIMIT) {
       membershipId,
       membershipValidUntil,
       joinDate,
+      planStartDate,
       missingFields
     });
 
@@ -373,6 +377,7 @@ function normalizeImportedRows(rawRows, previewLimit = DEFAULT_PREVIEW_LIMIT) {
         membershipId,
         membershipValidUntil: membershipValidUntil || 'NA',
         joinDate: joinDate != null ? formatYyyyMmDdLocal(joinDate) : 'NA',
+        planStartDate: planStartDate != null ? formatYyyyMmDdLocal(planStartDate) : 'NA',
         missingFields
       });
     }
@@ -442,6 +447,11 @@ function buildMemberMergePatch(existingMember, row) {
     patch.membershipValidUntil = incomingValidUntil;
   }
 
+  const incomingPlanStartDate = row.planStartDate instanceof Date ? row.planStartDate : parseDateValue(row.planStartDate);
+  if (incomingPlanStartDate && (!existingMember.planStartDate || new Date(existingMember.planStartDate).getTime() !== incomingPlanStartDate.getTime())) {
+    patch.planStartDate = incomingPlanStartDate;
+  }
+
   return patch;
 }
 
@@ -507,6 +517,13 @@ exports.importMembers = async (req, res) => {
       });
     }
 
+    if (rawRows.length > MAX_IMPORT_ROWS) {
+      return res.status(400).json({
+        success: false,
+        message: `File exceeds the maximum import limit of ${MAX_IMPORT_ROWS} members per upload. Found ${rawRows.length} rows. Split the file into smaller batches.`
+      });
+    }
+
     const { normalizedRows, previewRows } = normalizeImportedRows(rawRows, previewLimit);
     if (normalizedRows.length === 0) {
       return res.status(400).json({
@@ -567,32 +584,6 @@ exports.importMembers = async (req, res) => {
           { ordered: false }
         );
         importedCount += insertedMembers.length;
-
-        if (insertedMembers.length > 0) {
-          const payments = insertedMembers.map((insertedMember) => {
-            const meta = chunk.find((entry) => String(entry.memberDoc.membershipId) === String(insertedMember.membershipId));
-            return {
-              gymId,
-              type: 'received',
-              category: 'membership',
-              amount: meta ? meta.memberDoc.paymentAmount : 0,
-              description: `Bulk import membership payment for ${insertedMember.memberName || 'Member'}`,
-              memberName: insertedMember.memberName || '',
-              memberId: insertedMember._id,
-              paymentMethod: String(meta ? meta.memberDoc.paymentMode : 'cash').toLowerCase(),
-              status: 'completed',
-              registrationSource: 'offline',
-              planSelected: insertedMember.planSelected || '',
-              monthlyPlan: insertedMember.monthlyPlan || '',
-              paidDate: new Date(),
-              createdBy: (req.admin && (req.admin._id || req.admin.id)) || gymId
-            };
-          });
-
-          if (payments.length > 0) {
-            await Payment.insertMany(payments, { ordered: false });
-          }
-        }
       } catch (insertError) {
         const insertedDocs = insertError.insertedDocs || [];
         importedCount += insertedDocs.length;
@@ -726,6 +717,7 @@ exports.importMembers = async (req, res) => {
         monthlyPlan: row.monthlyPlan,
         activityPreference: row.activityPreference,
         joinDate: row.joinDate || undefined,
+        planStartDate: row.planStartDate || undefined,
         membershipId,
         membershipValidUntil: row.membershipValidUntil || computeValidityFromPlan(row.monthlyPlan)
       };

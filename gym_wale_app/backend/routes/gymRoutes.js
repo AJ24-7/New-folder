@@ -302,14 +302,24 @@ router.get('/dashboard', gymadminAuth, async (req, res) => {
       }
     }).length;
 
+    // Calculate current month date range
+    const now = new Date();
+    const firstDayOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDayOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
     // Get other stats in parallel
     const [
       payments,
+      thisMonthPayments,
+      lastMonthPayments,
       trialBookings,
       trainers,
       gym
     ] = await Promise.all([
       Payment.find({ gymId: gymId }),
+      Payment.find({ gymId: gymId, createdAt: { $gte: firstDayOfThisMonth } }),
+      Payment.find({ gymId: gymId, createdAt: { $gte: firstDayOfLastMonth, $lte: lastDayOfLastMonth } }),
       TrialBooking.countDocuments({ gymId: gymId }),
       Trainer.countDocuments({ gym: gymId, status: 'approved' }),
       Gym.findById(gymId)
@@ -320,15 +330,28 @@ router.get('/dashboard', gymadminAuth, async (req, res) => {
       return sum + (payment.amount || 0);
     }, 0);
 
+    const combinedThisMonthRevenue = thisMonthPayments.reduce((sum, payment) => {
+      return sum + (payment.amount || 0);
+    }, 0);
+
+    const combinedLastMonthRevenue = lastMonthPayments.reduce((sum, payment) => {
+      return sum + (payment.amount || 0);
+    }, 0);
+
+    // Calculate revenue growth percentage
+    const revenueGrowthPercentage = combinedLastMonthRevenue === 0
+      ? (combinedThisMonthRevenue > 0 ? 100 : 0)
+      : Math.round(((combinedThisMonthRevenue - combinedLastMonthRevenue) / combinedLastMonthRevenue) * 100);
+
     // Calculate growth percentages (simplified - you can enhance this)
     const usersGrowthPercentage = 5.2; // You can calculate this from historical data
-    const revenueGrowthPercentage = 12.5;
 
     res.json({
       success: true,
       totalUsers: allMembers.length,
       activeSubscriptions,
       combinedTotalRevenue,
+      combinedThisMonthRevenue,
       totalPayments: payments.length,
       totalTrialBookings: trialBookings,
       activeTrainers: trainers,

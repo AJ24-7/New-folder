@@ -805,12 +805,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           color: AppTheme.primaryColor,
           trend: _stats?.usersGrowthPercentage,
         ),
-        StatCard(
-          title: 'Total Payments',
-          value: _currencyFormat.format(_stats?.combinedTotalRevenue ?? 0),
-          icon: Icons.credit_card,
-          color: AppTheme.successColor,
-          trend: 12.5,
+        GestureDetector(
+          onTap: () => Navigator.pushReplacementNamed(context, '/payments'),
+          child: StatCard(
+            title: 'This Month Revenue',
+            value: _currencyFormat.format(_stats?.combinedThisMonthRevenue ?? 0),
+            icon: Icons.credit_card,
+            color: AppTheme.successColor,
+            trend: _stats?.revenueGrowthPercentage,
+          ),
         ),
         StatCard(
           title: 'Overall Attendance',
@@ -821,12 +824,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
           trend: _attendanceStats?.monthlyAttendanceRate,
           onTap: () => Navigator.pushReplacementNamed(context, '/attendance'),
         ),
-        StatCard(
-          title: 'Active Trainers',
-          value: _stats?.activeSubscriptions.toString() ?? '0',
-          icon: Icons.person,
-          color: AppTheme.secondaryColor,
-          trend: 8.0,
+        Stack(
+          children: [
+            Opacity(
+              opacity: 0.35,
+              child: StatCard(
+                title: 'Active Trainers',
+                value: _stats?.activeSubscriptions.toString() ?? '0',
+                icon: Icons.person,
+                color: AppTheme.secondaryColor,
+                trend: 8.0,
+              ),
+            ),
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.lock_rounded, color: Colors.white, size: 22),
+                    SizedBox(height: 4),
+                    Text(
+                      'Coming Soon',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ],
     );

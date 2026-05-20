@@ -10,6 +10,7 @@ class DashboardStats {
   final int pendingTrainers;
   final double combinedTotalRevenue;
   final double combinedThisMonthRevenue;
+  final double revenueGrowthPercentage;
   final int totalSubscriptions;
   final int activeSubscriptions;
   final int trialSubscriptions;
@@ -26,6 +27,7 @@ class DashboardStats {
     required this.pendingTrainers,
     required this.combinedTotalRevenue,
     required this.combinedThisMonthRevenue,
+    required this.revenueGrowthPercentage,
     required this.totalSubscriptions,
     required this.activeSubscriptions,
     required this.trialSubscriptions,
@@ -44,6 +46,7 @@ class DashboardStats {
       pendingTrainers: json['pendingTrainers'] ?? 0,
       combinedTotalRevenue: (json['combinedTotalRevenue'] ?? 0).toDouble(),
       combinedThisMonthRevenue: (json['combinedThisMonthRevenue'] ?? 0).toDouble(),
+      revenueGrowthPercentage: (json['revenueGrowthPercentage'] ?? 0).toDouble(),
       totalSubscriptions: json['totalSubscriptions'] ?? 0,
       activeSubscriptions: json['activeSubscriptions'] ?? 0,
       trialSubscriptions: json['trialSubscriptions'] ?? 0,
